@@ -11,8 +11,10 @@ import org.springframework.stereotype.Service;
 import com.ruoyi.common.constant.UserConstants;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.common.core.domain.entity.SysDictData;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.vo.CostSceneGovernanceCheckVo;
+import com.ruoyi.system.mapper.SysDictDataMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.service.cost.ICostSceneService;
 
@@ -24,8 +26,15 @@ import com.ruoyi.system.service.cost.ICostSceneService;
 @Service
 public class CostSceneServiceImpl implements ICostSceneService
 {
+    private static final String DICT_TYPE_BUSINESS_DOMAIN = "cost_business_domain";
+    private static final String DICT_TYPE_SCENE_TYPE = "cost_scene_type";
+    private static final String DICT_TYPE_SCENE_STATUS = "cost_scene_status";
+
     @Autowired
     private CostSceneMapper sceneMapper;
+
+    @Autowired
+    private SysDictDataMapper dictDataMapper;
 
     /**
      * 查询场景列表
@@ -145,6 +154,7 @@ public class CostSceneServiceImpl implements ICostSceneService
     @Override
     public int insertScene(CostScene scene)
     {
+        validateSceneDictValue(scene);
         return sceneMapper.insert(scene);
     }
 
@@ -157,8 +167,25 @@ public class CostSceneServiceImpl implements ICostSceneService
     @Override
     public int updateScene(CostScene scene)
     {
+        validateSceneDictValue(scene);
         validateDisableBeforeUpdate(scene);
         return sceneMapper.updateById(scene);
+    }
+
+    /**
+     * 校验场景中心核心字段必须来自系统字典。
+     *
+     * <p>线程一的治理边界要求“业务域字典化、系统字典收口”必须在后端硬约束，
+     * 不能只依赖前端下拉防止非法值写入。这里统一校验业务域、场景类型和场景状态，
+     * 让场景主数据始终受控于 cost_ 前缀字典体系。</p>
+     *
+     * @param scene 场景对象
+     */
+    private void validateSceneDictValue(CostScene scene)
+    {
+        validateDictValueExists(DICT_TYPE_BUSINESS_DOMAIN, scene.getBusinessDomain(), "业务域");
+        validateDictValueExists(DICT_TYPE_SCENE_TYPE, scene.getSceneType(), "场景类型");
+        validateDictValueExists(DICT_TYPE_SCENE_STATUS, scene.getStatus(), "场景状态");
     }
 
     /**
@@ -306,5 +333,27 @@ public class CostSceneServiceImpl implements ICostSceneService
     private long nullSafeLong(Long value)
     {
         return StringUtils.isNull(value) ? 0L : value.longValue();
+    }
+
+    /**
+     * 校验字典值是否存在且处于可用状态。
+     *
+     * @param dictType 字典类型
+     * @param dictValue 字典值
+     * @param fieldLabel 业务字段名称
+     */
+    private void validateDictValueExists(String dictType, String dictValue, String fieldLabel)
+    {
+        if (StringUtils.isEmpty(dictValue))
+        {
+            return;
+        }
+        List<SysDictData> dictDataList = dictDataMapper.selectDictDataByType(dictType);
+        boolean matched = dictDataList.stream()
+                .anyMatch(item -> dictValue.equals(item.getDictValue()) && "0".equals(item.getStatus()));
+        if (!matched)
+        {
+            throw new ServiceException(String.format("%s取值无效，请从系统字典 %s 中选择合法值：%s", fieldLabel, dictType, dictValue));
+        }
     }
 }
