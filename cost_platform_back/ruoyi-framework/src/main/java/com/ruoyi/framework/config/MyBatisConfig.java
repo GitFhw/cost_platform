@@ -7,8 +7,8 @@ import java.util.HashSet;
 import java.util.List;
 import javax.sql.DataSource;
 import org.apache.ibatis.io.VFS;
+import org.apache.ibatis.plugin.Interceptor;
 import org.apache.ibatis.session.SqlSessionFactory;
-import org.mybatis.spring.SqlSessionFactoryBean;
 import org.mybatis.spring.boot.autoconfigure.SpringBootVFS;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -22,10 +22,12 @@ import org.springframework.core.type.classreading.CachingMetadataReaderFactory;
 import org.springframework.core.type.classreading.MetadataReader;
 import org.springframework.core.type.classreading.MetadataReaderFactory;
 import org.springframework.util.ClassUtils;
+import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.ruoyi.common.utils.StringUtils;
 
 /**
- * Mybatis支持*匹配扫描包
+ * MyBatis/MyBatis-Plus 支持 * 匹配扫描包。
+ * 保持若依原有 XML Mapper 可继续运行，同时为核算模块渐进接入 MyBatis-Plus 提供统一工厂。
  * 
  * @author ruoyi
  */
@@ -34,6 +36,9 @@ public class MyBatisConfig
 {
     @Autowired
     private Environment env;
+
+    @Autowired(required = false)
+    private Interceptor[] interceptors;
 
     static final String DEFAULT_RESOURCE_PATTERN = "**/*.class";
 
@@ -122,11 +127,15 @@ public class MyBatisConfig
         typeAliasesPackage = setTypeAliasesPackage(typeAliasesPackage);
         VFS.addImplClass(SpringBootVFS.class);
 
-        final SqlSessionFactoryBean sessionFactory = new SqlSessionFactoryBean();
+        final MybatisSqlSessionFactoryBean sessionFactory = new MybatisSqlSessionFactoryBean();
         sessionFactory.setDataSource(dataSource);
         sessionFactory.setTypeAliasesPackage(typeAliasesPackage);
         sessionFactory.setMapperLocations(resolveMapperLocations(StringUtils.split(mapperLocations, ",")));
         sessionFactory.setConfigLocation(new DefaultResourceLoader().getResource(configLocation));
+        if (interceptors != null && interceptors.length > 0)
+        {
+            sessionFactory.setPlugins(interceptors);
+        }
         return sessionFactory.getObject();
     }
 }

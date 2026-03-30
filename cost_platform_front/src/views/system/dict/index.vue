@@ -1,5 +1,56 @@
 <template>
    <div class="app-container">
+      <el-alert
+         v-if="isCostScope"
+         title="当前已切换到核算字典视角，默认按 cost_ 前缀过滤，用于集中维护业务域字典与系统字典规划。"
+         type="info"
+         show-icon
+         :closable="false"
+         style="margin-bottom: 16px"
+      />
+      <section v-if="isCostScope" class="cost-dict-board">
+         <div class="cost-dict-board__stats">
+            <div class="cost-dict-board__stat">
+               <span>核算字典类型</span>
+               <strong>{{ costCatalog.length }}</strong>
+               <small>当前已建档的 cost_ 字典类型</small>
+            </div>
+            <div class="cost-dict-board__stat">
+               <span>启用类型</span>
+               <strong>{{ enabledCostCatalogCount }}</strong>
+               <small>状态为正常的字典类型</small>
+            </div>
+            <div class="cost-dict-board__stat">
+               <span>规划字典</span>
+               <strong>{{ planningReadyText }}</strong>
+               <small>第一阶段预留的系统字典规划</small>
+            </div>
+         </div>
+         <div class="cost-dict-board__cards">
+            <article v-for="item in costFocusCards" :key="item.title" class="cost-dict-card">
+               <div class="cost-dict-card__title">{{ item.title }}</div>
+               <div class="cost-dict-card__desc">{{ item.desc }}</div>
+               <div class="cost-dict-card__meta">{{ item.meta }}</div>
+               <div class="cost-dict-card__actions">
+                  <el-button link type="primary" @click="handleCostFocus(item.queryType)">查看类型</el-button>
+                  <el-button
+                     v-if="item.dictType"
+                     link
+                     type="primary"
+                     @click="handleOpenCostDictData(item.dictType)"
+                  >
+                     维护数据
+                  </el-button>
+               </div>
+            </article>
+         </div>
+         <div class="cost-dict-board__tags">
+            <span class="cost-dict-board__tags-label">规划字典：</span>
+            <el-tag v-for="item in planningDictTypes" :key="item.dictType" size="small" effect="plain">
+               {{ item.label }}
+            </el-tag>
+         </div>
+      </section>
       <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="68px">
          <el-form-item label="字典名称" prop="dictName">
             <el-input
@@ -27,7 +78,7 @@
                style="width: 240px"
             >
                <el-option
-                  v-for="dict in sys_normal_disable"
+                  v-for="dict in statusOptions"
                   :key="dict.value"
                   :label="dict.label"
                   :value="dict.value"
@@ -112,7 +163,7 @@
          </el-table-column>
          <el-table-column label="状态" align="center" prop="status">
             <template #default="scope">
-               <dict-tag :options="sys_normal_disable" :value="scope.row.status" />
+               <dict-tag :options="statusOptions" :value="scope.row.status" />
             </template>
          </el-table-column>
          <el-table-column label="备注" align="center" prop="remark" :show-overflow-tooltip="true" />
@@ -158,7 +209,7 @@
             <el-form-item label="状态" prop="status">
                <el-radio-group v-model="form.status">
                   <el-radio
-                     v-for="dict in sys_normal_disable"
+                     v-for="dict in statusOptions"
                      :key="dict.value"
                      :value="dict.value"
                   >{{ dict.label }}</el-radio>
@@ -182,13 +233,16 @@
 
 <script setup name="Dict">
 import DictDataDrawer from './detail'
-import useDictStore from '@/store/modules/dict'
 import { listType, getType, delType, addType, updateType, refreshCache } from "@/api/system/dict/type"
+import { getRemoteDictOptions } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
-const { sys_normal_disable } = proxy.useDict("sys_normal_disable")
+const route = useRoute()
+const router = useRouter()
 
 const typeList = ref([])
+const costCatalog = ref([])
+const statusOptions = ref([])
 const open = ref(false)
 const loading = ref(true)
 const showSearch = ref(true)
@@ -200,6 +254,18 @@ const title = ref("")
 const dateRange = ref([])
 const drawerVisible = ref(false)
 const drawerRow = ref({})
+const isCostScope = computed(() => route.query.scope === "cost")
+const planningDictTypes = [
+  { dictType: "cost_cargo_type", label: "货种" },
+  { dictType: "cost_trade_type", label: "内外贸" },
+  { dictType: "cost_shift_type", label: "班次" },
+  { dictType: "cost_job_type", label: "工种" },
+  { dictType: "cost_post_type", label: "岗位" },
+  { dictType: "cost_customer_level", label: "客户等级" },
+  { dictType: "cost_currency", label: "币种" },
+  { dictType: "cost_partner_team", label: "协力队" },
+  { dictType: "cost_mine_three_flag", label: "是否矿三" }
+]
 
 const data = reactive({
   form: {},
@@ -217,15 +283,86 @@ const data = reactive({
 })
 
 const { queryParams, form, rules } = toRefs(data)
+const enabledCostCatalogCount = computed(() => costCatalog.value.filter(item => item.status === "0").length)
+const planningReadyCount = computed(() =>
+  planningDictTypes.filter(item => costCatalog.value.some(dict => dict.dictType === item.dictType)).length
+)
+const planningReadyText = computed(() => `${planningReadyCount.value}/${planningDictTypes.length}`)
+const costFocusCards = computed(() => {
+  const businessDomain = findCostDict("cost_business_domain")
+  const sceneStatus = findCostDict("cost_scene_status")
+  const sceneType = findCostDict("cost_scene_type")
+  return [
+    {
+      title: "业务域字典",
+      desc: "维护跨行业业务边界，是场景中心的第一层分类入口。",
+      meta: businessDomain ? `${businessDomain.dictName} · ${resolveStatusLabel(businessDomain.status)}` : "尚未建档",
+      dictType: "cost_business_domain",
+      queryType: "cost_business_domain"
+    },
+    {
+      title: "场景核心字典",
+      desc: "统一维护场景状态和场景类型，收稳场景中心的字段口径。",
+      meta: `已建档 ${[sceneStatus, sceneType].filter(Boolean).length}/2`,
+      dictType: "cost_scene_type",
+      queryType: "cost_scene_"
+    },
+    {
+      title: "规划字典",
+      desc: "承接后续费用、变量、规则中心的业务口径规划。",
+      meta: `已建档 ${planningReadyText.value}`,
+      dictType: undefined,
+      queryType: "cost_"
+    }
+  ]
+})
+
+function resolveScopedValue(value) {
+  return typeof value === "string" && value !== "" ? value : undefined
+}
+
+function getScopedQueryDefaults() {
+  return {
+    dictName: resolveScopedValue(route.query.dictName),
+    dictType: resolveScopedValue(route.query.dictType),
+    status: resolveScopedValue(route.query.status)
+  }
+}
+
+function applyScopedQueryDefaults(resetPage = false) {
+  Object.assign(queryParams.value, getScopedQueryDefaults())
+  if (resetPage) {
+    queryParams.value.pageNum = 1
+  }
+}
+
+async function loadStatusOptions() {
+  statusOptions.value = await getRemoteDictOptions("sys_normal_disable")
+}
 
 /** 查询字典类型列表 */
-function getList() {
+async function getList() {
   loading.value = true
-  listType(proxy.addDateRange(queryParams.value, dateRange.value)).then(response => {
+  try {
+    const response = await listType(proxy.addDateRange(queryParams.value, dateRange.value))
     typeList.value = response.rows
     total.value = response.total
+  } finally {
     loading.value = false
-  })
+  }
+}
+
+async function loadCostCatalog() {
+  if (!isCostScope.value) {
+    costCatalog.value = []
+    return
+  }
+  try {
+    const response = await listType({ pageNum: 1, pageSize: 100, dictType: "cost_" })
+    costCatalog.value = response.rows || []
+  } catch (error) {
+    costCatalog.value = []
+  }
 }
 
 /** 取消按钮 */
@@ -239,7 +376,7 @@ function reset() {
   form.value = {
     dictId: undefined,
     dictName: undefined,
-    dictType: undefined,
+    dictType: isCostScope.value ? (resolveScopedValue(route.query.dictType) || "cost_") : undefined,
     status: "0",
     remark: undefined
   }
@@ -256,6 +393,7 @@ function handleQuery() {
 function resetQuery() {
   dateRange.value = []
   proxy.resetForm("queryRef")
+  applyScopedQueryDefaults(true)
   handleQuery()
 }
 
@@ -284,6 +422,26 @@ function handleDataList(row) {
   proxy.$tab.openPage("字典数据", '/system/dict-data/index/' + row.dictId)
 }
 
+function handleCostFocus(dictType) {
+  router.push({
+    path: route.path,
+    query: {
+      ...route.query,
+      scope: "cost",
+      dictType
+    }
+  })
+}
+
+function handleOpenCostDictData(dictType) {
+  const row = findCostDict(dictType)
+  if (!row) {
+    proxy.$modal.msgError(`未找到字典类型 ${dictType}，请先完成初始化数据。`)
+    return
+  }
+  handleDataList(row)
+}
+
 /** 修改按钮操作 */
 function handleUpdate(row) {
   reset()
@@ -304,12 +462,14 @@ function submitForm() {
           proxy.$modal.msgSuccess("修改成功")
           open.value = false
           getList()
+          loadCostCatalog()
         })
       } else {
         addType(form.value).then(response => {
           proxy.$modal.msgSuccess("新增成功")
           open.value = false
           getList()
+          loadCostCatalog()
         })
       }
     }
@@ -323,6 +483,7 @@ function handleDelete(row) {
     return delType(dictIds)
   }).then(() => {
     getList()
+    loadCostCatalog()
     proxy.$modal.msgSuccess("删除成功")
   }).catch(() => {})
 }
@@ -335,12 +496,107 @@ function handleExport() {
 }
 
 /** 刷新缓存按钮操作 */
-function handleRefreshCache() {
-  refreshCache().then(() => {
-    proxy.$modal.msgSuccess("刷新成功")
-    useDictStore().cleanDict()
-  })
+async function handleRefreshCache() {
+  await refreshCache()
+  await Promise.all([loadStatusOptions(), getList(), loadCostCatalog()])
+  proxy.$modal.msgSuccess("刷新成功")
 }
 
-getList()
+watch(() => route.query, async () => {
+  applyScopedQueryDefaults(true)
+  await Promise.all([loadStatusOptions(), getList(), loadCostCatalog()])
+}, { immediate: true, deep: true })
+
+function findCostDict(dictType) {
+  return costCatalog.value.find(item => item.dictType === dictType)
+}
+
+function resolveStatusLabel(status) {
+  const option = statusOptions.value.find(item => item.value === status)
+  return option ? option.label : status || "未知"
+}
 </script>
+
+<style scoped>
+.cost-dict-board {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.cost-dict-board__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.cost-dict-board__stat,
+.cost-dict-card {
+  padding: 16px 18px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 14px;
+  background: var(--el-bg-color-overlay);
+}
+
+.cost-dict-board__stat {
+  display: grid;
+  gap: 8px;
+}
+
+.cost-dict-board__stat span,
+.cost-dict-board__stat small,
+.cost-dict-card__desc,
+.cost-dict-card__meta,
+.cost-dict-board__tags-label {
+  color: var(--el-text-color-secondary);
+}
+
+.cost-dict-board__stat strong {
+  font-size: 28px;
+  line-height: 1.1;
+  color: var(--el-color-primary);
+}
+
+.cost-dict-board__cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.cost-dict-card {
+  display: grid;
+  gap: 10px;
+}
+
+.cost-dict-card__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.cost-dict-card__desc,
+.cost-dict-card__meta {
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.cost-dict-card__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.cost-dict-board__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 1200px) {
+  .cost-dict-board__stats,
+  .cost-dict-board__cards {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
