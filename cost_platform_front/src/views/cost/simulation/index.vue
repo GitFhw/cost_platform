@@ -1,0 +1,305 @@
+<template>
+  <div class="app-container run-page">
+    <section class="run-page__hero">
+      <div>
+        <div class="run-page__eyebrow">线程五 · 步骤 1</div>
+        <h2 class="run-page__title">试算中心</h2>
+        <p class="run-page__subtitle">按已发布快照执行单笔试算，输出变量值、命中规则、费用结果和解释时间线，不污染正式核算结果台账。</p>
+      </div>
+      <el-tag type="warning">只执行线程五运行链，不提前实现线程六治理增强</el-tag>
+    </section>
+
+    <section class="run-page__metrics">
+      <div v-for="item in metricItems" :key="item.label" class="run-page__metric-card">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+        <small>{{ item.desc }}</small>
+      </div>
+    </section>
+
+    <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
+      <el-form-item label="所属场景" prop="sceneId">
+        <el-select v-model="queryParams.sceneId" clearable filterable style="width: 220px" @change="handleQuerySceneChange">
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="版本号" prop="versionId">
+        <el-select v-model="queryParams.versionId" clearable filterable style="width: 220px">
+          <el-option v-for="item in versionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="状态" prop="status">
+        <el-select v-model="queryParams.status" clearable style="width: 180px">
+          <el-option v-for="item in simulationStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+        <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+      </el-form-item>
+    </el-form>
+
+    <section class="run-page__workspace">
+      <div class="run-page__panel">
+        <div class="run-page__section-head">
+          <div>
+            <h3>执行试算</h3>
+            <p>试算始终基于所选场景当前生效版本或指定版本执行。</p>
+          </div>
+          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+        </div>
+
+        <el-form :model="form" label-width="92px">
+          <el-form-item label="试算场景" required>
+            <el-select v-model="form.sceneId" filterable style="width: 100%" @change="handleFormSceneChange">
+              <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="执行版本">
+            <el-select v-model="form.versionId" clearable filterable style="width: 100%">
+              <el-option v-for="item in formVersionOptions" :key="item.versionId" :label="`${item.versionNo} / ${item.versionStatus}`" :value="item.versionId" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="输入 JSON" required>
+            <el-input v-model="form.inputJson" type="textarea" :rows="14" maxlength="10000" show-word-limit />
+          </el-form-item>
+        </el-form>
+
+        <div class="run-page__action-row">
+          <el-button type="primary" icon="Promotion" @click="handleExecute" v-hasPermi="['cost:simulation:execute']">执行试算</el-button>
+          <el-button icon="RefreshLeft" @click="fillExample">装入示例</el-button>
+        </div>
+      </div>
+
+      <div class="run-page__panel">
+        <div class="run-page__section-head">
+          <div>
+            <h3>试算记录</h3>
+            <p>保留最近试算输入、变量结果、费用结果和解释信息。</p>
+          </div>
+        </div>
+
+        <el-table v-loading="loading" :data="recordList">
+          <el-table-column label="试算编号" prop="simulationNo" width="220" />
+          <el-table-column label="场景" min-width="180">
+            <template #default="scope">{{ scope.row.sceneName }} ({{ scope.row.sceneCode }})</template>
+          </el-table-column>
+          <el-table-column label="版本" prop="versionNo" width="160" />
+          <el-table-column label="状态" width="110" align="center">
+            <template #default="scope">
+              <dict-tag :options="simulationStatusOptions" :value="scope.row.status" />
+            </template>
+          </el-table-column>
+          <el-table-column label="创建时间" width="180" align="center">
+            <template #default="scope">{{ parseTime(scope.row.createTime) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" fixed="right" align="center">
+            <template #default="scope">
+              <el-button link type="primary" icon="View" @click="handleDetail(scope.row)">详情</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+      </div>
+    </section>
+
+    <el-drawer v-model="detailOpen" title="试算详情" size="980px" append-to-body>
+      <el-descriptions v-if="detailData.record" :column="2" border>
+        <el-descriptions-item label="试算编号">{{ detailData.record.simulationNo }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ resolveSimulationStatus(detailData.record.status) }}</el-descriptions-item>
+        <el-descriptions-item label="场景">{{ detailData.record.sceneName }}</el-descriptions-item>
+        <el-descriptions-item label="版本">{{ detailData.record.versionNo }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ parseTime(detailData.record.createTime) }}</el-descriptions-item>
+        <el-descriptions-item label="异常信息">{{ detailData.record.errorMessage || '-' }}</el-descriptions-item>
+      </el-descriptions>
+
+      <el-tabs class="run-page__tabs">
+        <el-tab-pane label="输入数据">
+          <pre>{{ formatJson(detailData.input) }}</pre>
+        </el-tab-pane>
+        <el-tab-pane label="变量结果">
+          <pre>{{ formatJson(detailData.variables) }}</pre>
+        </el-tab-pane>
+        <el-tab-pane label="费用结果">
+          <pre>{{ formatJson(detailData.result) }}</pre>
+        </el-tab-pane>
+        <el-tab-pane label="解释时间线">
+          <pre>{{ formatJson(detailData.explain) }}</pre>
+        </el-tab-pane>
+      </el-tabs>
+    </el-drawer>
+  </div>
+</template>
+
+<script setup name="CostSimulation">
+import { executeSimulation, getSimulationDetail, getSimulationStats, listSimulation, listVersionOptions } from '@/api/cost/run'
+import { optionselectScene } from '@/api/cost/scene'
+import { getRemoteDictOptionMap } from '@/utils/dictRemote'
+
+const route = useRoute()
+const { proxy } = getCurrentInstance()
+
+const loading = ref(false)
+const showSearch = ref(true)
+const total = ref(0)
+const recordList = ref([])
+const sceneOptions = ref([])
+const versionOptions = ref([])
+const formVersionOptions = ref([])
+const simulationStatusOptions = ref([])
+const detailOpen = ref(false)
+const detailData = ref({})
+const stats = reactive({ simulationCount: 0, successCount: 0, failedCount: 0, sceneCount: 0 })
+
+const queryParams = reactive({
+  pageNum: 1,
+  pageSize: 10,
+  sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
+  versionId: undefined,
+  status: undefined
+})
+
+const form = reactive({
+  sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
+  versionId: undefined,
+  inputJson: ''
+})
+
+const metricItems = computed(() => [
+  { label: '试算次数', value: stats.simulationCount, desc: '当前筛选范围内试算记录总数' },
+  { label: '成功次数', value: stats.successCount, desc: '试算成功的记录数' },
+  { label: '失败次数', value: stats.failedCount, desc: '试算失败的记录数' },
+  { label: '覆盖场景', value: stats.sceneCount, desc: '已执行试算的场景数量' }
+])
+
+async function loadBaseOptions() {
+  const [dictMap, sceneResp] = await Promise.all([
+    getRemoteDictOptionMap(['cost_simulation_status']),
+    optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
+  ])
+  simulationStatusOptions.value = dictMap.cost_simulation_status || []
+  sceneOptions.value = sceneResp?.data || []
+}
+
+async function loadVersionOptions(sceneId, target) {
+  if (!sceneId) {
+    target.value = []
+    return
+  }
+  const resp = await listVersionOptions(sceneId)
+  target.value = resp.data || []
+}
+
+async function getList() {
+  loading.value = true
+  try {
+    await loadBaseOptions()
+    if (queryParams.sceneId) {
+      await loadVersionOptions(queryParams.sceneId, versionOptions)
+    } else {
+      versionOptions.value = []
+    }
+    if (form.sceneId) {
+      await loadVersionOptions(form.sceneId, formVersionOptions)
+    } else {
+      formVersionOptions.value = []
+    }
+    const [listResp, statsResp] = await Promise.all([
+      listSimulation(queryParams),
+      getSimulationStats(queryParams.sceneId)
+    ])
+    recordList.value = listResp.rows || []
+    total.value = listResp.total || 0
+    Object.assign(stats, statsResp.data || {})
+  } finally {
+    loading.value = false
+  }
+}
+
+function handleQuery() {
+  queryParams.pageNum = 1
+  getList()
+}
+
+function resetQuery() {
+  proxy.resetForm('queryRef')
+  queryParams.pageNum = 1
+  queryParams.pageSize = 10
+  versionOptions.value = []
+  getList()
+}
+
+async function handleQuerySceneChange(sceneId) {
+  queryParams.versionId = undefined
+  await loadVersionOptions(sceneId, versionOptions)
+}
+
+async function handleFormSceneChange(sceneId) {
+  form.versionId = undefined
+  await loadVersionOptions(sceneId, formVersionOptions)
+}
+
+function fillExample() {
+  form.inputJson = JSON.stringify({
+    bizNo: 'SIM-001',
+    objectCode: 'EMP-001',
+    objectName: '张三',
+    days: 22,
+    amountBase: 1800,
+    level: 'A',
+    isRemote: false
+  }, null, 2)
+}
+
+async function handleExecute() {
+  if (!form.sceneId || !form.inputJson) {
+    proxy.$modal.msgWarning('请选择试算场景并填写输入 JSON')
+    return
+  }
+  const resp = await executeSimulation({ ...form })
+  proxy.$modal.msgSuccess('试算执行完成')
+  detailData.value = resp.data || {}
+  detailOpen.value = true
+  getList()
+}
+
+async function handleDetail(row) {
+  const resp = await getSimulationDetail(row.simulationId)
+  detailData.value = resp.data || {}
+  detailOpen.value = true
+}
+
+function resolveSimulationStatus(value) {
+  return simulationStatusOptions.value.find(item => item.value === value)?.label || value
+}
+
+function formatJson(value) {
+  return JSON.stringify(value || {}, null, 2)
+}
+
+fillExample()
+getList()
+</script>
+
+<style scoped lang="scss">
+.run-page { display: grid; gap: 16px; }
+.run-page__hero, .run-page__metric-card, .run-page__panel { border: 1px solid var(--el-border-color); border-radius: 16px; background: var(--el-bg-color-overlay); }
+.run-page__hero { display: flex; justify-content: space-between; gap: 16px; padding: 22px 24px; background: color-mix(in srgb, var(--el-color-primary-light-9) 16%, var(--el-bg-color-overlay)); }
+.run-page__eyebrow { font-size: 12px; color: var(--el-color-primary); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.run-page__title { margin: 8px 0 0; font-size: 28px; }
+.run-page__subtitle { margin: 10px 0 0; color: var(--el-text-color-regular); line-height: 1.8; }
+.run-page__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.run-page__metric-card { display: grid; gap: 6px; padding: 14px 16px; }
+.run-page__metric-card strong { font-size: 26px; color: var(--el-color-primary); }
+.run-page__workspace { display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 16px; }
+.run-page__panel { padding: 16px; }
+.run-page__section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.run-page__section-head h3 { margin: 0; font-size: 18px; }
+.run-page__section-head p { margin: 6px 0 0; color: var(--el-text-color-secondary); font-size: 13px; }
+.run-page__action-row { display: flex; gap: 10px; margin-top: 8px; }
+.run-page__tabs pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+@media (max-width: 1200px) {
+  .run-page__metrics, .run-page__workspace { grid-template-columns: 1fr; }
+}
+</style>
