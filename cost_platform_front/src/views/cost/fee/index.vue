@@ -78,7 +78,11 @@
       </el-table-column>
       <el-table-column label="费用编码" prop="feeCode" min-width="150" align="center" />
       <el-table-column label="费用名称" prop="feeName" min-width="160" align="center" :show-overflow-tooltip="true" />
-      <el-table-column label="计价单位" prop="unitCode" width="120" align="center" />
+      <el-table-column label="计价单位" prop="unitCode" width="120" align="center">
+        <template #default="scope">
+          <span>{{ resolveUnitLabel(scope.row.unitCode) }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="费用分类" prop="feeCategory" width="140" align="center" />
       <el-table-column label="影响因素摘要" prop="factorSummary" min-width="180" align="center" :show-overflow-tooltip="true" />
       <el-table-column label="状态" prop="status" width="110" align="center">
@@ -136,7 +140,9 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="计价单位" prop="unitCode">
-              <el-input v-model="form.unitCode" placeholder="如：吨、天、航次" />
+              <el-select v-model="form.unitCode" filterable clearable style="width: 100%" placeholder="请选择计价单位">
+                <el-option v-for="item in unitOptionsForForm" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -212,6 +218,7 @@ const feeList = ref([])
 const sceneOptions = ref([])
 const businessDomainOptions = ref([])
 const feeStatusOptions = ref([])
+const unitCodeOptions = ref([])
 const open = ref(false)
 const loading = ref(true)
 const showSearch = ref(true)
@@ -258,6 +265,15 @@ const metricItems = computed(() => [
   }
 ])
 
+const unitOptionsForForm = computed(() => {
+  const options = [...unitCodeOptions.value]
+  const currentValue = form.value?.unitCode
+  if (currentValue && !options.some(item => item.value === currentValue)) {
+    options.push({ label: currentValue, value: currentValue })
+  }
+  return options
+})
+
 const currentSceneLabel = computed(() => {
   if (!queryParams.value.sceneId) {
     return '全部场景'
@@ -268,11 +284,12 @@ const currentSceneLabel = computed(() => {
 
 async function loadBaseOptions() {
   const [dictMap, sceneResponse] = await Promise.all([
-    getRemoteDictOptionMap(['cost_business_domain', 'cost_fee_status']),
+    getRemoteDictOptionMap(['cost_business_domain', 'cost_fee_status', 'cost_unit_code']),
     optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
   ])
   businessDomainOptions.value = dictMap.cost_business_domain || []
   feeStatusOptions.value = dictMap.cost_fee_status || []
+  unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResponse?.data || []
 }
 
@@ -456,6 +473,10 @@ function resolveDictLabel(optionsRef, value) {
   const options = Array.isArray(optionsRef) ? optionsRef : (optionsRef?.value || [])
   const match = options.find(item => item.value === value)
   return match ? match.label : value || '-'
+}
+
+function resolveUnitLabel(value) {
+  return resolveDictLabel(unitCodeOptions, value)
 }
 
 async function ensureDisableAllowed() {
