@@ -32,7 +32,7 @@
         <span class="scene-center__hero-note-label">治理说明</span>
         <strong class="scene-center__hero-note-title">场景是费用、变量、规则、发布的上游边界</strong>
         <span class="scene-center__hero-note-desc">
-          发布中心恢复前，不伪造“当前生效版本”类指标，只保留真实可维护的主数据治理能力。
+          场景可理解为合同、核算主题或业务方案。当前生效版本仅展示真实发布结果，线程一先收稳场景主数据与字典口径。
         </span>
       </div>
     </section>
@@ -45,8 +45,8 @@
       </div>
     </section>
 
-    <el-alert
-      title="核算字典规划统一挂在系统字典中心，当前线程已预留 cost_ 前缀治理入口与首批规划项。"
+      <el-alert
+      title="核算字典规划统一挂在系统字典中心，线程一先完成业务域字典与场景核心字典收口，再为后续费用、变量、规则预留规划项。"
       type="info"
       show-icon
       :closable="false"
@@ -199,7 +199,7 @@
       <el-table-column label="当前生效版本" align="center" prop="activeVersionId" width="140">
         <template #default="scope">
           <el-tag v-if="scope.row.activeVersionId" type="success">#{{ scope.row.activeVersionId }}</el-tag>
-          <span v-else class="scene-center__muted">待恢复</span>
+          <span v-else class="scene-center__muted">未生效</span>
         </template>
       </el-table-column>
       <el-table-column label="状态" align="center" prop="status" width="110">
@@ -241,6 +241,9 @@
 
     <el-dialog :title="title" v-model="open" width="620px" append-to-body>
       <el-form ref="sceneRef" :model="form" :rules="rules" label-width="100px">
+        <div class="scene-center__dialog-tip">
+          场景是平台第一层业务组织边界，可理解为合同、核算主题、业务方案或公司级核算域。
+        </div>
         <el-row :gutter="18">
           <el-col :span="12">
             <el-form-item label="场景编码" prop="sceneCode">
@@ -835,6 +838,15 @@ getList()
 .scene-center__alert,
 .scene-center__query {
   margin-bottom: 0;
+}
+
+.scene-center__dialog-tip {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: var(--el-text-color-regular);
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 32%, var(--el-bg-color-overlay));
+  line-height: 1.8;
 }
 
 .scene-center__muted {
