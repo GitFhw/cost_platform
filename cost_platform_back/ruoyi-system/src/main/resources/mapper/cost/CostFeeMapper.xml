@@ -1,0 +1,122 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostFeeMapper">
+
+    <resultMap id="CostFeeResult" type="com.ruoyi.system.domain.cost.CostFeeItem">
+        <id property="feeId" column="fee_id" />
+        <result property="sceneId" column="scene_id" />
+        <result property="sceneCode" column="scene_code" />
+        <result property="sceneName" column="scene_name" />
+        <result property="businessDomain" column="business_domain" />
+        <result property="feeCode" column="fee_code" />
+        <result property="feeName" column="fee_name" />
+        <result property="feeCategory" column="fee_category" />
+        <result property="unitCode" column="unit_code" />
+        <result property="factorSummary" column="factor_summary" />
+        <result property="scopeDescription" column="scope_description" />
+        <result property="objectDimension" column="object_dimension" />
+        <result property="sortNo" column="sort_no" />
+        <result property="status" column="status" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="selectFeeVo">
+        select f.fee_id,
+               f.scene_id,
+               s.scene_code,
+               s.scene_name,
+               s.business_domain,
+               f.fee_code,
+               f.fee_name,
+               f.fee_category,
+               f.unit_code,
+               f.factor_summary,
+               f.scope_description,
+               f.object_dimension,
+               f.sort_no,
+               f.status,
+               f.remark,
+               f.create_by,
+               f.create_time,
+               f.update_by,
+               f.update_time
+        from cost_fee_item f
+        left join cost_scene s on s.scene_id = f.scene_id
+    </sql>
+
+    <sql id="feeWhere">
+        <where>
+            <if test="sceneId != null">
+                and f.scene_id = #{sceneId}
+            </if>
+            <if test="businessDomain != null and businessDomain != ''">
+                and s.business_domain = #{businessDomain}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    f.fee_code like concat('%', #{keyword}, '%')
+                    or f.fee_name like concat('%', #{keyword}, '%')
+                )
+            </if>
+            <if test="feeCode != null and feeCode != ''">
+                and f.fee_code like concat('%', #{feeCode}, '%')
+            </if>
+            <if test="feeName != null and feeName != ''">
+                and f.fee_name like concat('%', #{feeName}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                and f.status = #{status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectFeeList" parameterType="com.ruoyi.system.domain.cost.CostFeeItem" resultMap="CostFeeResult">
+        <include refid="selectFeeVo"/>
+        <include refid="feeWhere"/>
+        order by f.update_time desc, f.fee_id desc
+    </select>
+
+    <select id="selectFeeOptions" parameterType="com.ruoyi.system.domain.cost.CostFeeItem" resultMap="CostFeeResult">
+        <include refid="selectFeeVo"/>
+        <include refid="feeWhere"/>
+        order by s.scene_name asc, f.sort_no asc, f.fee_id asc
+    </select>
+
+    <select id="selectFeeStats" parameterType="com.ruoyi.system.domain.cost.CostFeeItem" resultType="java.util.HashMap">
+        select count(1) as feeCount,
+               coalesce(sum(case when f.status = '0' then 1 else 0 end), 0) as enabledFeeCount,
+               count(distinct f.scene_id) as sceneCoverageCount
+        from cost_fee_item f
+        left join cost_scene s on s.scene_id = f.scene_id
+        <include refid="feeWhere"/>
+    </select>
+
+    <select id="selectFeeGovernanceCheck" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFeeGovernanceCheckVo">
+        select f.fee_id as feeId,
+               f.scene_id as sceneId,
+               s.scene_code as sceneCode,
+               s.scene_name as sceneName,
+               f.fee_code as feeCode,
+               f.fee_name as feeName,
+               f.status as status,
+               (select count(1) from cost_rule r where r.fee_id = f.fee_id) as ruleCount,
+               (select count(1) from cost_fee_variable_rel rel where rel.fee_id = f.fee_id) as variableRelCount,
+               (select count(1)
+                from cost_publish_snapshot snap
+                join cost_publish_version ver on ver.version_id = snap.version_id
+                where ver.scene_id = f.scene_id
+                  and snap.snapshot_type = 'FEE'
+                  and snap.object_code = f.fee_code) as publishedVersionCount,
+               (select count(1) from cost_result_ledger l where l.fee_id = f.fee_id) as resultLedgerCount
+        from cost_fee_item f
+        left join cost_scene s on s.scene_id = f.scene_id
+        where f.fee_id = #{feeId}
+    </select>
+
+</mapper>
