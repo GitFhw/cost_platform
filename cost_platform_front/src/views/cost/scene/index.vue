@@ -221,6 +221,9 @@
           <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['cost:scene:edit']">
             修改
           </el-button>
+          <el-button link type="primary" icon="Tickets" @click="handleOpenPublishCenter(scope.row)" v-hasPermi="['cost:publish:list']">
+            查看版本
+          </el-button>
           <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['cost:scene:remove']">
             删除
           </el-button>
@@ -632,6 +635,15 @@ function handleOpenBusinessDomain() {
     query: {
       dictType: 'cost_business_domain',
       scope: 'cost'
+    }
+  })
+}
+
+function handleOpenPublishCenter(row) {
+  router.push({
+    path: '/cost/publish',
+    query: {
+      sceneId: row.sceneId
     }
   })
 }
