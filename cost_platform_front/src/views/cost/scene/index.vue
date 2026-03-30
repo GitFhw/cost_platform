@@ -687,7 +687,8 @@ function resolveTargetRows(row) {
 }
 
 function resolveDictLabel(optionsRef, value) {
-  const match = optionsRef.value.find(item => item.value === value)
+  const options = Array.isArray(optionsRef) ? optionsRef : (optionsRef?.value || [])
+  const match = options.find(item => item.value === value)
   return match ? match.label : value || '-'
 }
 
