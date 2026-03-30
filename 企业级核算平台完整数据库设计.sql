@@ -204,7 +204,7 @@ create table cost_rule_tier (
   start_value                decimal(18,4)   default null comment '阶梯起始值，允许为空表示首档负无穷起始',
   end_value                  decimal(18,4)   default null comment '阶梯截止值，允许为空表示末档无上限',
   rate_value                 decimal(18,6)   not null comment '阶梯费率或阶梯单价',
-  interval_mode              varchar(16)     not null default 'LEFT_CLOSED_RIGHT_OPEN' comment '区间模式，例如LEFT_CLOSED_RIGHT_OPEN、LEFT_OPEN_RIGHT_CLOSED',
+  interval_mode              varchar(32)     not null default 'LEFT_CLOSED_RIGHT_OPEN' comment '区间模式，例如LEFT_CLOSED_RIGHT_OPEN、LEFT_OPEN_RIGHT_CLOSED',
   tier_no                    int             not null default 1 comment '阶梯序号',
   status                     char(1)         not null default '0' comment '阶梯状态（0正常 1停用）',
   remark                     varchar(500)    default null comment '备注',

@@ -43,7 +43,42 @@
 
 - 若依基础库脚本：`cost_platform_back/sql/ry_20260320.sql`
 - 核算平台业务表基线：`企业级核算平台完整数据库设计.sql`
+- 线程一基础治理增量脚本：`cost_platform_back/sql/cost_thread1_governance_20260330.sql`
+
+## Flyway 迁移
+
+- Flyway 迁移目录：`cost_platform_back/ruoyi-admin/src/main/resources/db/migration`
+- `B20260330_000__platform_baseline.sql`：整合若依基础库和核算平台业务表基线，面向空库初始化
+- `V20260330_001__thread1_governance.sql`：线程一基础治理增量，包含核算菜单前置、若依官网默认隐藏
+- `V20260330_002__demo_configuration_examples.sql`：面向业务熟悉场景配置的示例数据，包含示例场景、费用、变量、规则和阶梯
+- `V20260330_003__quartz_schema.sql`：Quartz 调度表迁移，对应 `cost_platform_back/sql/quartz.sql`
+
+推荐使用方式：
+
+- 全新测试库或培训库：直接创建空库，启动应用后由 Flyway 自动完成基线和增量迁移
+- 已有开发库：先确认库内已经具备若依基础表和核算平台业务表基线，再让 Flyway 做 baseline 和后续增量
+- 不要只手工导入若依原始库后再执行 Flyway。当前基线脚本把若依基础表和核算平台业务表放在同一个 baseline 里，只导若依原始库会导致 Flyway 跳过业务表基线
+
+补充说明：
+
+- `cost_platform_back/sql/cost_thread1_governance_20260330.sql` 仍保留为历史参考和人工补库兜底脚本，但后续新增 SQL 以 Flyway migration 为主
+- 示例数据主要用于帮助业务人员熟悉场景中心的配置方式，建议优先投放到测试、培训或演示环境
 
 ## 说明
 
 当前仓库是新的产品重构工作区。后续开发、构建验证、提交和交付，都以根目录文档为统一基线。
+
+## 页面数据源约定
+
+- 页面列表、详情、下拉和指标卡默认直接查询后台接口
+- 需要共享缓存时，统一由后端接入 Redis，前端只消费后端返回结果
+- 不再使用前端本地 store、localStorage 或 sessionStorage 把字典和主数据缓存成事实来源，避免多人同时操作时口径不一致
+
+## 后端持久层约定
+
+- 当前后端已集成 MyBatis-Plus，采用“若依原生 MyBatis XML + MyBatis-Plus”渐进混合模式
+- 单表 CRUD、唯一校验、条件构造优先使用 `BaseMapper`、`LambdaQueryWrapper`
+- 跨表统计、治理预检查、复杂报表 SQL 继续保留在 XML Mapper 中
+- 同一个分页查询链路不要同时混用 `PageHelper` 和 MyBatis-Plus `Page`，避免重复分页
+- 旧模块不做一次性推翻重写，按线程逐步改造成 MyBatis-Plus 样式
+- 基础审计字段统一沿用若依原生 `BaseEntity`，新 MP 模块通过 `SecurityUtils` 自动填充创建人、修改人、创建时间、修改时间

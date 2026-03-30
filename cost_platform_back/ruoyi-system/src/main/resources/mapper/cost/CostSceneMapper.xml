@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostSceneMapper">
+
+    <resultMap id="CostSceneResult" type="com.ruoyi.system.domain.cost.CostScene">
+        <id property="sceneId" column="scene_id" />
+        <result property="sceneCode" column="scene_code" />
+        <result property="sceneName" column="scene_name" />
+        <result property="businessDomain" column="business_domain" />
+        <result property="orgCode" column="org_code" />
+        <result property="sceneType" column="scene_type" />
+        <result property="activeVersionId" column="active_version_id" />
+        <result property="status" column="status" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="selectSceneVo">
+        select scene_id, scene_code, scene_name, business_domain, org_code, scene_type,
+               active_version_id, status, remark, create_by, create_time, update_by, update_time
+        from cost_scene
+    </sql>
+
+    <sql id="sceneWhere">
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (scene_code like concat('%', #{keyword}, '%')
+                or scene_name like concat('%', #{keyword}, '%'))
+            </if>
+            <if test="businessDomain != null and businessDomain != ''">
+                and business_domain = #{businessDomain}
+            </if>
+            <if test="sceneType != null and sceneType != ''">
+                and scene_type = #{sceneType}
+            </if>
+            <if test="orgCode != null and orgCode != ''">
+                and org_code like concat('%', #{orgCode}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectSceneList" parameterType="com.ruoyi.system.domain.cost.CostScene" resultMap="CostSceneResult">
+        <include refid="selectSceneVo"/>
+        <include refid="sceneWhere"/>
+        order by update_time desc, scene_id desc
+    </select>
+
+    <select id="selectSceneOptions" parameterType="com.ruoyi.system.domain.cost.CostScene" resultMap="CostSceneResult">
+        <include refid="selectSceneVo"/>
+        <include refid="sceneWhere"/>
+        order by scene_name asc, scene_id asc
+    </select>
+
+    <select id="selectSceneStats" parameterType="com.ruoyi.system.domain.cost.CostScene" resultType="java.util.HashMap">
+        select count(1) as sceneCount,
+               coalesce(sum(case when status = '0' then 1 else 0 end), 0) as enabledSceneCount,
+               count(distinct case when business_domain is not null and business_domain != '' then business_domain end) as businessDomainCount
+        from cost_scene
+        <include refid="sceneWhere"/>
+    </select>
+
+    <select id="selectSceneGovernanceCheck" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostSceneGovernanceCheckVo">
+        select s.scene_id as sceneId,
+               s.scene_code as sceneCode,
+               s.scene_name as sceneName,
+               s.business_domain as businessDomain,
+               s.status as status,
+               s.active_version_id as activeVersionId,
+               (select count(1) from cost_fee_item f where f.scene_id = s.scene_id) as feeCount,
+               (select count(1) from cost_variable_group g where g.scene_id = s.scene_id) as variableGroupCount,
+               (select count(1) from cost_variable v where v.scene_id = s.scene_id) as variableCount,
+               (select count(1) from cost_rule r where r.scene_id = s.scene_id) as ruleCount,
+               (select count(1) from cost_publish_version p where p.scene_id = s.scene_id) as publishedVersionCount
+        from cost_scene s
+        where s.scene_id = #{sceneId}
+    </select>
+
+</mapper>
