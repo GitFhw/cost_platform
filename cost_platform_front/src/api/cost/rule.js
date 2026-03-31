@@ -52,6 +52,15 @@ export function updateRule(data) {
   })
 }
 
+// 复制规则并改条件值
+export function copyRule(data) {
+  return request({
+    url: '/cost/rule/copy',
+    method: 'post',
+    data
+  })
+}
+
 // 删除规则
 export function delRule(ruleId) {
   return request({

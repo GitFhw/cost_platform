@@ -290,6 +290,29 @@
             <span>阶梯工作区</span>
             <small>阶梯依据变量：{{ resolveVariableName(form.quantityVariableCode) || '未选择' }}</small>
           </div>
+          <div class="rule-center__tier-basis" v-if="selectedTierVariableMeta">
+            <div>
+              <strong>{{ selectedTierVariableMeta.variableName }}</strong>
+              <span>{{ selectedTierVariableMeta.variableCode }}</span>
+            </div>
+            <div>
+              <span>来源：{{ resolveTagLabel(variableSourceOptions, selectedTierVariableMeta.sourceType) || '-' }}</span>
+              <span>类型：{{ resolveTagLabel(variableDataTypeOptions, selectedTierVariableMeta.dataType) || '-' }}</span>
+              <span>路径：{{ selectedTierVariableMeta.dataPath || '未配置路径' }}</span>
+            </div>
+          </div>
+          <el-alert
+            v-if="tierValidationIssues.length"
+            :title="`当前阶梯存在 ${tierValidationIssues.length} 项待修正问题`"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="mb12"
+          >
+            <template #default>
+              <div v-for="item in tierValidationIssues" :key="item" class="rule-center__issue-item">{{ item }}</div>
+            </template>
+          </el-alert>
           <RuleTierEditor v-model="form.tiers" :interval-mode-options="intervalModeOptions" />
         </template>
       </el-form>
@@ -300,9 +323,105 @@
         </div>
       </template>
     </el-drawer>
+
+    <el-dialog v-model="copyOpen" title="复制并改条件值" width="920px" append-to-body>
+      <el-alert
+        title="复制后的新规则会保留原规则结构，仅修改新规则基础信息和条件值。"
+        :description="copySourceRule ? `来源规则：${copySourceRule.ruleCode} / ${copySourceRule.ruleName}` : '请先从规则台账中选择要复制的规则。'"
+        type="info"
+        :closable="false"
+        show-icon
+        class="mb16"
+      />
+      <el-form :model="copyForm" :rules="copyRules" ref="copyRef" label-width="120px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="新规则编码" prop="ruleCode">
+              <el-input v-model="copyForm.ruleCode" placeholder="请输入复制后的规则编码" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="新规则名称" prop="ruleName">
+              <el-input v-model="copyForm.ruleName" placeholder="请输入复制后的规则名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="优先级" prop="priority">
+              <el-input-number v-model="copyForm.priority" :min="0" :max="9999" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="排序号" prop="sortNo">
+              <el-input-number v-model="copyForm.sortNo" :min="1" :max="9999" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="状态" prop="status">
+              <el-radio-group v-model="copyForm.status">
+                <el-radio v-for="item in ruleStatusOptions" :key="item.value" :value="item.value">{{ item.label }}</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24" v-if="copySourceRule?.ruleType === 'TIER_RATE'">
+            <div class="rule-center__copy-basis">
+              <strong>阶梯依据变量</strong>
+              <span>{{ resolveVariableName(copySourceRule.quantityVariableCode) || copySourceRule.quantityVariableCode || '未配置' }}</span>
+            </div>
+          </el-col>
+        </el-row>
+        <div class="rule-center__section-title">
+          <span>条件值调整</span>
+          <small>变量、操作符和结构来自原规则，只修改比较值和显示名称。</small>
+        </div>
+        <el-table :data="copyForm.conditions" size="small" border>
+          <el-table-column label="变量" min-width="220" align="center">
+            <template #default="scope">
+              <div class="rule-center__readonly-cell">
+                <strong>{{ resolveVariableName(scope.row.variableCode) }}</strong>
+                <span>{{ scope.row.variableCode }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作符" width="120" align="center">
+            <template #default="scope">
+              <dict-tag :options="operatorOptions" :value="scope.row.operatorCode" />
+            </template>
+          </el-table-column>
+          <el-table-column label="条件值" min-width="240" align="center">
+            <template #default="scope">
+              <ConditionValueEditor
+                v-model="scope.row.compareValue"
+                :operator-code="scope.row.operatorCode"
+                :variable-meta="variableMetaMap[scope.row.variableCode] || {}"
+                :dict-options-map="dynamicDictOptionsMap"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="显示名称" min-width="180" align="center">
+            <template #default="scope">
+              <el-input v-model="scope.row.displayName" placeholder="可按新口径覆盖" />
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" @click="submitCopyForm">生 成 新 规 则</el-button>
+          <el-button @click="copyOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
  
     <el-dialog v-model="expressionOpen" title="表达式助手" width="760px" append-to-body>
       <div class="rule-center__expression-grid">
+        <section>
+          <h4>命名空间</h4>
+          <div class="rule-center__token-list">
+            <el-tag v-for="item in namespaceTokens" :key="item.value" class="rule-center__token" type="warning" @click="appendFormula(item.value)">
+              {{ item.label }}
+            </el-tag>
+          </div>
+        </section>
         <section>
           <h4>变量引用</h4>
           <div class="rule-center__token-list">
@@ -344,7 +463,7 @@ import { ElMessageBox } from 'element-plus'
 import ConditionValueEditor from '@/components/cost/ConditionValueEditor.vue'
 import RuleTierEditor from '@/components/cost/RuleTierEditor.vue'
 import { optionselectFee } from '@/api/cost/fee'
-import { addRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, updateRule } from '@/api/cost/rule'
+import { addRule, copyRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, updateRule } from '@/api/cost/rule'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
@@ -364,6 +483,8 @@ const feeKeyword = ref('')
 const selectedFeeId = ref(undefined)
 const initialStatus = ref(undefined)
 const expressionOpen = ref(false)
+const copyOpen = ref(false)
+const copySourceRule = ref(undefined)
 
 const ruleList = ref([])
 const sceneOptions = ref([])
@@ -395,14 +516,27 @@ const data = reactive({
     status: undefined
   },
   form: {},
+  copyForm: {
+    ruleCode: undefined,
+    ruleName: undefined,
+    priority: 100,
+    sortNo: 10,
+    status: '0',
+    conditions: []
+  },
   rules: {
     ruleCode: [{ required: true, message: '规则编码不能为空', trigger: 'blur' }],
     ruleType: [{ required: true, message: '规则类型不能为空', trigger: 'change' }],
     status: [{ required: true, message: '规则状态不能为空', trigger: 'change' }]
+  },
+  copyRules: {
+    ruleCode: [{ required: true, message: '新规则编码不能为空', trigger: 'blur' }],
+    ruleName: [{ required: true, message: '新规则名称不能为空', trigger: 'blur' }],
+    status: [{ required: true, message: '状态不能为空', trigger: 'change' }]
   }
 })
 
-const { queryParams, form, rules } = toRefs(data)
+const { queryParams, form, copyForm, rules, copyRules } = toRefs(data)
 
 const formulaFunctions = [
   { label: 'if(cond,a,b)', value: 'if(, , )' },
@@ -411,6 +545,13 @@ const formulaFunctions = [
   { label: 'round(x,2)', value: 'round(, 2)' },
   { label: 'between(x,a,b)', value: 'between(, , )' },
   { label: 'coalesce(a,b)', value: 'coalesce(, )' }
+]
+const namespaceTokens = [
+  { label: 'V.变量', value: 'V.' },
+  { label: 'I.输入', value: 'I.' },
+  { label: 'C.上下文', value: 'C.' },
+  { label: 'F.费用结果', value: 'F.' },
+  { label: 'T.临时值', value: 'T.' }
 ]
 
 const filteredFeeOptions = computed(() => {
@@ -430,12 +571,16 @@ const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) 
   acc[item.variableCode] = item
   return acc
 }, {}))
+const selectedTierVariableMeta = computed(() => variableMetaMap.value[form.value.quantityVariableCode])
+const tierValidationIssues = computed(() => buildTierValidationIssues(form.value.tiers || []))
 const metricItems = computed(() => [
   { label: '规则总数', value: statistics.ruleCount, desc: '当前检索条件下规则数量' },
   { label: '启用规则数', value: statistics.enabledRuleCount, desc: '状态为正常的规则数量' },
   { label: '阶梯规则数', value: statistics.tierRuleCount, desc: '用于维护阶梯费率的规则数量' },
   { label: '当前费用', value: currentFee.value?.feeName || '未选择', desc: currentFee.value?.feeCode || '请先从左侧费用列表中选择' }
 ])
+const variableSourceOptions = computed(() => proxy.useDict('cost_variable_source_type').cost_variable_source_type || [])
+const variableDataTypeOptions = computed(() => proxy.useDict('cost_variable_data_type').cost_variable_data_type || [])
 
 function resetFormModel() {
   form.value = {
@@ -608,16 +753,22 @@ async function handleCopy(row) {
   const ruleId = row?.ruleId || ids.value[0]
   const response = await getRule(ruleId)
   await loadVariables(currentFee.value?.sceneId || queryParams.value.sceneId)
-  resetFormModel()
   const copied = normalizeRuleDetail(response.data)
-  copied.ruleId = undefined
-  copied.ruleCode = `${copied.ruleCode || 'RULE'}_COPY`
-  copied.ruleName = copied.ruleName ? `${copied.ruleName}-复制` : '复制规则'
-  copied.conditions = (copied.conditions || []).map(item => ({ ...item, conditionId: undefined }))
-  copied.tiers = (copied.tiers || []).map(item => ({ ...item, tierId: undefined }))
-  form.value = copied
-  title.value = '复制并改条件值'
-  open.value = true
+  copySourceRule.value = copied
+  copyForm.value = {
+    ruleCode: `${copied.ruleCode || 'RULE'}_COPY`,
+    ruleName: copied.ruleName ? `${copied.ruleName}-复制` : '复制规则',
+    priority: copied.priority ?? 100,
+    sortNo: copied.sortNo ?? 10,
+    status: copied.status || '0',
+    conditions: (copied.conditions || []).map(item => ({
+      ...item,
+      conditionId: undefined,
+      displayName: item.displayName || resolveVariableName(item.variableCode)
+    }))
+  }
+  proxy.resetForm('copyRef')
+  copyOpen.value = true
 }
 
 function cancel() {
@@ -713,7 +864,11 @@ function normalizePricingConfig(ruleType, pricingConfig) {
 }
 
 function normalizeSubmitData() {
-  const payload = JSON.parse(JSON.stringify(form.value))
+  return buildSubmitPayload(form.value)
+}
+
+function buildSubmitPayload(source) {
+  const payload = JSON.parse(JSON.stringify(source))
   const sceneId = currentFee.value?.sceneId || queryParams.value.sceneId
   payload.sceneId = sceneId
   payload.feeId = selectedFeeId.value
@@ -737,6 +892,10 @@ function submitForm() {
     if (!valid) {
       return
     }
+    if (form.value.ruleType === 'TIER_RATE' && tierValidationIssues.value.length) {
+      proxy.$modal.msgWarning(tierValidationIssues.value[0])
+      return
+    }
     if (!selectedFeeId.value) {
       proxy.$modal.msgWarning('请先选择费用后再保存规则')
       return
@@ -750,6 +909,35 @@ function submitForm() {
     await request
     proxy.$modal.msgSuccess(payload.ruleId ? '修改成功' : '新增成功')
     open.value = false
+    getList()
+  })
+}
+
+function submitCopyForm() {
+  proxy.$refs.copyRef.validate(async valid => {
+    if (!valid || !copySourceRule.value) {
+      return
+    }
+    if ((copyForm.value.conditions || []).some(item => requiresCompareValue(item.operatorCode) && isBlankValue(item.compareValue))) {
+      proxy.$modal.msgWarning('复制规则时请补齐所有条件值')
+      return
+    }
+    await copyRule({
+      sourceRuleId: copySourceRule.value.ruleId,
+      ruleCode: copyForm.value.ruleCode,
+      ruleName: copyForm.value.ruleName,
+      priority: copyForm.value.priority,
+      sortNo: copyForm.value.sortNo,
+      status: copyForm.value.status,
+      conditions: (copyForm.value.conditions || []).map((item, index) => ({
+        ...item,
+        conditionId: undefined,
+        sceneId: currentFee.value?.sceneId || queryParams.value.sceneId,
+        sortNo: index + 1
+      }))
+    })
+    proxy.$modal.msgSuccess('复制成功')
+    copyOpen.value = false
     getList()
   })
 }
@@ -828,6 +1016,52 @@ function resolveUnitLabel(unitCode) {
 
 function appendFormula(token) {
   form.value.amountFormula = `${form.value.amountFormula || ''}${form.value.amountFormula ? ' ' : ''}${token}`
+}
+
+function buildTierValidationIssues(tiers) {
+  if (!tiers?.length) {
+    return []
+  }
+  const issues = []
+  const normalized = tiers.map((item, index) => ({ ...item, __index: index + 1 }))
+    .sort((a, b) => (a.tierNo || a.__index) - (b.tierNo || b.__index))
+  let previous = null
+  normalized.forEach(item => {
+    if (item.rateValue == null || item.rateValue === '') {
+      issues.push(`第${item.__index}档未填写费率/单价`)
+    }
+    if (item.startValue != null && item.endValue != null && Number(item.startValue) >= Number(item.endValue)) {
+      issues.push(`第${item.__index}档起始值必须小于截止值`)
+    }
+    if (previous) {
+      if (previous.endValue == null) {
+        issues.push(`第${previous.__index}档已是不封顶区间，后续不应继续维护档位`)
+      } else if (item.startValue == null || item.startValue === '') {
+        issues.push(`第${item.__index}档缺少起始值`)
+      } else if (Number(previous.endValue) < Number(item.startValue)) {
+        issues.push(`第${previous.__index}档与第${item.__index}档之间存在断档`)
+      } else if (Number(previous.endValue) > Number(item.startValue)) {
+        issues.push(`第${previous.__index}档与第${item.__index}档区间重叠`)
+      }
+    }
+    previous = item
+  })
+  return [...new Set(issues)]
+}
+
+function requiresCompareValue(operatorCode) {
+  return !['IS_NULL', 'IS_NOT_NULL'].includes((operatorCode || '').toUpperCase())
+}
+
+function isBlankValue(value) {
+  return value == null || value === ''
+}
+
+function resolveTagLabel(options, value) {
+  const source = options?.value ?? options ?? []
+  const normalized = Array.isArray(source) ? source : []
+  const match = normalized.find(item => item.value === value)
+  return match ? match.label : value
 }
 
 getList()
@@ -958,6 +1192,44 @@ getList()
   background: color-mix(in srgb, var(--el-color-primary-light-9) 36%, var(--el-bg-color-overlay));
   color: var(--el-text-color-regular);
   font-size: 13px;
+}
+
+.rule-center__tier-basis,
+.rule-center__copy-basis {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--el-color-success-light-9) 30%, var(--el-bg-color-overlay));
+  margin-bottom: 12px;
+}
+
+.rule-center__tier-basis > div,
+.rule-center__copy-basis {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+
+.rule-center__tier-basis strong,
+.rule-center__copy-basis strong {
+  color: var(--el-color-success-dark-2);
+}
+
+.rule-center__issue-item {
+  line-height: 1.8;
+}
+
+.rule-center__readonly-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.rule-center__readonly-cell span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .rule-center__expression-grid {

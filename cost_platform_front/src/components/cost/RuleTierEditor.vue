@@ -30,6 +30,14 @@
           </el-select>
         </template>
       </el-table-column>
+      <el-table-column label="区间摘要" min-width="240" align="center">
+        <template #default="scope">
+          <div class="tier-editor__summary">
+            <strong>{{ buildRangeSummary(scope.row) }}</strong>
+            <span>{{ buildHitSummary(scope.row) }}</span>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column label="备注" min-width="180" align="center">
         <template #default="scope">
           <el-input v-model="scope.row.remark" placeholder="补充本档口径" />
@@ -75,6 +83,19 @@ function handleRemove(index) {
   })
   innerValue.value = next
 }
+
+function buildRangeSummary(row) {
+  const start = row.startValue ?? '-INF'
+  const end = row.endValue ?? '+INF'
+  return row.intervalMode === 'LEFT_OPEN_RIGHT_CLOSED'
+    ? `${start} < x <= ${end}`
+    : `${start} <= x < ${end}`
+}
+
+function buildHitSummary(row) {
+  const price = row.rateValue ?? '-'
+  return `命中当前区间时，取费率/单价 ${price}`
+}
 </script>
 
 <style scoped lang="scss">
@@ -93,5 +114,20 @@ function handleRemove(index) {
 .tier-editor__tip {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+.tier-editor__summary {
+  display: grid;
+  gap: 4px;
+}
+
+.tier-editor__summary strong {
+  color: var(--el-text-color-primary);
+}
+
+.tier-editor__summary span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 </style>
