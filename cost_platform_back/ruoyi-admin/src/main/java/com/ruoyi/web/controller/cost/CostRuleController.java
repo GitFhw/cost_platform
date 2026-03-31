@@ -7,6 +7,7 @@ import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostRule;
+import com.ruoyi.system.domain.cost.bo.CostRuleCopyBo;
 import com.ruoyi.system.domain.cost.bo.CostRuleSaveBo;
 import com.ruoyi.system.service.cost.ICostRuleService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -114,6 +115,33 @@ public class CostRuleController extends BaseController
             return error("修改规则'" + rule.getRuleCode() + "'失败，同场景下规则编码已存在");
         }
         return toAjax(ruleService.updateRule(rule));
+    }
+
+    /**
+     * 复制规则并改条件值
+     */
+    @PreAuthorize("@ss.hasPermi('cost:rule:add')")
+    @Log(title = "规则中心", businessType = BusinessType.INSERT)
+    @PostMapping("/copy")
+    public AjaxResult copy(@Validated @RequestBody CostRuleCopyBo request)
+    {
+        CostRuleSaveBo saveBo = ruleService.selectRuleDetail(request.getSourceRuleId());
+        if (saveBo == null)
+        {
+            return error("来源规则不存在，请刷新后重试");
+        }
+        saveBo.setRuleId(null);
+        saveBo.setRuleCode(request.getRuleCode());
+        saveBo.setRuleName(request.getRuleName());
+        saveBo.setPriority(request.getPriority());
+        saveBo.setSortNo(request.getSortNo());
+        saveBo.setStatus(request.getStatus());
+        saveBo.setConditions(request.getConditions());
+        if (!ruleService.checkRuleCodeUnique(saveBo))
+        {
+            return error("复制规则'" + request.getRuleCode() + "'失败，同场景下规则编码已存在");
+        }
+        return toAjax(ruleService.copyRule(request));
     }
 
     /**

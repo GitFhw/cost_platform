@@ -1,6 +1,7 @@
 package com.ruoyi.system.service.cost;
 
 import com.ruoyi.system.domain.cost.CostRule;
+import com.ruoyi.system.domain.cost.bo.CostRuleCopyBo;
 import com.ruoyi.system.domain.cost.bo.CostRuleSaveBo;
 import com.ruoyi.system.domain.vo.CostRuleGovernanceCheckVo;
 
@@ -48,6 +49,11 @@ public interface ICostRuleService
      * 修改规则
      */
     int updateRule(CostRuleSaveBo rule);
+
+    /**
+     * 复制规则并改条件值
+     */
+    int copyRule(CostRuleCopyBo request);
 
     /**
      * 删除规则

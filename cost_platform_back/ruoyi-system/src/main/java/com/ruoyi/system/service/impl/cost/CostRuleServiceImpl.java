@@ -12,6 +12,7 @@ import com.ruoyi.system.domain.cost.CostRule;
 import com.ruoyi.system.domain.cost.CostRuleCondition;
 import com.ruoyi.system.domain.cost.CostRuleTier;
 import com.ruoyi.system.domain.cost.CostVariable;
+import com.ruoyi.system.domain.cost.bo.CostRuleCopyBo;
 import com.ruoyi.system.domain.cost.bo.CostRuleSaveBo;
 import com.ruoyi.system.domain.vo.CostRuleGovernanceCheckVo;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
@@ -197,6 +198,34 @@ public class CostRuleServiceImpl implements ICostRuleService
     }
 
     /**
+     * 复制规则并调整条件值
+     *
+     * 复制链路直接复用规则详情快照，确保条件结构、定价配置和阶梯结构一致，
+     * 仅开放新规则基础信息和条件值覆盖。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int copyRule(CostRuleCopyBo request)
+    {
+        CostRuleSaveBo source = selectRuleDetail(request.getSourceRuleId());
+        if (StringUtils.isNull(source))
+        {
+            throw new ServiceException("来源规则不存在，请刷新后重试");
+        }
+        CostRuleSaveBo target = new CostRuleSaveBo();
+        BeanUtils.copyProperties(source, target);
+        target.setRuleId(null);
+        target.setRuleCode(request.getRuleCode());
+        target.setRuleName(request.getRuleName());
+        target.setPriority(request.getPriority() == null ? source.getPriority() : request.getPriority());
+        target.setSortNo(request.getSortNo() == null ? source.getSortNo() : request.getSortNo());
+        target.setStatus(request.getStatus());
+        target.setConditions(copyConditions(request.getConditions(), source.getConditions()));
+        target.setTiers(copyTiers(source.getTiers()));
+        return insertRule(target);
+    }
+
+    /**
      * 删除规则
      *
      * 删除前先执行治理预检查，避免已进入发布/追溯链路的规则被误删。
@@ -284,14 +313,16 @@ public class CostRuleServiceImpl implements ICostRuleService
         }
         if (RULE_TYPE_TIER_RATE.equals(ruleType))
         {
-            if (StringUtils.isEmpty(request.getQuantityVariableCode()))
-            {
-                throw new ServiceException("阶梯费率规则必须选择阶梯依据变量");
-            }
+            CostVariable quantityVariable = requireQuantityVariable(request);
             if (request.getTiers() == null || request.getTiers().isEmpty())
             {
                 throw new ServiceException("阶梯费率规则必须维护至少一条阶梯明细");
             }
+            validateNumericVariable(quantityVariable, "阶梯依据变量");
+        }
+        if (RULE_TYPE_FORMULA.equals(ruleType) && StringUtils.isNotEmpty(request.getQuantityVariableCode()))
+        {
+            validateNumericVariable(requireQuantityVariable(request), "公式计量变量");
         }
     }
 
@@ -317,6 +348,10 @@ public class CostRuleServiceImpl implements ICostRuleService
             if (StringUtils.isEmpty(condition.getOperatorCode()))
             {
                 throw new ServiceException(String.format("第%1$d条条件未选择操作符", index));
+            }
+            if (requiresCompareValue(condition.getOperatorCode()) && StringUtils.isEmpty(String.valueOf(condition.getCompareValue())))
+            {
+                throw new ServiceException(String.format("第%1$d条条件未填写条件值", index));
             }
             condition.setSceneId(sceneId);
             condition.setGroupNo(condition.getGroupNo() == null ? 1 : condition.getGroupNo());
@@ -407,6 +442,59 @@ public class CostRuleServiceImpl implements ICostRuleService
     }
 
     /**
+     * 要求当前规则已经选择计量变量，并返回变量元数据。
+     */
+    private CostVariable requireQuantityVariable(CostRuleSaveBo request)
+    {
+        if (StringUtils.isEmpty(request.getQuantityVariableCode()))
+        {
+            throw new ServiceException("阶梯/公式规则必须选择计量变量");
+        }
+        return getSceneVariable(request.getSceneId(), request.getQuantityVariableCode(), "计量变量");
+    }
+
+    /**
+     * 查询场景下变量元数据。
+     */
+    private CostVariable getSceneVariable(Long sceneId, String variableCode, String fieldLabel)
+    {
+        CostVariable variable = variableMapper.selectOne(Wrappers.<CostVariable>lambdaQuery()
+                .eq(CostVariable::getSceneId, sceneId)
+                .eq(CostVariable::getVariableCode, variableCode)
+                .last("limit 1"));
+        if (StringUtils.isNull(variable))
+        {
+            throw new ServiceException(fieldLabel + "不存在，请先在变量中心维护后再引用");
+        }
+        return variable;
+    }
+
+    /**
+     * 阶梯和公式的计量变量必须是数值语义变量，避免区间比较命中字符串口径。
+     */
+    private void validateNumericVariable(CostVariable variable, String fieldLabel)
+    {
+        if (StringUtils.isNull(variable))
+        {
+            return;
+        }
+        String dataType = StringUtils.isEmpty(variable.getDataType()) ? "" : variable.getDataType().toUpperCase();
+        List<String> numericTypes = Arrays.asList("NUMBER", "INTEGER", "DECIMAL", "LONG", "DOUBLE");
+        if (!numericTypes.contains(dataType))
+        {
+            throw new ServiceException(fieldLabel + "必须为数值类型变量");
+        }
+    }
+
+    /**
+     * 判断条件操作符是否要求填写比较值。
+     */
+    private boolean requiresCompareValue(String operatorCode)
+    {
+        return !Arrays.asList("IS_NULL", "IS_NOT_NULL").contains(StringUtils.isEmpty(operatorCode) ? "" : operatorCode.toUpperCase());
+    }
+
+    /**
      * 替换规则子表
      */
     private void replaceChildren(Long ruleId, Long sceneId, CostRuleSaveBo request)
@@ -441,6 +529,47 @@ public class CostRuleServiceImpl implements ICostRuleService
                 tierMapper.insert(tier);
             }
         }
+    }
+
+    /**
+     * 复制条件列表并覆盖比较值。
+     */
+    private List<CostRuleCondition> copyConditions(List<CostRuleCondition> requestConditions, List<CostRuleCondition> sourceConditions)
+    {
+        List<CostRuleCondition> conditions = new ArrayList<>();
+        List<CostRuleCondition> baseList = requestConditions == null || requestConditions.isEmpty() ? sourceConditions : requestConditions;
+        if (baseList == null)
+        {
+            return conditions;
+        }
+        for (CostRuleCondition item : baseList)
+        {
+            CostRuleCondition condition = new CostRuleCondition();
+            BeanUtils.copyProperties(item, condition);
+            condition.setConditionId(null);
+            conditions.add(condition);
+        }
+        return conditions;
+    }
+
+    /**
+     * 复制阶梯列表。
+     */
+    private List<CostRuleTier> copyTiers(List<CostRuleTier> sourceTiers)
+    {
+        List<CostRuleTier> tiers = new ArrayList<>();
+        if (sourceTiers == null)
+        {
+            return tiers;
+        }
+        for (CostRuleTier item : sourceTiers)
+        {
+            CostRuleTier tier = new CostRuleTier();
+            BeanUtils.copyProperties(item, tier);
+            tier.setTierId(null);
+            tiers.add(tier);
+        }
+        return tiers;
     }
 
     /**
