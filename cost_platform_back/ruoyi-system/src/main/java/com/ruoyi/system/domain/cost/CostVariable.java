@@ -98,6 +98,12 @@ public class CostVariable extends BaseEntity
     @Size(max = 32, message = "来源类型长度不能超过32个字符")
     private String sourceType;
 
+    /** 来源系统标识 */
+    @Excel(name = "来源系统")
+    @TableField("source_system")
+    @Size(max = 64, message = "来源系统标识长度不能超过64个字符")
+    private String sourceSystem;
+
     /** 字典类型 */
     @Excel(name = "字典类型")
     @TableField("dict_type")
@@ -110,11 +116,45 @@ public class CostVariable extends BaseEntity
     @Size(max = 255, message = "远程接口地址长度不能超过255个字符")
     private String remoteApi;
 
+    /** 鉴权方式 */
+    @Excel(name = "鉴权方式", dictType = "cost_variable_auth_type")
+    @TableField("auth_type")
+    @Size(max = 32, message = "鉴权方式长度不能超过32个字符")
+    private String authType;
+
+    /** 鉴权配置JSON */
+    @Excel(name = "鉴权配置")
+    @TableField("auth_config_json")
+    private String authConfigJson;
+
     /** 远程数据路径 */
     @Excel(name = "数据路径")
     @TableField("data_path")
     @Size(max = 255, message = "数据路径长度不能超过255个字符")
     private String dataPath;
+
+    /** 字段映射配置JSON */
+    @Excel(name = "字段映射配置")
+    @TableField("mapping_config_json")
+    private String mappingConfigJson;
+
+    /** 同步方式 */
+    @Excel(name = "同步方式", dictType = "cost_variable_sync_mode")
+    @TableField("sync_mode")
+    @Size(max = 32, message = "同步方式长度不能超过32个字符")
+    private String syncMode;
+
+    /** 缓存策略 */
+    @Excel(name = "缓存策略", dictType = "cost_variable_cache_policy")
+    @TableField("cache_policy")
+    @Size(max = 32, message = "缓存策略长度不能超过32个字符")
+    private String cachePolicy;
+
+    /** 失败兜底策略 */
+    @Excel(name = "失败兜底策略", dictType = "cost_variable_fallback_policy")
+    @TableField("fallback_policy")
+    @Size(max = 32, message = "失败兜底策略长度不能超过32个字符")
+    private String fallbackPolicy;
 
     /** 公式表达式 */
     @Excel(name = "公式表达式")
