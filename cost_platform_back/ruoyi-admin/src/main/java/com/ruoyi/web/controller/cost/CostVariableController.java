@@ -7,18 +7,29 @@ import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostVariable;
+import com.ruoyi.system.domain.vo.CostVariableCopyRequest;
+import com.ruoyi.system.domain.vo.CostVariableImportRow;
+import com.ruoyi.system.domain.vo.CostVariableTemplateApplyRequest;
 import com.ruoyi.system.service.cost.ICostVariableService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * 变量中心控制器
+ * 变量中心控制器。
  *
  * @author codex
  */
@@ -30,7 +41,7 @@ public class CostVariableController extends BaseController
     private ICostVariableService variableService;
 
     /**
-     * 查询变量列表
+     * 查询变量列表。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/list")
@@ -42,7 +53,7 @@ public class CostVariableController extends BaseController
     }
 
     /**
-     * 查询变量统计卡片
+     * 查询变量统计卡片。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/stats")
@@ -52,7 +63,7 @@ public class CostVariableController extends BaseController
     }
 
     /**
-     * 查询变量治理预检查
+     * 查询变量治理预检查。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/governance/{variableId}")
@@ -62,7 +73,7 @@ public class CostVariableController extends BaseController
     }
 
     /**
-     * 查询变量选择框
+     * 查询变量选择框。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/optionselect")
@@ -72,7 +83,7 @@ public class CostVariableController extends BaseController
     }
 
     /**
-     * 导出变量列表
+     * 导出变量列表。
      */
     @Log(title = "变量中心", businessType = BusinessType.EXPORT)
     @PreAuthorize("@ss.hasPermi('cost:variable:export')")
@@ -85,7 +96,39 @@ public class CostVariableController extends BaseController
     }
 
     /**
-     * 查询变量详情
+     * 下载导入模板。
+     */
+    @PostMapping("/importTemplate")
+    @PreAuthorize("@ss.hasPermi('cost:variable:export')")
+    public void importTemplate(HttpServletResponse response)
+    {
+        ExcelUtil<CostVariableImportRow> util = new ExcelUtil<>(CostVariableImportRow.class);
+        util.importTemplateExcel(response, "变量导入模板", "线程二-变量导入模板");
+    }
+
+    /**
+     * 导入预览与校验报告。
+     */
+    @PreAuthorize("@ss.hasPermi('cost:variable:add')")
+    @PostMapping("/importPreview")
+    public AjaxResult importPreview(MultipartFile file) throws Exception
+    {
+        return success(variableService.previewImport(file));
+    }
+
+    /**
+     * 执行变量导入。
+     */
+    @Log(title = "变量中心", businessType = BusinessType.IMPORT)
+    @PreAuthorize("@ss.hasPermi('cost:variable:add')")
+    @PostMapping("/importData")
+    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception
+    {
+        return success(variableService.importVariables(file, updateSupport, getUsername()));
+    }
+
+    /**
+     * 查询变量详情。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:query')")
     @GetMapping("/{variableId}")
@@ -95,7 +138,7 @@ public class CostVariableController extends BaseController
     }
 
     /**
-     * 新增变量
+     * 新增变量。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:add')")
     @Log(title = "变量中心", businessType = BusinessType.INSERT)
@@ -106,11 +149,12 @@ public class CostVariableController extends BaseController
         {
             return error("新增变量'" + variable.getVariableName() + "'失败，同场景下变量编码已存在");
         }
+        variable.setCreateBy(getUsername());
         return toAjax(variableService.insertVariable(variable));
     }
 
     /**
-     * 修改变量
+     * 修改变量。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:edit')")
     @Log(title = "变量中心", businessType = BusinessType.UPDATE)
@@ -121,11 +165,44 @@ public class CostVariableController extends BaseController
         {
             return error("修改变量'" + variable.getVariableName() + "'失败，同场景下变量编码已存在");
         }
+        variable.setUpdateBy(getUsername());
         return toAjax(variableService.updateVariable(variable));
     }
 
     /**
-     * 删除变量
+     * 复制变量。
+     */
+    @PreAuthorize("@ss.hasPermi('cost:variable:add')")
+    @Log(title = "变量中心", businessType = BusinessType.INSERT)
+    @PostMapping("/copy")
+    public AjaxResult copy(@RequestBody CostVariableCopyRequest request)
+    {
+        return success(variableService.copyVariable(request));
+    }
+
+    /**
+     * 查询共享影响因素模板。
+     */
+    @PreAuthorize("@ss.hasPermi('cost:variable:list')")
+    @GetMapping("/sharedTemplates")
+    public AjaxResult sharedTemplates()
+    {
+        return success(variableService.selectSharedTemplates());
+    }
+
+    /**
+     * 应用共享影响因素模板。
+     */
+    @PreAuthorize("@ss.hasPermi('cost:variable:add')")
+    @Log(title = "变量中心", businessType = BusinessType.INSERT)
+    @PostMapping("/sharedTemplates/apply")
+    public AjaxResult applySharedTemplate(@RequestBody CostVariableTemplateApplyRequest request)
+    {
+        return success(variableService.applySharedTemplate(request, getUsername()));
+    }
+
+    /**
+     * 删除变量。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:remove')")
     @Log(title = "变量中心", businessType = BusinessType.DELETE)
@@ -136,7 +213,7 @@ public class CostVariableController extends BaseController
     }
 
     /**
-     * 测试第三方接口连通性
+     * 测试第三方接口。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:edit')")
     @PostMapping("/remote/test")
@@ -146,7 +223,7 @@ public class CostVariableController extends BaseController
     }
 
     /**
-     * 预览第三方接口数据
+     * 预览第三方接口数据。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @PostMapping("/remote/preview")
@@ -156,7 +233,7 @@ public class CostVariableController extends BaseController
     }
 
     /**
-     * 刷新第三方变量缓存
+     * 刷新第三方变量缓存。
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:edit')")
     @PostMapping("/remote/refresh")

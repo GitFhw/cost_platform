@@ -17,9 +17,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="variableName" column="variable_name" />
         <result property="variableType" column="variable_type" />
         <result property="sourceType" column="source_type" />
+        <result property="sourceSystem" column="source_system" />
         <result property="dictType" column="dict_type" />
         <result property="remoteApi" column="remote_api" />
+        <result property="authType" column="auth_type" />
+        <result property="authConfigJson" column="auth_config_json" />
         <result property="dataPath" column="data_path" />
+        <result property="mappingConfigJson" column="mapping_config_json" />
+        <result property="syncMode" column="sync_mode" />
+        <result property="cachePolicy" column="cache_policy" />
+        <result property="fallbackPolicy" column="fallback_policy" />
         <result property="formulaExpr" column="formula_expr" />
         <result property="dataType" column="data_type" />
         <result property="defaultValue" column="default_value" />
@@ -46,9 +53,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                v.variable_name,
                v.variable_type,
                v.source_type,
+               v.source_system,
                v.dict_type,
                v.remote_api,
+               v.auth_type,
+               v.auth_config_json,
                v.data_path,
+               v.mapping_config_json,
+               v.sync_mode,
+               v.cache_policy,
+               v.fallback_policy,
                v.formula_expr,
                v.data_type,
                v.default_value,
@@ -93,6 +107,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
             <if test="sourceType != null and sourceType != ''">
                 and v.source_type = #{sourceType}
+            </if>
+            <if test="sourceSystem != null and sourceSystem != ''">
+                and v.source_system like concat('%', #{sourceSystem}, '%')
             </if>
             <if test="status != null and status != ''">
                 and v.status = #{status}

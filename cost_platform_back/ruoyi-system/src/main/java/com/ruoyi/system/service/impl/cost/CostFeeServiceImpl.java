@@ -3,9 +3,13 @@ package com.ruoyi.system.service.impl.cost;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.ruoyi.common.constant.UserConstants;
 import com.ruoyi.common.exception.ServiceException;
+import com.ruoyi.common.core.domain.entity.SysDictData;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.cost.CostFeeItem;
+import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.vo.CostFeeGovernanceCheckVo;
+import com.ruoyi.system.mapper.SysDictDataMapper;
+import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
 import com.ruoyi.system.service.cost.ICostFeeService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,8 +29,17 @@ import java.util.StringJoiner;
 @Service
 public class CostFeeServiceImpl implements ICostFeeService
 {
+    private static final String DICT_TYPE_FEE_STATUS = "cost_fee_status";
+    private static final String DICT_TYPE_UNIT_CODE = "cost_unit_code";
+
     @Autowired
     private CostFeeMapper feeMapper;
+
+    @Autowired
+    private CostSceneMapper sceneMapper;
+
+    @Autowired
+    private SysDictDataMapper dictDataMapper;
 
     /**
      * 查询费用列表
@@ -126,6 +139,7 @@ public class CostFeeServiceImpl implements ICostFeeService
     @Override
     public int insertFee(CostFeeItem feeItem)
     {
+        validateFeeConfig(feeItem);
         if (feeItem.getSortNo() == null)
         {
             feeItem.setSortNo(10);
@@ -140,6 +154,7 @@ public class CostFeeServiceImpl implements ICostFeeService
     public int updateFee(CostFeeItem feeItem)
     {
         validateDisableBeforeUpdate(feeItem);
+        validateFeeConfig(feeItem);
         return feeMapper.updateById(feeItem);
     }
 
@@ -263,5 +278,54 @@ public class CostFeeServiceImpl implements ICostFeeService
     private long nullSafeLong(Long value)
     {
         return StringUtils.isNull(value) ? 0L : value.longValue();
+    }
+
+    /**
+     * 校验费用中心核心配置必须符合线程二治理要求。
+     *
+     * @param feeItem 费用对象
+     */
+    private void validateFeeConfig(CostFeeItem feeItem)
+    {
+        validateSceneEnabled(feeItem.getSceneId());
+        validateDictValueExists(DICT_TYPE_FEE_STATUS, feeItem.getStatus(), "费用状态");
+        if (StringUtils.isNotEmpty(feeItem.getUnitCode()))
+        {
+            validateDictValueExists(DICT_TYPE_UNIT_CODE, feeItem.getUnitCode(), "计价单位");
+        }
+    }
+
+    /**
+     * 校验费用所属场景必须存在且处于正常状态。
+     */
+    private void validateSceneEnabled(Long sceneId)
+    {
+        if (sceneId == null)
+        {
+            throw new ServiceException("费用所属场景不能为空");
+        }
+        CostScene scene = sceneMapper.selectById(sceneId);
+        if (scene == null)
+        {
+            throw new ServiceException("费用所属场景不存在");
+        }
+        if (!"0".equals(scene.getStatus()))
+        {
+            throw new ServiceException("费用所属场景不是正常状态，当前不允许继续维护");
+        }
+    }
+
+    /**
+     * 校验字典值是否存在且启用。
+     */
+    private void validateDictValueExists(String dictType, String dictValue, String fieldLabel)
+    {
+        List<SysDictData> dictDataList = dictDataMapper.selectDictDataByType(dictType);
+        boolean matched = dictDataList.stream()
+                .anyMatch(item -> dictValue.equals(item.getDictValue()) && "0".equals(item.getStatus()));
+        if (!matched)
+        {
+            throw new ServiceException(String.format("%s取值无效，请从系统字典 %s 中选择合法值：%s", fieldLabel, dictType, dictValue));
+        }
     }
 }

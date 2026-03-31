@@ -1,4 +1,4 @@
-﻿import request from '@/utils/request'
+import request from '@/utils/request'
 
 // 查询变量列表
 export function listVariable(query) {
@@ -61,11 +61,66 @@ export function updateVariable(data) {
   })
 }
 
+// 复制变量
+export function copyVariable(data) {
+  return request({
+    url: '/cost/variable/copy',
+    method: 'post',
+    data
+  })
+}
+
 // 删除变量
 export function delVariable(variableId) {
   return request({
     url: '/cost/variable/' + variableId,
     method: 'delete'
+  })
+}
+
+// 下载导入模板
+export function importVariableTemplate() {
+  return request({
+    url: '/cost/variable/importTemplate',
+    method: 'post',
+    responseType: 'blob'
+  })
+}
+
+// 导入预览
+export function previewVariableImport(data) {
+  return request({
+    url: '/cost/variable/importPreview',
+    method: 'post',
+    headers: { 'Content-Type': 'multipart/form-data' },
+    data
+  })
+}
+
+// 执行导入
+export function importVariableData(data) {
+  return request({
+    url: '/cost/variable/importData',
+    method: 'post',
+    headers: { 'Content-Type': 'multipart/form-data' },
+    data
+  })
+}
+
+// 查询共享影响因素模板
+export function listVariableTemplates() {
+  return request({
+    url: '/cost/variable/sharedTemplates',
+    method: 'get'
+  })
+}
+
+// 应用共享影响因素模板
+export function applyVariableTemplate(data) {
+  return request({
+    url: '/cost/variable/sharedTemplates/apply',
+    method: 'post',
+    data
   })
 }
 

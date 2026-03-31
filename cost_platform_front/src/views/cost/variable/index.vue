@@ -1,6 +1,30 @@
-﻿<template>
+<template>
   <div class="app-container variable-center">
-    <el-alert title="变量中心（线程二）：支持变量分组、第三方接入变量、接口测试和数据预览。" type="info" :closable="false" show-icon class="mb16" />
+    <section class="variable-center__hero">
+      <div>
+        <div class="variable-center__eyebrow">Thread 2 / Variable Center</div>
+        <h2 class="variable-center__title">变量中心</h2>
+        <p class="variable-center__subtitle">
+          变量是费用、规则、发布和运行链共享的输入层。线程二重点收敛变量来源类型、第三方接入配置、导入校验、复制复用与共享影响因素模板。
+        </p>
+      </div>
+      <el-tag type="info">第三方变量先完成正式配置模型，真实接入链路在线程五至线程六继续增强</el-tag>
+    </section>
+
+    <section class="variable-center__metrics">
+      <div v-for="item in metricItems" :key="item.label" class="variable-center__metric-card">
+        <span class="variable-center__metric-label">{{ item.label }}</span>
+        <strong class="variable-center__metric-value">{{ item.value }}</strong>
+        <span class="variable-center__metric-desc">{{ item.desc }}</span>
+      </div>
+    </section>
+
+    <el-alert
+      title="变量中心已按线程二治理要求承接输入变量、字典变量、第三方接入变量、公式变量，并补齐导入预览、复制和共享模板能力。"
+      type="info"
+      :closable="false"
+      show-icon
+    />
 
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
@@ -13,12 +37,19 @@
           <el-option v-for="item in groupOptions" :key="item.groupId" :label="item.groupName" :value="item.groupId" />
         </el-select>
       </el-form-item>
-      <el-form-item label="变量编码" prop="variableCode"><el-input v-model="queryParams.variableCode" clearable style="width: 180px" @keyup.enter="handleQuery" /></el-form-item>
-      <el-form-item label="变量名称" prop="variableName"><el-input v-model="queryParams.variableName" clearable style="width: 180px" @keyup.enter="handleQuery" /></el-form-item>
-      <el-form-item label="来源" prop="sourceType">
+      <el-form-item label="变量编码" prop="variableCode">
+        <el-input v-model="queryParams.variableCode" clearable style="width: 180px" @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item label="变量名称" prop="variableName">
+        <el-input v-model="queryParams.variableName" clearable style="width: 180px" @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item label="来源类型" prop="sourceType">
         <el-select v-model="queryParams.sourceType" clearable style="width: 160px">
           <el-option v-for="item in sourceTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
+      </el-form-item>
+      <el-form-item label="来源系统" prop="sourceSystem">
+        <el-input v-model="queryParams.sourceSystem" clearable placeholder="如 WMS / ERP / TMS" style="width: 180px" @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
@@ -28,8 +59,11 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5"><el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['cost:variable:add']">新增变量</el-button></el-col>
-      <el-col :span="1.5"><el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate" v-hasPermi="['cost:variable:edit']">修改变量</el-button></el-col>
-      <el-col :span="1.5"><el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete" v-hasPermi="['cost:variable:remove']">删除变量</el-button></el-col>
+      <el-col :span="1.5"><el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['cost:variable:edit']">修改变量</el-button></el-col>
+      <el-col :span="1.5"><el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['cost:variable:remove']">删除变量</el-button></el-col>
+      <el-col :span="1.5"><el-button type="primary" plain icon="Upload" @click="handleImport" v-hasPermi="['cost:variable:add']">导入变量</el-button></el-col>
+      <el-col :span="1.5"><el-button type="success" plain icon="CopyDocument" :disabled="single" @click="handleCopy()">复制变量</el-button></el-col>
+      <el-col :span="1.5"><el-button type="primary" plain icon="Collection" @click="handleTemplateCenter">共享模板</el-button></el-col>
       <el-col :span="1.5"><el-button type="info" plain icon="Connection" :disabled="single" @click="handleTestRemote">测试接口</el-button></el-col>
       <el-col :span="1.5"><el-button type="info" plain icon="View" :disabled="single" @click="handlePreviewRemote">预览数据</el-button></el-col>
       <el-col :span="1.5"><el-button type="info" plain icon="RefreshRight" @click="handleRefreshRemote">刷新缓存</el-button></el-col>
@@ -40,17 +74,30 @@
     <el-table v-loading="loading" :data="variableList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="55" align="center" />
       <el-table-column type="index" label="序号" width="70" align="center" />
-      <el-table-column label="场景" min-width="220" align="center"><template #default="scope">{{ scope.row.sceneCode }} / {{ scope.row.sceneName }}</template></el-table-column>
+      <el-table-column label="场景" min-width="220" align="center">
+        <template #default="scope">{{ scope.row.sceneCode }} / {{ scope.row.sceneName }}</template>
+      </el-table-column>
       <el-table-column label="分组" prop="groupName" width="140" align="center" />
-      <el-table-column label="变量编码" prop="variableCode" width="150" align="center" />
-      <el-table-column label="变量名称" prop="variableName" min-width="150" align="center" :show-overflow-tooltip="true" />
-      <el-table-column label="类型" prop="variableType" width="120" align="center"><template #default="scope"><dict-tag :options="variableTypeOptions" :value="scope.row.variableType" /></template></el-table-column>
-      <el-table-column label="来源" prop="sourceType" width="120" align="center"><template #default="scope"><dict-tag :options="sourceTypeOptions" :value="scope.row.sourceType" /></template></el-table-column>
+      <el-table-column label="变量编码" prop="variableCode" width="160" align="center" />
+      <el-table-column label="变量名称" prop="variableName" min-width="160" align="center" :show-overflow-tooltip="true" />
+      <el-table-column label="类型" prop="variableType" width="120" align="center">
+        <template #default="scope"><dict-tag :options="variableTypeOptions" :value="scope.row.variableType" /></template>
+      </el-table-column>
+      <el-table-column label="来源" prop="sourceType" width="120" align="center">
+        <template #default="scope"><dict-tag :options="sourceTypeOptions" :value="scope.row.sourceType" /></template>
+      </el-table-column>
+      <el-table-column label="来源系统" prop="sourceSystem" width="140" align="center">
+        <template #default="scope">{{ scope.row.sourceSystem || '-' }}</template>
+      </el-table-column>
       <el-table-column label="第三方接口" prop="remoteApi" min-width="180" align="center" :show-overflow-tooltip="true" />
-      <el-table-column label="状态" prop="status" width="100" align="center"><template #default="scope"><dict-tag :options="variableStatusOptions" :value="scope.row.status" /></template></el-table-column>
-      <el-table-column label="操作" width="220" fixed="right" align="center">
+      <el-table-column label="状态" prop="status" width="100" align="center">
+        <template #default="scope"><dict-tag :options="variableStatusOptions" :value="scope.row.status" /></template>
+      </el-table-column>
+      <el-table-column label="操作" width="360" fixed="right" align="center">
         <template #default="scope">
+          <el-button link type="primary" icon="Document" @click="handleDetail(scope.row)">详情</el-button>
           <el-button link type="primary" icon="View" @click="handleGovernance(scope.row)">治理</el-button>
+          <el-button link type="primary" icon="CopyDocument" @click="handleCopy(scope.row)">复制</el-button>
           <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)">修改</el-button>
           <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)">删除</el-button>
         </template>
@@ -59,7 +106,7 @@
 
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
 
-    <el-drawer v-model="open" :title="title" size="680px" append-to-body>
+    <el-drawer v-model="open" :title="title" size="720px" append-to-body>
       <el-form ref="variableRef" :model="form" :rules="rules" label-width="108px">
         <el-form-item label="所属场景" prop="sceneId">
           <el-select v-model="form.sceneId" filterable style="width: 100%" @change="loadFormGroups">
@@ -71,39 +118,224 @@
             <el-option v-for="item in formGroupOptions" :key="item.groupId" :label="item.groupName" :value="item.groupId" />
           </el-select>
         </el-form-item>
+        <div class="variable-center__drawer-tip">
+          先选来源类型，再补齐对应配置。第三方接口变量需明确来源系统、鉴权、字段映射、同步方式、缓存策略和失败兜底。
+        </div>
         <el-row :gutter="14">
           <el-col :span="12"><el-form-item label="变量编码" prop="variableCode"><el-input v-model="form.variableCode" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="变量名称" prop="variableName"><el-input v-model="form.variableName" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="变量类型" prop="variableType"><el-select v-model="form.variableType" style="width: 100%"><el-option v-for="item in variableTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="来源类型" prop="sourceType"><el-select v-model="form.sourceType" style="width: 100%"><el-option v-for="item in sourceTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="数据类型" prop="dataType"><el-select v-model="form.dataType" style="width: 100%"><el-option v-for="item in dataTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="状态" prop="status"><el-radio-group v-model="form.status"><el-radio v-for="item in variableStatusOptions" :key="item.value" :value="item.value">{{ item.label }}</el-radio></el-radio-group></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="状态" prop="status"><el-radio-group v-model="form.status"><el-radio v-for="item in variableStatusOptions" :key="item.value" :label="item.value">{{ item.label }}</el-radio></el-radio-group></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="默认值" prop="defaultValue"><el-input v-model="form.defaultValue" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="精度" prop="precisionScale"><el-input-number v-model="form.precisionScale" :min="0" :max="8" style="width: 100%" /></el-form-item></el-col>
         </el-row>
         <el-form-item v-if="form.sourceType === 'DICT'" label="字典类型" prop="dictType"><el-input v-model="form.dictType" placeholder="如 cost_cargo_type" /></el-form-item>
         <template v-if="form.sourceType === 'REMOTE'">
-          <el-form-item label="第三方接口" prop="remoteApi"><el-input v-model="form.remoteApi" placeholder="http/https 接口地址" /></el-form-item>
-          <el-form-item label="字段映射路径" prop="dataPath"><el-input v-model="form.dataPath" placeholder="如 data.items[].value" /></el-form-item>
+          <el-row :gutter="14">
+            <el-col :span="12"><el-form-item label="来源系统" prop="sourceSystem"><el-input v-model="form.sourceSystem" placeholder="如 WMS / ERP / TMS" /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="鉴权方式" prop="authType"><el-select v-model="form.authType" style="width: 100%"><el-option v-for="item in authTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="第三方接口" prop="remoteApi"><el-input v-model="form.remoteApi" placeholder="http/https 接口地址" /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="鉴权配置JSON" prop="authConfigJson"><el-input v-model="form.authConfigJson" type="textarea" :rows="3" /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="字段映射路径" prop="dataPath"><el-input v-model="form.dataPath" placeholder="如 data.items[].value" /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="映射配置JSON" prop="mappingConfigJson"><el-input v-model="form.mappingConfigJson" type="textarea" :rows="4" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="同步方式" prop="syncMode"><el-select v-model="form.syncMode" style="width: 100%"><el-option v-for="item in syncModeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="缓存策略" prop="cachePolicy"><el-select v-model="form.cachePolicy" style="width: 100%"><el-option v-for="item in cachePolicyOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="失败兜底" prop="fallbackPolicy"><el-select v-model="form.fallbackPolicy" style="width: 100%"><el-option v-for="item in fallbackPolicyOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
+          </el-row>
         </template>
         <el-form-item v-if="form.sourceType === 'FORMULA'" label="公式表达式" prop="formulaExpr"><el-input v-model="form.formulaExpr" type="textarea" :rows="3" /></el-form-item>
         <el-form-item label="备注" prop="remark"><el-input v-model="form.remark" type="textarea" :rows="3" /></el-form-item>
       </el-form>
-      <template #footer><div class="dialog-footer"><el-button type="primary" @click="submitForm">确 定</el-button><el-button @click="cancel">取 消</el-button></div></template>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" @click="submitForm">确 定</el-button>
+          <el-button @click="cancel">取 消</el-button>
+        </div>
+      </template>
     </el-drawer>
 
     <el-dialog title="接口测试" v-model="testOpen" width="480px" append-to-body>
       <el-descriptions :column="1" border v-if="testResult">
         <el-descriptions-item label="结果"><el-tag :type="testResult.success ? 'success' : 'danger'">{{ testResult.success ? '通过' : '失败' }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="说明">{{ testResult.message }}</el-descriptions-item>
+        <el-descriptions-item label="来源系统">{{ testResult.sourceSystem || '-' }}</el-descriptions-item>
         <el-descriptions-item label="接口地址">{{ testResult.remoteApi || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="鉴权方式">{{ resolveDictLabel(authTypeOptions, testResult.authType) }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
 
     <el-dialog title="数据预览" v-model="previewOpen" width="880px" append-to-body>
       <el-row :gutter="12" v-if="previewResult">
-        <el-col :span="12"><el-table :data="previewResult.rawRows" height="260" size="small"><el-table-column prop="sourceCode" label="源编码" /><el-table-column prop="sourceName" label="源名称" /><el-table-column prop="value" label="源值" /></el-table></el-col>
-        <el-col :span="12"><el-table :data="previewResult.mappedRows" height="260" size="small"><el-table-column prop="variableCode" label="变量编码" /><el-table-column prop="mappedValue" label="映射值" /><el-table-column prop="dataPath" label="映射路径" /></el-table></el-col>
+        <el-col :span="12">
+          <el-table :data="previewResult.rawRows" height="260" size="small">
+            <el-table-column prop="sourceCode" label="源编码" />
+            <el-table-column prop="sourceName" label="源名称" />
+            <el-table-column prop="value" label="源值" />
+          </el-table>
+        </el-col>
+        <el-col :span="12">
+          <el-table :data="previewResult.mappedRows" height="260" size="small">
+            <el-table-column prop="variableCode" label="变量编码" />
+            <el-table-column prop="mappedValue" label="映射值" />
+            <el-table-column prop="dataPath" label="映射路径" />
+          </el-table>
+        </el-col>
       </el-row>
+      <el-descriptions v-if="previewResult" :column="2" border class="mt12">
+        <el-descriptions-item label="来源系统">{{ previewResult.sourceSystem || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="同步方式">{{ resolveDictLabel(syncModeOptions, previewResult.syncMode) }}</el-descriptions-item>
+        <el-descriptions-item label="缓存策略">{{ resolveDictLabel(cachePolicyOptions, previewResult.cachePolicy) }}</el-descriptions-item>
+        <el-descriptions-item label="失败兜底">{{ resolveDictLabel(fallbackPolicyOptions, previewResult.fallbackPolicy) }}</el-descriptions-item>
+      </el-descriptions>
     </el-dialog>
+
+    <el-dialog title="导入变量" v-model="importOpen" width="880px" append-to-body>
+      <el-upload ref="uploadRef" :limit="1" accept=".xlsx,.xls" :auto-upload="false" :show-file-list="true" :on-change="handleImportFileChange" :on-remove="handleImportFileRemove" drag>
+        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+        <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+        <template #tip>
+          <div class="el-upload__tip text-center">
+            <div class="el-upload__tip">
+              <el-checkbox v-model="importForm.updateSupport">若变量编码已存在则覆盖更新</el-checkbox>
+            </div>
+            <span>仅支持 xls / xlsx 格式，建议先下载模板后录入。</span>
+            <el-link type="primary" underline="never" style="font-size: 12px; vertical-align: baseline" @click="downloadImportTemplate">下载模板</el-link>
+          </div>
+        </template>
+      </el-upload>
+      <el-alert v-if="importPreview.totalRows" :title="`本次导入共 ${importPreview.totalRows} 行，通过 ${importPreview.passRows} 行，失败 ${importPreview.failRows} 行`" :type="importPreview.failRows ? 'warning' : 'success'" :closable="false" show-icon class="mt12" />
+      <el-row :gutter="12" v-if="importPreview.totalRows" class="mt12">
+        <el-col :span="14">
+          <el-table :data="importPreview.previewRows" size="small" max-height="260">
+            <el-table-column prop="rowNum" label="行号" width="70" />
+            <el-table-column prop="sceneCode" label="场景编码" width="140" />
+            <el-table-column prop="variableCode" label="变量编码" width="160" />
+            <el-table-column prop="variableName" label="变量名称" min-width="160" />
+            <el-table-column prop="importAction" label="动作" width="100" />
+          </el-table>
+        </el-col>
+        <el-col :span="10">
+          <el-table :data="importPreview.issues" size="small" max-height="260">
+            <el-table-column prop="rowNum" label="行号" width="70" />
+            <el-table-column prop="variableCode" label="变量编码" width="120" />
+            <el-table-column prop="message" label="校验问题" min-width="220" show-overflow-tooltip />
+          </el-table>
+        </el-col>
+      </el-row>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="submitImportPreview">导入预览</el-button>
+          <el-button type="primary" :disabled="!importPreview.importable" @click="submitImportData">确认导入</el-button>
+          <el-button @click="importOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog title="复制变量" v-model="copyOpen" width="520px" append-to-body>
+      <el-form ref="copyRef" :model="copyForm" :rules="copyRules" label-width="108px">
+        <el-form-item label="源变量">
+          <el-input :model-value="`${copySource.variableCode || ''}${copySource.variableName ? ' / ' + copySource.variableName : ''}`" disabled />
+        </el-form-item>
+        <el-form-item label="目标场景" prop="targetSceneId">
+          <el-select v-model="copyForm.targetSceneId" filterable style="width: 100%" @change="loadCopyGroups">
+            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="目标分组" prop="targetGroupId">
+          <el-select v-model="copyForm.targetGroupId" clearable filterable style="width: 100%">
+            <el-option v-for="item in copyGroupOptions" :key="item.groupId" :label="item.groupName" :value="item.groupId" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="新变量编码" prop="variableCode">
+          <el-input v-model="copyForm.variableCode" />
+        </el-form-item>
+        <el-form-item label="新变量名称" prop="variableName">
+          <el-input v-model="copyForm.variableName" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" @click="submitCopy">确认复制</el-button>
+          <el-button @click="copyOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog title="共享影响因素模板" v-model="templateOpen" width="980px" append-to-body>
+      <el-row :gutter="16">
+        <el-col :span="11">
+          <el-form :model="templateForm" label-width="96px">
+            <el-form-item label="目标场景">
+              <el-select v-model="templateForm.sceneId" filterable style="width: 100%" @change="loadTemplateGroups">
+                <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="目标分组">
+              <el-select v-model="templateForm.groupId" clearable filterable style="width: 100%">
+                <el-option v-for="item in templateGroupOptions" :key="item.groupId" :label="item.groupName" :value="item.groupId" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="覆盖更新">
+              <el-checkbox v-model="templateForm.updateSupport">已有变量编码时允许更新</el-checkbox>
+            </el-form-item>
+          </el-form>
+          <div class="variable-template-list">
+            <div v-for="item in templateList" :key="item.templateCode" class="variable-template-card" :class="{ 'is-active': templateForm.templateCode === item.templateCode }" @click="templateForm.templateCode = item.templateCode">
+              <div class="variable-template-card__title">{{ item.templateName }}</div>
+              <div class="variable-template-card__desc">{{ item.description }}</div>
+              <div class="variable-template-card__meta">{{ item.namespaceHint }}</div>
+              <el-tag type="info">{{ item.variableCount }} 个变量</el-tag>
+            </div>
+          </div>
+        </el-col>
+        <el-col :span="13">
+          <el-empty v-if="!currentTemplate" description="请选择左侧共享模板" />
+          <template v-else>
+            <el-alert :title="currentTemplate.templateName" :description="currentTemplate.namespaceHint" type="info" :closable="false" show-icon />
+            <el-table :data="currentTemplate.items" size="small" class="mt12" max-height="360">
+              <el-table-column prop="variableCode" label="变量编码" min-width="180" />
+              <el-table-column prop="variableName" label="变量名称" min-width="140" />
+              <el-table-column prop="sourceType" label="来源" width="100" />
+              <el-table-column prop="dataType" label="数据类型" width="100" />
+            </el-table>
+          </template>
+        </el-col>
+      </el-row>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" :disabled="!templateForm.templateCode || !templateForm.sceneId" @click="submitTemplateApply">应用模板</el-button>
+          <el-button @click="templateOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-drawer v-model="detailOpen" title="变量详情" size="560px" append-to-body>
+      <div v-if="detailInfo.variableId" class="variable-detail">
+        <div class="variable-detail__header">
+          <div class="variable-detail__title">{{ detailInfo.variableName }}</div>
+          <div class="variable-detail__meta">{{ detailInfo.variableCode }} / {{ detailInfo.sceneCode }} / {{ detailInfo.sceneName }}</div>
+        </div>
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="变量类型">{{ resolveDictLabel(variableTypeOptions, detailInfo.variableType) }}</el-descriptions-item>
+          <el-descriptions-item label="来源类型">{{ resolveDictLabel(sourceTypeOptions, detailInfo.sourceType) }}</el-descriptions-item>
+          <el-descriptions-item label="来源系统">{{ detailInfo.sourceSystem || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="字典类型">{{ detailInfo.dictType || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="第三方接口">{{ detailInfo.remoteApi || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="鉴权方式">{{ resolveDictLabel(authTypeOptions, detailInfo.authType) }}</el-descriptions-item>
+          <el-descriptions-item label="数据路径">{{ detailInfo.dataPath || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="同步方式">{{ resolveDictLabel(syncModeOptions, detailInfo.syncMode) }}</el-descriptions-item>
+          <el-descriptions-item label="缓存策略">{{ resolveDictLabel(cachePolicyOptions, detailInfo.cachePolicy) }}</el-descriptions-item>
+          <el-descriptions-item label="失败兜底">{{ resolveDictLabel(fallbackPolicyOptions, detailInfo.fallbackPolicy) }}</el-descriptions-item>
+          <el-descriptions-item label="默认值">{{ detailInfo.defaultValue || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="公式表达式">{{ detailInfo.formulaExpr || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="鉴权配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.authConfigJson) }}</pre></el-descriptions-item>
+          <el-descriptions-item label="映射配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.mappingConfigJson) }}</pre></el-descriptions-item>
+          <el-descriptions-item label="备注">{{ detailInfo.remark || '-' }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </el-drawer>
 
     <el-drawer v-model="governanceOpen" title="变量治理检查" size="500px" append-to-body>
       <div v-loading="governanceLoading" v-if="governanceInfo.variableId">
@@ -121,14 +353,31 @@
 </template>
 
 <script setup name="CostVariable">
+import { computed, getCurrentInstance, reactive, ref, toRefs } from 'vue'
 import { ElMessageBox } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
 import { optionselectScene } from '@/api/cost/scene'
-import { addVariable, delVariable, getVariable, getVariableGovernance, listVariable, previewVariableRemote, refreshVariableRemote, testVariableRemote, updateVariable } from '@/api/cost/variable'
+import {
+  addVariable,
+  applyVariableTemplate,
+  copyVariable,
+  delVariable,
+  getVariable,
+  getVariableGovernance,
+  getVariableStats,
+  importVariableData,
+  listVariable,
+  listVariableTemplates,
+  previewVariableImport,
+  previewVariableRemote,
+  refreshVariableRemote,
+  testVariableRemote,
+  updateVariable
+} from '@/api/cost/variable'
 import { optionselectVariableGroup } from '@/api/cost/variableGroup'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
-
 const loading = ref(true)
 const showSearch = ref(true)
 const open = ref(false)
@@ -143,22 +392,41 @@ const variableList = ref([])
 const sceneOptions = ref([])
 const groupOptions = ref([])
 const formGroupOptions = ref([])
+const copyGroupOptions = ref([])
+const templateGroupOptions = ref([])
+const templateList = ref([])
 const variableTypeOptions = ref([])
 const sourceTypeOptions = ref([])
 const dataTypeOptions = ref([])
 const variableStatusOptions = ref([])
+const authTypeOptions = ref([])
+const syncModeOptions = ref([])
+const cachePolicyOptions = ref([])
+const fallbackPolicyOptions = ref([])
 
 const governanceOpen = ref(false)
 const governanceLoading = ref(false)
 const governanceInfo = ref({})
+const detailOpen = ref(false)
+const detailInfo = ref({})
 const testOpen = ref(false)
 const testResult = ref(null)
 const previewOpen = ref(false)
 const previewResult = ref(null)
+const importOpen = ref(false)
+const importFile = ref(null)
+const importPreview = ref({ totalRows: 0, passRows: 0, failRows: 0, importable: false, previewRows: [], issues: [] })
+const copyOpen = ref(false)
+const copySource = ref({})
+const templateOpen = ref(false)
+const statistics = reactive({ variableCount: 0, enabledVariableCount: 0, remoteVariableCount: 0, formulaVariableCount: 0 })
 
 const data = reactive({
-  queryParams: { pageNum: 1, pageSize: 10, sceneId: undefined, groupId: undefined, variableCode: undefined, variableName: undefined, sourceType: undefined },
+  queryParams: { pageNum: 1, pageSize: 10, sceneId: undefined, groupId: undefined, variableCode: undefined, variableName: undefined, sourceType: undefined, sourceSystem: undefined },
   form: {},
+  copyForm: { variableId: undefined, targetSceneId: undefined, targetGroupId: undefined, variableCode: undefined, variableName: undefined },
+  templateForm: { sceneId: undefined, groupId: undefined, templateCode: undefined, updateSupport: false },
+  importForm: { updateSupport: false },
   rules: {
     sceneId: [{ required: true, message: '所属场景不能为空', trigger: 'change' }],
     variableCode: [{ required: true, message: '变量编码不能为空', trigger: 'blur' }],
@@ -166,23 +434,53 @@ const data = reactive({
     variableType: [{ required: true, message: '变量类型不能为空', trigger: 'change' }],
     sourceType: [{ required: true, message: '来源类型不能为空', trigger: 'change' }],
     status: [{ required: true, message: '状态不能为空', trigger: 'change' }]
+  },
+  copyRules: {
+    targetSceneId: [{ required: true, message: '目标场景不能为空', trigger: 'change' }],
+    variableCode: [{ required: true, message: '新变量编码不能为空', trigger: 'blur' }],
+    variableName: [{ required: true, message: '新变量名称不能为空', trigger: 'blur' }]
   }
 })
-const { queryParams, form, rules } = toRefs(data)
+const { queryParams, form, copyForm, templateForm, importForm, rules, copyRules } = toRefs(data)
+
+const metricItems = computed(() => [
+  { label: '变量总数', value: statistics.variableCount, desc: '当前筛选条件下的变量规模' },
+  { label: '启用变量数', value: statistics.enabledVariableCount, desc: '状态为正常的变量数量' },
+  { label: '第三方变量数', value: statistics.remoteVariableCount, desc: '来源为第三方接口的变量数量' },
+  { label: '公式变量数', value: statistics.formulaVariableCount, desc: '来源为公式派生的变量数量' }
+])
+
+const currentTemplate = computed(() => templateList.value.find(item => item.templateCode === templateForm.value.templateCode))
 
 async function loadBaseOptions() {
-  const [dictMap, sceneResponse] = await Promise.all([
-    getRemoteDictOptionMap(['cost_variable_type', 'cost_variable_source_type', 'cost_variable_data_type', 'cost_variable_status']),
-    optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
+  const [dictMap, sceneResponse, templateResponse] = await Promise.all([
+    getRemoteDictOptionMap([
+      'cost_variable_type',
+      'cost_variable_source_type',
+      'cost_variable_data_type',
+      'cost_variable_status',
+      'cost_variable_auth_type',
+      'cost_variable_sync_mode',
+      'cost_variable_cache_policy',
+      'cost_variable_fallback_policy'
+    ]),
+    optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 }),
+    listVariableTemplates()
   ])
   variableTypeOptions.value = dictMap.cost_variable_type || []
   sourceTypeOptions.value = dictMap.cost_variable_source_type || []
   dataTypeOptions.value = dictMap.cost_variable_data_type || []
   variableStatusOptions.value = dictMap.cost_variable_status || []
+  authTypeOptions.value = dictMap.cost_variable_auth_type || []
+  syncModeOptions.value = dictMap.cost_variable_sync_mode || []
+  cachePolicyOptions.value = dictMap.cost_variable_cache_policy || []
+  fallbackPolicyOptions.value = dictMap.cost_variable_fallback_policy || []
   sceneOptions.value = sceneResponse?.data || []
+  templateList.value = templateResponse?.data || []
 }
 
 async function loadGroups(sceneId) {
+  if (!sceneId) return []
   const response = await optionselectVariableGroup({ sceneId, status: '0', pageNum: 1, pageSize: 1000 })
   return response?.data || []
 }
@@ -190,10 +488,16 @@ async function loadGroups(sceneId) {
 async function getList() {
   loading.value = true
   try {
-    const [, rows] = await Promise.all([loadBaseOptions(), listVariable(queryParams.value)])
+    const [, rows, statsResponse] = await Promise.all([loadBaseOptions(), listVariable(queryParams.value), getVariableStats(queryParams.value)])
     variableList.value = rows.rows
     total.value = rows.total
     groupOptions.value = await loadGroups(queryParams.value.sceneId)
+    Object.assign(statistics, {
+      variableCount: Number(statsResponse.data?.variableCount || 0),
+      enabledVariableCount: Number(statsResponse.data?.enabledVariableCount || 0),
+      remoteVariableCount: Number(statsResponse.data?.remoteVariableCount || 0),
+      formulaVariableCount: Number(statsResponse.data?.formulaVariableCount || 0)
+    })
   } finally {
     loading.value = false
   }
@@ -209,10 +513,55 @@ async function loadFormGroups() {
   formGroupOptions.value = await loadGroups(form.value.sceneId)
 }
 
+async function loadCopyGroups() {
+  copyGroupOptions.value = await loadGroups(copyForm.value.targetSceneId)
+  if (!copyGroupOptions.value.find(item => item.groupId === copyForm.value.targetGroupId)) {
+    copyForm.value.targetGroupId = undefined
+  }
+}
+
+async function loadTemplateGroups() {
+  templateGroupOptions.value = await loadGroups(templateForm.value.sceneId)
+  if (!templateGroupOptions.value.find(item => item.groupId === templateForm.value.groupId)) {
+    templateForm.value.groupId = undefined
+  }
+}
+
 function resetFormModel() {
-  form.value = { variableId: undefined, sceneId: undefined, groupId: undefined, variableCode: undefined, variableName: undefined, variableType: 'TEXT', sourceType: 'INPUT', dictType: undefined, remoteApi: undefined, dataPath: undefined, formulaExpr: undefined, dataType: 'STRING', status: '0', precisionScale: 2, sortNo: 10, remark: undefined }
+  form.value = {
+    variableId: undefined,
+    sceneId: undefined,
+    groupId: undefined,
+    variableCode: undefined,
+    variableName: undefined,
+    variableType: 'TEXT',
+    sourceType: 'INPUT',
+    sourceSystem: undefined,
+    dictType: undefined,
+    remoteApi: undefined,
+    authType: 'NONE',
+    authConfigJson: undefined,
+    dataPath: undefined,
+    mappingConfigJson: undefined,
+    syncMode: 'REALTIME',
+    cachePolicy: 'MANUAL_REFRESH',
+    fallbackPolicy: 'FAIL_FAST',
+    formulaExpr: undefined,
+    dataType: 'STRING',
+    defaultValue: undefined,
+    status: '0',
+    precisionScale: 2,
+    sortNo: 10,
+    remark: undefined
+  }
   initialStatus.value = undefined
   proxy.resetForm('variableRef')
+}
+
+function resetImportState() {
+  importFile.value = null
+  importPreview.value = { totalRows: 0, passRows: 0, failRows: 0, importable: false, previewRows: [], issues: [] }
+  importForm.value.updateSupport = false
 }
 
 function handleSelectionChange(selection) {
@@ -221,8 +570,18 @@ function handleSelectionChange(selection) {
   multiple.value = !selection.length
 }
 
-function handleQuery() { queryParams.value.pageNum = 1; getList() }
-function resetQuery() { proxy.resetForm('queryRef'); queryParams.value.pageNum = 1; queryParams.value.pageSize = 10; queryParams.value.groupId = undefined; handleQuery() }
+function handleQuery() {
+  queryParams.value.pageNum = 1
+  getList()
+}
+
+function resetQuery() {
+  proxy.resetForm('queryRef')
+  queryParams.value.pageNum = 1
+  queryParams.value.pageSize = 10
+  queryParams.value.groupId = undefined
+  handleQuery()
+}
 
 async function handleAdd() {
   await loadBaseOptions()
@@ -242,7 +601,16 @@ async function handleUpdate(row) {
   title.value = '修改变量'
 }
 
-function cancel() { open.value = false; resetFormModel() }
+async function handleDetail(row) {
+  const response = await getVariable(row.variableId)
+  detailInfo.value = response.data || {}
+  detailOpen.value = true
+}
+
+function cancel() {
+  open.value = false
+  resetFormModel()
+}
 
 function submitForm() {
   proxy.$refs.variableRef.validate(async valid => {
@@ -274,7 +642,12 @@ async function handleDelete(row) {
   }
   const variableIds = row?.variableId || ids.value
   const variableNames = targetRows.map(item => item.variableName).join('、')
-  proxy.$modal.confirm(`是否确认删除变量"${variableNames}"的数据项？`).then(function() { return delVariable(variableIds) }).then(() => { getList(); proxy.$modal.msgSuccess('删除成功') }).catch(() => {})
+  proxy.$modal.confirm(`是否确认删除变量"${variableNames}"的数据项？`).then(function() {
+    return delVariable(variableIds)
+  }).then(() => {
+    getList()
+    proxy.$modal.msgSuccess('删除成功')
+  }).catch(() => {})
 }
 
 function handleExport() {
@@ -308,18 +681,30 @@ async function ensureDisableAllowed() {
   return true
 }
 
-function currentRow() { return variableList.value.find(item => item.variableId === ids.value[0]) }
+function currentRow() {
+  return variableList.value.find(item => item.variableId === ids.value[0])
+}
 
 async function handleTestRemote() {
-  const row = currentRow(); if (!row) return
-  const response = await testVariableRemote({ remoteApi: row.remoteApi, authType: 'NONE' })
+  const row = currentRow()
+  if (!row) return
+  const response = await testVariableRemote({ remoteApi: row.remoteApi, authType: row.authType, sourceSystem: row.sourceSystem })
   testResult.value = response.data
   testOpen.value = true
 }
 
 async function handlePreviewRemote() {
-  const row = currentRow(); if (!row) return
-  const response = await previewVariableRemote({ variableId: row.variableId, dataPath: row.dataPath, variableCode: row.variableCode })
+  const row = currentRow()
+  if (!row) return
+  const response = await previewVariableRemote({
+    variableId: row.variableId,
+    dataPath: row.dataPath,
+    variableCode: row.variableCode,
+    sourceSystem: row.sourceSystem,
+    syncMode: row.syncMode,
+    cachePolicy: row.cachePolicy,
+    fallbackPolicy: row.fallbackPolicy
+  })
   previewResult.value = response.data
   previewOpen.value = true
 }
@@ -329,11 +714,140 @@ async function handleRefreshRemote() {
   proxy.$modal.msgSuccess(response.data?.message || '刷新成功')
 }
 
+function handleImport() {
+  resetImportState()
+  importOpen.value = true
+}
+
+function handleImportFileChange(file) {
+  importFile.value = file.raw
+}
+
+function handleImportFileRemove() {
+  importFile.value = null
+  importPreview.value = { totalRows: 0, passRows: 0, failRows: 0, importable: false, previewRows: [], issues: [] }
+}
+
+function buildImportFormData() {
+  if (!importFile.value) {
+    proxy.$modal.msgWarning('请先选择导入文件')
+    return null
+  }
+  const formData = new FormData()
+  formData.append('file', importFile.value)
+  return formData
+}
+
+async function submitImportPreview() {
+  const formData = buildImportFormData()
+  if (!formData) return
+  const response = await previewVariableImport(formData)
+  importPreview.value = response.data || importPreview.value
+}
+
+async function submitImportData() {
+  const formData = buildImportFormData()
+  if (!formData) return
+  formData.append('updateSupport', importForm.value.updateSupport)
+  const response = await importVariableData(formData)
+  importPreview.value = response.data || importPreview.value
+  proxy.$modal.msgSuccess(`导入完成：通过 ${importPreview.value.passRows} 行，失败 ${importPreview.value.failRows} 行`)
+  if (importPreview.value.failRows === 0) {
+    importOpen.value = false
+    resetImportState()
+    getList()
+  }
+}
+
+function downloadImportTemplate() {
+  proxy.download('cost/variable/importTemplate', {}, 'cost_variable_import_template.xlsx')
+}
+
+async function handleCopy(row) {
+  await loadBaseOptions()
+  const target = row || currentRow()
+  if (!target) return
+  copySource.value = target
+  copyForm.value = {
+    variableId: target.variableId,
+    targetSceneId: target.sceneId,
+    targetGroupId: target.groupId,
+    variableCode: `${target.variableCode}_COPY`,
+    variableName: `${target.variableName}-复制`
+  }
+  copyGroupOptions.value = await loadGroups(copyForm.value.targetSceneId)
+  copyOpen.value = true
+}
+
+function submitCopy() {
+  proxy.$refs.copyRef.validate(async valid => {
+    if (!valid) return
+    await copyVariable(copyForm.value)
+    proxy.$modal.msgSuccess('复制成功')
+    copyOpen.value = false
+    getList()
+  })
+}
+
+async function handleTemplateCenter() {
+  await loadBaseOptions()
+  templateForm.value.sceneId = queryParams.value.sceneId
+  templateForm.value.groupId = queryParams.value.groupId
+  templateForm.value.templateCode = templateList.value[0]?.templateCode
+  templateForm.value.updateSupport = false
+  templateGroupOptions.value = await loadGroups(templateForm.value.sceneId)
+  templateOpen.value = true
+}
+
+async function submitTemplateApply() {
+  const response = await applyVariableTemplate(templateForm.value)
+  proxy.$modal.msgSuccess(response.data?.message || '共享模板应用成功')
+  templateOpen.value = false
+  getList()
+}
+
+function resolveDictLabel(optionsRef, value) {
+  const options = Array.isArray(optionsRef) ? optionsRef : (optionsRef?.value || [])
+  const match = options.find(item => item.value === value)
+  return match ? match.label : value || '-'
+}
+
+function formatJson(value) {
+  if (!value) return '-'
+  try {
+    return JSON.stringify(typeof value === 'string' ? JSON.parse(value) : value, null, 2)
+  } catch (error) {
+    return value
+  }
+}
+
 getList()
 </script>
 
 <style scoped lang="scss">
 .variable-center { display: grid; gap: 16px; }
-.mb16 { margin-bottom: 0; }
+.variable-center__hero { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; padding: 20px 24px; border: 1px solid var(--el-border-color); border-radius: 16px; background: color-mix(in srgb, var(--el-color-primary-light-9) 18%, var(--el-bg-color-overlay)); }
+.variable-center__eyebrow { font-size: 12px; color: var(--el-color-primary); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.variable-center__title { margin: 8px 0 0; font-size: 26px; }
+.variable-center__subtitle { margin: 10px 0 0; color: var(--el-text-color-regular); line-height: 1.8; }
+.variable-center__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.variable-center__metric-card { display: grid; gap: 6px; padding: 14px 16px; border: 1px solid var(--el-border-color-light); border-radius: 12px; background: var(--el-bg-color-overlay); }
+.variable-center__metric-label, .variable-center__metric-desc { font-size: 12px; color: var(--el-text-color-secondary); }
+.variable-center__metric-value { font-size: 24px; color: var(--el-color-primary); }
+.variable-center__drawer-tip { margin-bottom: 16px; padding: 12px 14px; border-radius: 12px; color: var(--el-text-color-regular); background: color-mix(in srgb, var(--el-color-primary-light-9) 32%, var(--el-bg-color-overlay)); line-height: 1.8; }
+.variable-detail { display: grid; gap: 14px; }
+.variable-detail__header { padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 12px; }
+.variable-detail__title { font-size: 18px; font-weight: 700; }
+.variable-detail__meta { margin-top: 6px; color: var(--el-text-color-secondary); font-size: 12px; }
+.variable-detail__json { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: Consolas, Monaco, monospace; }
+.variable-template-list { display: grid; gap: 12px; max-height: 420px; overflow: auto; }
+.variable-template-card { padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 12px; cursor: pointer; background: var(--el-bg-color-overlay); display: grid; gap: 8px; }
+.variable-template-card.is-active { border-color: var(--el-color-primary); box-shadow: 0 0 0 1px color-mix(in srgb, var(--el-color-primary) 24%, transparent); }
+.variable-template-card__title { font-weight: 700; }
+.variable-template-card__desc, .variable-template-card__meta { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.7; }
 .mt12 { margin-top: 12px; }
+
+@media (max-width: 1200px) {
+  .variable-center__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 </style>
