@@ -23,6 +23,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="pricingMode" column="pricing_mode" />
         <result property="pricingJson" column="pricing_json" />
         <result property="amountFormula" column="amount_formula" />
+        <result property="amountFormulaCode" column="amount_formula_code" />
+        <result property="amountFormulaName" column="amount_formula_name" />
+        <result property="amountBusinessFormula" column="amount_business_formula" />
         <result property="noteTemplate" column="note_template" />
         <result property="status" column="status" />
         <result property="sortNo" column="sort_no" />
@@ -87,6 +90,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                r.pricing_mode,
                r.pricing_json,
                r.amount_formula,
+               r.amount_formula_code,
+               af.formula_name as amount_formula_name,
+               af.business_formula as amount_business_formula,
                r.note_template,
                r.status,
                r.sort_no,
@@ -104,6 +110,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         left join cost_scene s on s.scene_id = r.scene_id
         left join cost_fee_item f on f.fee_id = r.fee_id
         left join cost_variable qv on qv.scene_id = r.scene_id and qv.variable_code = r.quantity_variable_code
+        left join cost_formula af on af.scene_id = r.scene_id and af.formula_code = r.amount_formula_code
     </sql>
 
     <sql id="ruleWhere">

@@ -139,6 +139,20 @@ public class CostRule extends BaseEntity
     @Size(max = 2000, message = "金额公式长度不能超过2000个字符")
     private String amountFormula;
 
+    /** 金额公式编码 */
+    @Excel(name = "金额公式编码")
+    @TableField("amount_formula_code")
+    @Size(max = 64, message = "金额公式编码长度不能超过64个字符")
+    private String amountFormulaCode;
+
+    /** 金额公式名称 */
+    @TableField(exist = false)
+    private String amountFormulaName;
+
+    /** 金额业务中文公式 */
+    @TableField(exist = false)
+    private String amountBusinessFormula;
+
     /** 结果备注模板 */
     @Excel(name = "说明模板")
     @TableField("note_template")

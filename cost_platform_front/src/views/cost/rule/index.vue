@@ -221,6 +221,18 @@
               </el-form-item>
             </el-col>
             <el-col :span="24">
+              <el-form-item label="公式编码" prop="amountFormulaCode">
+                <el-select v-model="form.amountFormulaCode" clearable filterable style="width: 100%" placeholder="优先引用公式实验室中的金额公式编码">
+                  <el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaCode} / ${item.formulaName}`" :value="item.formulaCode" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="24">
+              <el-form-item label="中文公式">
+                <div class="rule-center__formula-preview">{{ selectedAmountFormulaMeta.businessFormula || '未选择公式编码时，可继续填写标准表达式作为兼容兜底。' }}</div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="24">
               <div class="rule-center__formula-helper">
                 <span>命名空间提示：`V.` 变量、`I.` 输入、`C.` 上下文、`F.` 费用结果、`T.` 临时值</span>
                 <el-button link type="primary" @click="expressionOpen = true">打开表达式助手</el-button>
@@ -463,6 +475,7 @@ import { ElMessageBox } from 'element-plus'
 import ConditionValueEditor from '@/components/cost/ConditionValueEditor.vue'
 import RuleTierEditor from '@/components/cost/RuleTierEditor.vue'
 import { optionselectFee } from '@/api/cost/fee'
+import { optionselectFormula } from '@/api/cost/formula'
 import { addRule, copyRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, updateRule } from '@/api/cost/rule'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
@@ -490,6 +503,7 @@ const ruleList = ref([])
 const sceneOptions = ref([])
 const feeOptions = ref([])
 const variableOptions = ref([])
+const formulaOptions = ref([])
 const businessDomainOptions = ref([])
 const ruleStatusOptions = ref([])
 const ruleTypeOptions = ref([])
@@ -571,6 +585,7 @@ const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) 
   acc[item.variableCode] = item
   return acc
 }, {}))
+const selectedAmountFormulaMeta = computed(() => formulaOptions.value.find(item => item.formulaCode === form.value.amountFormulaCode) || {})
 const selectedTierVariableMeta = computed(() => variableMetaMap.value[form.value.quantityVariableCode])
 const tierValidationIssues = computed(() => buildTierValidationIssues(form.value.tiers || []))
 const metricItems = computed(() => [
@@ -595,6 +610,7 @@ function resetFormModel() {
     quantityVariableCode: undefined,
     pricingMode: 'TYPED',
     pricingConfig: { rateValue: undefined },
+    amountFormulaCode: undefined,
     amountFormula: undefined,
     noteTemplate: undefined,
     status: '0',
@@ -645,10 +661,15 @@ async function loadFees() {
 async function loadVariables(sceneId) {
   if (!sceneId) {
     variableOptions.value = []
+    formulaOptions.value = []
     return
   }
-  const response = await optionselectVariable({ sceneId, status: '0', pageNum: 1, pageSize: 1000 })
-  variableOptions.value = response?.data || []
+  const [variableResponse, formulaResponse] = await Promise.all([
+    optionselectVariable({ sceneId, status: '0', pageNum: 1, pageSize: 1000 }),
+    optionselectFormula({ sceneId, status: '0', pageNum: 1, pageSize: 1000 })
+  ])
+  variableOptions.value = variableResponse?.data || []
+  formulaOptions.value = formulaResponse?.data || []
   await ensureDynamicDictOptions()
 }
 
@@ -779,10 +800,12 @@ function cancel() {
 function handleRuleTypeChange(value) {
   if (value === 'FIXED_RATE') {
     form.value.pricingConfig = { rateValue: form.value.pricingConfig?.rateValue }
+    form.value.amountFormulaCode = undefined
     form.value.amountFormula = undefined
     form.value.tiers = []
   } else if (value === 'FIXED_AMOUNT') {
     form.value.pricingConfig = { amountValue: form.value.pricingConfig?.amountValue }
+    form.value.amountFormulaCode = undefined
     form.value.amountFormula = undefined
     form.value.tiers = []
   } else if (value === 'FORMULA') {
@@ -790,6 +813,8 @@ function handleRuleTypeChange(value) {
     form.value.tiers = []
   } else if (value === 'TIER_RATE') {
     form.value.pricingConfig = {}
+    form.value.amountFormulaCode = undefined
+    form.value.amountFormula = undefined
     if (!form.value.tiers?.length) {
       form.value.tiers = [{ tierNo: 1, intervalMode: 'LEFT_CLOSED_RIGHT_OPEN', status: '0' }]
     }
@@ -849,6 +874,7 @@ function normalizeRuleDetail(data = {}) {
     quantityVariableCode: data.quantityVariableCode,
     pricingMode: data.pricingMode || 'TYPED',
     pricingConfig: normalizedPricingConfig,
+    amountFormulaCode: data.amountFormulaCode,
     amountFormula: data.amountFormula,
     noteTemplate: data.noteTemplate,
     status: data.status || '0',
@@ -1207,6 +1233,15 @@ getList()
   background: color-mix(in srgb, var(--el-color-primary-light-9) 36%, var(--el-bg-color-overlay));
   color: var(--el-text-color-regular);
   font-size: 13px;
+}
+
+.rule-center__formula-preview {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--el-fill-color-light);
+  line-height: 1.7;
+  color: var(--el-text-color-regular);
 }
 
 .rule-center__tier-basis,

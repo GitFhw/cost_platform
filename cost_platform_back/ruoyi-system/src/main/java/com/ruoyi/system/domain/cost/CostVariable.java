@@ -162,6 +162,20 @@ public class CostVariable extends BaseEntity
     @Size(max = 2000, message = "公式表达式长度不能超过2000个字符")
     private String formulaExpr;
 
+    /** 引用的公式编码 */
+    @Excel(name = "公式编码")
+    @TableField("formula_code")
+    @Size(max = 64, message = "公式编码长度不能超过64个字符")
+    private String formulaCode;
+
+    /** 公式名称 */
+    @TableField(exist = false)
+    private String formulaName;
+
+    /** 业务中文公式 */
+    @TableField(exist = false)
+    private String businessFormula;
+
     /** 数据类型 */
     @Excel(name = "数据类型", dictType = "cost_variable_data_type")
     @TableField("data_type")

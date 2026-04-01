@@ -8,6 +8,7 @@ import com.ruoyi.common.constant.UserConstants;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.cost.CostFeeItem;
+import com.ruoyi.system.domain.cost.CostFormula;
 import com.ruoyi.system.domain.cost.CostRule;
 import com.ruoyi.system.domain.cost.CostRuleCondition;
 import com.ruoyi.system.domain.cost.CostRuleTier;
@@ -16,10 +17,12 @@ import com.ruoyi.system.domain.cost.bo.CostRuleCopyBo;
 import com.ruoyi.system.domain.cost.bo.CostRuleSaveBo;
 import com.ruoyi.system.domain.vo.CostRuleGovernanceCheckVo;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
+import com.ruoyi.system.mapper.cost.CostFormulaMapper;
 import com.ruoyi.system.mapper.cost.CostRuleConditionMapper;
 import com.ruoyi.system.mapper.cost.CostRuleMapper;
 import com.ruoyi.system.mapper.cost.CostRuleTierMapper;
 import com.ruoyi.system.mapper.cost.CostVariableMapper;
+import com.ruoyi.system.service.cost.ICostExpressionService;
 import com.ruoyi.system.service.cost.ICostRuleService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,6 +76,12 @@ public class CostRuleServiceImpl implements ICostRuleService
 
     @Autowired
     private CostVariableMapper variableMapper;
+
+    @Autowired
+    private CostFormulaMapper formulaMapper;
+
+    @Autowired
+    private ICostExpressionService expressionService;
 
     /**
      * 查询规则列表
@@ -267,6 +276,7 @@ public class CostRuleServiceImpl implements ICostRuleService
         entity.setSortNo(request.getSortNo() == null ? 10 : request.getSortNo());
         entity.setRuleName(StringUtils.isEmpty(request.getRuleName()) ? request.getRuleCode() : request.getRuleName());
         entity.setPricingJson(writePricingConfig(request.getPricingConfig()));
+        entity.setAmountFormulaCode(StringUtils.trim(request.getAmountFormulaCode()));
         if (!update)
         {
             entity.setRuleId(null);
@@ -311,6 +321,10 @@ public class CostRuleServiceImpl implements ICostRuleService
         {
             throw new ServiceException("公式金额规则必须填写金额公式");
         }
+        if (RULE_TYPE_FORMULA.equals(ruleType))
+        {
+            bindAmountFormula(request);
+        }
         if (RULE_TYPE_TIER_RATE.equals(ruleType))
         {
             CostVariable quantityVariable = requireQuantityVariable(request);
@@ -324,6 +338,30 @@ public class CostRuleServiceImpl implements ICostRuleService
         {
             validateNumericVariable(requireQuantityVariable(request), "公式计量变量");
         }
+    }
+
+    /**
+     * 绑定金额公式编码并回填标准表达式。
+     */
+    private void bindAmountFormula(CostRuleSaveBo request)
+    {
+        if (StringUtils.isNotEmpty(request.getAmountFormulaCode()))
+        {
+            CostFormula formula = formulaMapper.selectOne(Wrappers.<CostFormula>lambdaQuery()
+                    .eq(CostFormula::getSceneId, request.getSceneId())
+                    .eq(CostFormula::getFormulaCode, request.getAmountFormulaCode()));
+            if (formula == null)
+            {
+                throw new ServiceException("金额公式编码不存在，请先在公式实验室维护");
+            }
+            if (!STATUS_ENABLED.equals(formula.getStatus()))
+            {
+                throw new ServiceException("金额公式编码已停用，不能继续引用");
+            }
+            request.setAmountFormula(formula.getFormulaExpr());
+            return;
+        }
+        expressionService.validateExpression(request.getAmountFormula());
     }
 
     /**

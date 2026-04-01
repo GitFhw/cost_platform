@@ -10,6 +10,7 @@ import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.CostVariable;
 import com.ruoyi.system.domain.cost.CostVariableGroup;
+import com.ruoyi.system.domain.cost.CostFormula;
 import com.ruoyi.system.domain.vo.CostVariableCopyRequest;
 import com.ruoyi.system.domain.vo.CostVariableGovernanceCheckVo;
 import com.ruoyi.system.domain.vo.CostVariableImportIssueVo;
@@ -20,8 +21,10 @@ import com.ruoyi.system.domain.vo.CostVariableTemplateVo;
 import com.ruoyi.system.mapper.SysDictDataMapper;
 import com.ruoyi.system.mapper.SysDictTypeMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
+import com.ruoyi.system.mapper.cost.CostFormulaMapper;
 import com.ruoyi.system.mapper.cost.CostVariableGroupMapper;
 import com.ruoyi.system.mapper.cost.CostVariableMapper;
+import com.ruoyi.system.service.cost.ICostExpressionService;
 import com.ruoyi.system.service.cost.ICostVariableService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -68,10 +71,16 @@ public class CostVariableServiceImpl implements ICostVariableService
     private CostVariableGroupMapper variableGroupMapper;
 
     @Autowired
+    private CostFormulaMapper formulaMapper;
+
+    @Autowired
     private SysDictDataMapper dictDataMapper;
 
     @Autowired
     private SysDictTypeMapper dictTypeMapper;
+
+    @Autowired
+    private ICostExpressionService expressionService;
 
     @Override
     public List<CostVariable> selectVariableList(CostVariable variable)
@@ -235,6 +244,7 @@ public class CostVariableServiceImpl implements ICostVariableService
         copied.setCachePolicy(source.getCachePolicy());
         copied.setFallbackPolicy(source.getFallbackPolicy());
         copied.setFormulaExpr(source.getFormulaExpr());
+        copied.setFormulaCode(source.getFormulaCode());
         copied.setDataType(source.getDataType());
         copied.setDefaultValue(source.getDefaultValue());
         copied.setPrecisionScale(source.getPrecisionScale());
@@ -573,6 +583,7 @@ public class CostVariableServiceImpl implements ICostVariableService
         variable.setCachePolicy(StringUtils.defaultIfEmpty(StringUtils.trim(row.getCachePolicy()), "MANUAL_REFRESH"));
         variable.setFallbackPolicy(StringUtils.defaultIfEmpty(StringUtils.trim(row.getFallbackPolicy()), "FAIL_FAST"));
         variable.setFormulaExpr(StringUtils.trim(row.getFormulaExpr()));
+        variable.setFormulaCode("");
         variable.setDataType(StringUtils.defaultIfEmpty(StringUtils.trim(row.getDataType()), "STRING"));
         variable.setDefaultValue(StringUtils.trim(row.getDefaultValue()));
         variable.setPrecisionScale(row.getPrecisionScale());
@@ -649,6 +660,10 @@ public class CostVariableServiceImpl implements ICostVariableService
         {
             validateRemoteVariableConfig(variable);
         }
+        if ("FORMULA".equals(variable.getSourceType()))
+        {
+            validateFormulaVariableConfig(variable);
+        }
     }
 
     /**
@@ -711,7 +726,40 @@ public class CostVariableServiceImpl implements ICostVariableService
         if (!"FORMULA".equals(sourceType))
         {
             variable.setFormulaExpr(null);
+            variable.setFormulaCode("");
         }
+        else
+        {
+            variable.setFormulaCode(StringUtils.trim(variable.getFormulaCode()));
+        }
+    }
+
+    /**
+     * 校验公式变量配置。
+     */
+    private void validateFormulaVariableConfig(CostVariable variable)
+    {
+        if (StringUtils.isNotEmpty(variable.getFormulaCode()))
+        {
+            CostFormula formula = formulaMapper.selectOne(Wrappers.<CostFormula>lambdaQuery()
+                    .eq(CostFormula::getSceneId, variable.getSceneId())
+                    .eq(CostFormula::getFormulaCode, variable.getFormulaCode()));
+            if (formula == null)
+            {
+                throw new ServiceException("公式变量引用的公式编码不存在，请先到公式实验室维护");
+            }
+            if (!"0".equals(formula.getStatus()))
+            {
+                throw new ServiceException("公式变量引用的公式已停用，不能继续使用");
+            }
+            variable.setFormulaExpr(formula.getFormulaExpr());
+            return;
+        }
+        if (StringUtils.isEmpty(variable.getFormulaExpr()))
+        {
+            throw new ServiceException("公式变量必须选择公式编码或填写公式表达式");
+        }
+        expressionService.validateExpression(variable.getFormulaExpr());
     }
 
     /**

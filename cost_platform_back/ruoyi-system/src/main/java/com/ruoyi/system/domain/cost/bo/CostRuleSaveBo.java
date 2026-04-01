@@ -61,6 +61,9 @@ public class CostRuleSaveBo
     /** 金额公式 */
     private String amountFormula;
 
+    /** 金额公式编码 */
+    private String amountFormulaCode;
+
     /** 说明模板 */
     private String noteTemplate;
 

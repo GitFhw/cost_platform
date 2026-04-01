@@ -28,6 +28,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="cachePolicy" column="cache_policy" />
         <result property="fallbackPolicy" column="fallback_policy" />
         <result property="formulaExpr" column="formula_expr" />
+        <result property="formulaCode" column="formula_code" />
+        <result property="formulaName" column="formula_name" />
+        <result property="businessFormula" column="business_formula" />
         <result property="dataType" column="data_type" />
         <result property="defaultValue" column="default_value" />
         <result property="precisionScale" column="precision_scale" />
@@ -64,6 +67,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                v.cache_policy,
                v.fallback_policy,
                v.formula_expr,
+               v.formula_code,
+               fm.formula_name,
+               fm.business_formula,
                v.data_type,
                v.default_value,
                v.precision_scale,
@@ -77,6 +83,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         from cost_variable v
         left join cost_scene s on s.scene_id = v.scene_id
         left join cost_variable_group g on g.group_id = v.group_id
+        left join cost_formula fm on fm.scene_id = v.scene_id and fm.formula_code = v.formula_code
     </sql>
 
     <sql id="variableWhere">
