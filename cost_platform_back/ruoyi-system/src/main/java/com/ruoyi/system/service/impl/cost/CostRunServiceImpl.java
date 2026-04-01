@@ -4,29 +4,37 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ruoyi.common.core.redis.RedisCache;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.system.domain.cost.CostAlarmRecord;
+import com.ruoyi.system.domain.cost.CostBillPeriod;
 import com.ruoyi.system.domain.cost.CostCalcTask;
 import com.ruoyi.system.domain.cost.CostCalcTaskDetail;
 import com.ruoyi.system.domain.cost.CostFeeItem;
 import com.ruoyi.system.domain.cost.CostPublishSnapshot;
 import com.ruoyi.system.domain.cost.CostPublishVersion;
+import com.ruoyi.system.domain.cost.CostRecalcOrder;
 import com.ruoyi.system.domain.cost.CostResultLedger;
 import com.ruoyi.system.domain.cost.CostResultTrace;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.CostSimulationRecord;
 import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
 import com.ruoyi.system.domain.cost.bo.CostSimulationExecuteBo;
+import com.ruoyi.system.mapper.cost.CostBillPeriodMapper;
 import com.ruoyi.system.mapper.cost.CostCalcTaskDetailMapper;
 import com.ruoyi.system.mapper.cost.CostCalcTaskMapper;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
 import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
+import com.ruoyi.system.mapper.cost.CostRecalcOrderMapper;
 import com.ruoyi.system.mapper.cost.CostResultLedgerMapper;
 import com.ruoyi.system.mapper.cost.CostResultTraceMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.mapper.cost.CostSimulationRecordMapper;
+import com.ruoyi.system.service.cost.ICostAlarmService;
+import com.ruoyi.system.service.cost.ICostAuditService;
 import com.ruoyi.system.service.cost.ICostRunService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.expression.MapAccessor;
@@ -58,6 +66,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -87,6 +96,13 @@ public class CostRunServiceImpl implements ICostRunService
     private static final String DETAIL_STATUS_SUCCESS = "SUCCESS";
     private static final String DETAIL_STATUS_FAILED = "FAILED";
     private static final String RESULT_STATUS_SUCCESS = "SUCCESS";
+    private static final String PERIOD_STATUS_NOT_STARTED = "NOT_STARTED";
+    private static final String PERIOD_STATUS_IN_PROGRESS = "IN_PROGRESS";
+    private static final String PERIOD_STATUS_CLOSED = "CLOSED";
+    private static final String PERIOD_STATUS_SEALED = "SEALED";
+    private static final String RECALC_STATUS_RUNNING = "RUNNING";
+    private static final String RECALC_STATUS_SUCCESS = "SUCCESS";
+    private static final String RECALC_STATUS_FAILED = "FAILED";
     private static final String RULE_TYPE_FIXED_RATE = "FIXED_RATE";
     private static final String RULE_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
     private static final String RULE_TYPE_FORMULA = "FORMULA";
@@ -107,6 +123,7 @@ public class CostRunServiceImpl implements ICostRunService
     private static final String OP_EXPR = "EXPR";
     private static final String INTERVAL_LCRO = "LEFT_CLOSED_RIGHT_OPEN";
     private static final String INTERVAL_LORC = "LEFT_OPEN_RIGHT_CLOSED";
+    private static final String RUNTIME_CACHE_PREFIX = "cost:runtime:snapshot:";
     private static final DateTimeFormatter NO_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final DecimalFormat PARTITION_FORMAT = new DecimalFormat("000");
 
@@ -135,10 +152,25 @@ public class CostRunServiceImpl implements ICostRunService
     private CostPublishVersionMapper publishVersionMapper;
 
     @Autowired
+    private CostBillPeriodMapper billPeriodMapper;
+
+    @Autowired
+    private CostRecalcOrderMapper recalcOrderMapper;
+
+    @Autowired
     private CostFeeMapper feeMapper;
 
     @Autowired
     private ThreadPoolTaskExecutor threadPoolTaskExecutor;
+
+    @Autowired
+    private RedisCache redisCache;
+
+    @Autowired
+    private ICostAuditService auditService;
+
+    @Autowired
+    private ICostAlarmService alarmService;
 
     @Override
     public Map<String, Object> selectSimulationStats(Long sceneId)
@@ -248,6 +280,7 @@ public class CostRunServiceImpl implements ICostRunService
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), true);
         List<Map<String, Object>> inputs = parseTaskInput(bo);
         validateBillMonth(bo.getBillMonth());
+        CostBillPeriod period = ensureBillPeriodAvailable(snapshot.sceneId, bo.getBillMonth(), snapshot.versionId);
         if (StringUtils.isNotEmpty(bo.getRequestNo()))
         {
             CostCalcTask existing = calcTaskMapper.selectOne(Wrappers.<CostCalcTask>lambdaQuery()
@@ -284,6 +317,7 @@ public class CostRunServiceImpl implements ICostRunService
         task.setUpdateBy(operator);
         task.setUpdateTime(now);
         calcTaskMapper.insert(task);
+        markPeriodInProgress(period, task);
 
         AtomicInteger partitionCounter = new AtomicInteger(1);
         for (Map<String, Object> input : inputs)
@@ -300,6 +334,8 @@ public class CostRunServiceImpl implements ICostRunService
             detail.setErrorMessage("");
             calcTaskDetailMapper.insert(detail);
         }
+        auditService.recordAudit(snapshot.sceneId, "CALC_TASK", task.getTaskNo(),
+                "SUBMIT", "提交正式核算任务", null, task, task.getRequestNo());
         dispatchTaskAfterCommit(task.getTaskId());
         return selectTaskDetail(task.getTaskId());
     }
@@ -345,11 +381,19 @@ public class CostRunServiceImpl implements ICostRunService
         {
             throw new ServiceException("所属核算任务不存在，请刷新后重试");
         }
+        int nextRetryCount = (detail.getRetryCount() == null ? 0 : detail.getRetryCount()) + 1;
         calcTaskDetailMapper.update(null, Wrappers.<CostCalcTaskDetail>lambdaUpdate()
                 .eq(CostCalcTaskDetail::getDetailId, detailId)
                 .set(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_INIT)
-                .set(CostCalcTaskDetail::getRetryCount, (detail.getRetryCount() == null ? 0 : detail.getRetryCount()) + 1)
+                .set(CostCalcTaskDetail::getRetryCount, nextRetryCount)
                 .set(CostCalcTaskDetail::getErrorMessage, ""));
+        auditService.recordAudit(task.getSceneId(), "CALC_TASK_DETAIL", detail.getBizNo(),
+                "RETRY", "重试正式核算明细", detail, calcTaskDetailMapper.selectById(detailId), task.getRequestNo());
+        if (nextRetryCount >= 3)
+        {
+            createTaskAlarm(task, detail, "TASK_DETAIL_RETRY_LIMIT", "WARN",
+                    "任务明细重试次数达到阈值", "业务单号 " + detail.getBizNo() + " 的重试次数已达到 " + nextRetryCount + " 次");
+        }
         dispatchTaskAfterCommit(task.getTaskId());
         return 1;
     }
@@ -366,12 +410,17 @@ public class CostRunServiceImpl implements ICostRunService
         {
             return 0;
         }
-        return calcTaskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
+        int rows = calcTaskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
                 .eq(CostCalcTask::getTaskId, taskId)
                 .set(CostCalcTask::getTaskStatus, TASK_STATUS_CANCELLED)
                 .set(CostCalcTask::getErrorMessage, "任务已手工终止")
                 .set(CostCalcTask::getUpdateBy, firstNonBlank(SecurityUtils.getUsername(), "system"))
                 .set(CostCalcTask::getUpdateTime, DateUtils.getNowDate()));
+        refreshBillPeriod(task.getSceneId(), task.getBillMonth(), task);
+        syncRecalcByTask(task, TASK_STATUS_CANCELLED);
+        auditService.recordAudit(task.getSceneId(), "CALC_TASK", task.getTaskNo(),
+                "CANCEL", "取消正式核算任务", task, calcTaskMapper.selectById(taskId), task.getRequestNo());
+        return rows;
     }
 
     @Override
@@ -491,6 +540,8 @@ public class CostRunServiceImpl implements ICostRunService
                 catch (Exception e)
                 {
                     failed++;
+                    createTaskAlarm(latestTask, detail, "TASK_DETAIL_FAILED", "WARN",
+                            "任务明细执行失败", "业务单号 " + detail.getBizNo() + " 执行失败：" + limitLength(e.getMessage(), 300));
                     calcTaskDetailMapper.update(null, Wrappers.<CostCalcTaskDetail>lambdaUpdate()
                             .eq(CostCalcTaskDetail::getDetailId, detail.getDetailId())
                             .set(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_FAILED)
@@ -511,6 +562,14 @@ public class CostRunServiceImpl implements ICostRunService
                     .set(CostCalcTask::getFinishedTime, DateUtils.getNowDate())
                     .set(CostCalcTask::getDurationMs, DateUtils.getNowDate().getTime() - startedTime.getTime())
                     .set(CostCalcTask::getUpdateTime, DateUtils.getNowDate()));
+            CostCalcTask latest = calcTaskMapper.selectById(taskId);
+            if (latest != null)
+            {
+                refreshBillPeriod(latest.getSceneId(), latest.getBillMonth(), latest);
+                syncRecalcByTask(latest, TASK_STATUS_FAILED);
+                createTaskAlarm(latest, null, "TASK_FAILED", "ERROR",
+                        "正式核算任务执行失败", limitLength(e.getMessage(), 500));
+            }
         }
     }
 
@@ -630,6 +689,21 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostCalcTask::getFinishedTime, finishedTime)
                 .set(CostCalcTask::getDurationMs, finishedTime.getTime() - startedTime.getTime())
                 .set(CostCalcTask::getUpdateTime, finishedTime));
+        CostCalcTask task = calcTaskMapper.selectById(taskId);
+        if (task != null)
+        {
+            refreshBillPeriod(task.getSceneId(), task.getBillMonth(), task);
+            syncRecalcByTask(task, status);
+            auditService.recordAudit(task.getSceneId(), "CALC_TASK", task.getTaskNo(),
+                    "FINISH", "正式核算任务完成", null, task, task.getRequestNo());
+            if (TASK_STATUS_FAILED.equals(status) || TASK_STATUS_PART_SUCCESS.equals(status))
+            {
+                createTaskAlarm(task, null, "TASK_FINISHED_WITH_ERROR",
+                        TASK_STATUS_FAILED.equals(status) ? "ERROR" : "WARN",
+                        TASK_STATUS_FAILED.equals(status) ? "正式核算任务失败" : "正式核算任务部分成功",
+                        "任务 " + task.getTaskNo() + " 完成状态为 " + status + "，成功 " + success + " 条，失败 " + failed + " 条。");
+            }
+        }
     }
 
     /**
@@ -970,6 +1044,18 @@ public class CostRunServiceImpl implements ICostRunService
         {
             throw new ServiceException("正式核算默认只能按当前生效版本执行");
         }
+        String cacheKey = buildRuntimeCacheKey(targetVersionId);
+        try
+        {
+            String cached = redisCache.getCacheObject(cacheKey);
+            if (StringUtils.isNotEmpty(cached))
+            {
+                return objectMapper.readValue(cached, RuntimeSnapshot.class);
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
         List<CostPublishSnapshot> snapshots = publishVersionMapper.selectSnapshotList(targetVersionId, null);
         if (snapshots == null || snapshots.isEmpty())
         {
@@ -1065,6 +1151,13 @@ public class CostRunServiceImpl implements ICostRunService
         {
             rules.sort(Comparator.comparingInt((RuntimeRule item) -> item.priority == null ? 0 : item.priority).reversed()
                     .thenComparingInt(item -> item.sortNo == null ? 9999 : item.sortNo));
+        }
+        try
+        {
+            redisCache.setCacheObject(cacheKey, objectMapper.writeValueAsString(snapshot), 30, TimeUnit.MINUTES);
+        }
+        catch (JsonProcessingException ignored)
+        {
         }
         return snapshot;
     }
@@ -1529,79 +1622,287 @@ public class CostRunServiceImpl implements ICostRunService
         return text.length() <= maxLength ? text : text.substring(0, maxLength);
     }
 
-    private static class RuntimeSnapshot
+    private CostBillPeriod ensureBillPeriodAvailable(Long sceneId, String billMonth, Long versionId)
     {
-        private Long sceneId;
-        private Long versionId;
-        private String sceneCode;
-        private String sceneName;
-        private String versionNo;
-        private final List<RuntimeFee> fees = new ArrayList<>();
-        private final List<RuntimeVariable> variables = new ArrayList<>();
-        private final Map<String, RuntimeRule> rulesByCode = new LinkedHashMap<>();
-        private final Map<String, List<RuntimeRule>> rulesByFeeCode = new LinkedHashMap<>();
-        private final Map<String, List<RuntimeCondition>> conditionsByRuleCode = new LinkedHashMap<>();
-        private final Map<String, List<RuntimeTier>> tiersByRuleCode = new LinkedHashMap<>();
+        CostBillPeriod period = billPeriodMapper.selectOne(Wrappers.<CostBillPeriod>lambdaQuery()
+                .eq(CostBillPeriod::getSceneId, sceneId)
+                .eq(CostBillPeriod::getBillMonth, billMonth)
+                .last("limit 1"));
+        if (period == null)
+        {
+            Date now = DateUtils.getNowDate();
+            String operator = firstNonBlank(SecurityUtils.getUsername(), "system");
+            period = new CostBillPeriod();
+            period.setSceneId(sceneId);
+            period.setBillMonth(billMonth);
+            period.setPeriodStatus(PERIOD_STATUS_NOT_STARTED);
+            period.setActiveVersionId(versionId);
+            period.setResultCount(0L);
+            period.setAmountTotal(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            period.setRemark("运行链自动创建账期");
+            period.setCreateBy(operator);
+            period.setCreateTime(now);
+            period.setUpdateBy(operator);
+            period.setUpdateTime(now);
+            billPeriodMapper.insert(period);
+            return period;
+        }
+        if (PERIOD_STATUS_SEALED.equals(period.getPeriodStatus()))
+        {
+            throw new ServiceException("当前账期已封存，禁止直接提交正式核算任务");
+        }
+        if (!Objects.equals(period.getActiveVersionId(), versionId))
+        {
+            billPeriodMapper.update(null, Wrappers.<CostBillPeriod>lambdaUpdate()
+                    .eq(CostBillPeriod::getPeriodId, period.getPeriodId())
+                    .set(CostBillPeriod::getActiveVersionId, versionId)
+                    .set(CostBillPeriod::getUpdateBy, firstNonBlank(SecurityUtils.getUsername(), "system"))
+                    .set(CostBillPeriod::getUpdateTime, DateUtils.getNowDate()));
+            period.setActiveVersionId(versionId);
+        }
+        return period;
     }
 
-    private static class RuntimeFee
+    private void markPeriodInProgress(CostBillPeriod period, CostCalcTask task)
     {
-        private Long feeId;
-        private String feeCode;
-        private String feeName;
-        private String objectDimension;
-        private Integer sortNo;
+        billPeriodMapper.update(null, Wrappers.<CostBillPeriod>lambdaUpdate()
+                .eq(CostBillPeriod::getPeriodId, period.getPeriodId())
+                .ne(CostBillPeriod::getPeriodStatus, PERIOD_STATUS_SEALED)
+                .set(CostBillPeriod::getPeriodStatus, PERIOD_STATUS_IN_PROGRESS)
+                .set(CostBillPeriod::getActiveVersionId, task.getVersionId())
+                .set(CostBillPeriod::getLastTaskId, task.getTaskId())
+                .set(CostBillPeriod::getLastTaskNo, task.getTaskNo())
+                .set(CostBillPeriod::getUpdateBy, firstNonBlank(SecurityUtils.getUsername(), "system"))
+                .set(CostBillPeriod::getUpdateTime, DateUtils.getNowDate()));
     }
 
-    private static class RuntimeVariable
+    private void refreshBillPeriod(Long sceneId, String billMonth, CostCalcTask task)
     {
-        private String variableCode;
-        private String variableName;
-        private String sourceType;
-        private String dataType;
-        private String dataPath;
-        private String formulaExpr;
-        private Object defaultValue;
-        private Integer sortNo;
+        CostBillPeriod period = billPeriodMapper.selectOne(Wrappers.<CostBillPeriod>lambdaQuery()
+                .eq(CostBillPeriod::getSceneId, sceneId)
+                .eq(CostBillPeriod::getBillMonth, billMonth)
+                .last("limit 1"));
+        if (period == null)
+        {
+            return;
+        }
+        List<CostResultLedger> ledgers = resultLedgerMapper.selectList(Wrappers.<CostResultLedger>lambdaQuery()
+                .eq(CostResultLedger::getSceneId, sceneId)
+                .eq(CostResultLedger::getBillMonth, billMonth));
+        BigDecimal amountTotal = ledgers.stream()
+                .map(CostResultLedger::getAmountValue)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        String periodStatus = period.getPeriodStatus();
+        if (!PERIOD_STATUS_SEALED.equals(periodStatus))
+        {
+            if (task != null && (TASK_STATUS_RUNNING.equals(task.getTaskStatus()) || TASK_STATUS_INIT.equals(task.getTaskStatus())))
+            {
+                periodStatus = PERIOD_STATUS_IN_PROGRESS;
+            }
+            else if (!ledgers.isEmpty())
+            {
+                periodStatus = PERIOD_STATUS_CLOSED;
+            }
+            else
+            {
+                periodStatus = PERIOD_STATUS_NOT_STARTED;
+            }
+        }
+        billPeriodMapper.update(null, Wrappers.<CostBillPeriod>lambdaUpdate()
+                .eq(CostBillPeriod::getPeriodId, period.getPeriodId())
+                .set(CostBillPeriod::getPeriodStatus, periodStatus)
+                .set(CostBillPeriod::getActiveVersionId, task == null ? period.getActiveVersionId() : task.getVersionId())
+                .set(CostBillPeriod::getResultCount, (long) ledgers.size())
+                .set(CostBillPeriod::getAmountTotal, amountTotal)
+                .set(CostBillPeriod::getLastTaskId, task == null ? period.getLastTaskId() : task.getTaskId())
+                .set(CostBillPeriod::getLastTaskNo, task == null ? period.getLastTaskNo() : task.getTaskNo())
+                .set(CostBillPeriod::getUpdateBy, firstNonBlank(SecurityUtils.getUsername(), "system"))
+                .set(CostBillPeriod::getUpdateTime, DateUtils.getNowDate()));
     }
 
-    private static class RuntimeRule
+    private void syncRecalcByTask(CostCalcTask task, String taskStatus)
     {
-        private Long ruleId;
-        private String feeCode;
-        private String ruleCode;
-        private String ruleName;
-        private String ruleType;
-        private String conditionLogic;
-        private Integer priority;
-        private String quantityVariableCode;
-        private Map<String, Object> pricingConfig;
-        private String amountFormula;
-        private Integer sortNo;
-        private List<RuntimeCondition> conditions = Collections.emptyList();
-        private List<RuntimeTier> tiers = Collections.emptyList();
+        CostRecalcOrder recalcOrder = recalcOrderMapper.selectOne(Wrappers.<CostRecalcOrder>lambdaQuery()
+                .eq(CostRecalcOrder::getTargetTaskId, task.getTaskId())
+                .last("limit 1"));
+        if (recalcOrder == null)
+        {
+            return;
+        }
+        String recalcStatus = RECALC_STATUS_RUNNING;
+        if (TASK_STATUS_SUCCESS.equals(taskStatus) || TASK_STATUS_PART_SUCCESS.equals(taskStatus))
+        {
+            recalcStatus = RECALC_STATUS_SUCCESS;
+        }
+        else if (TASK_STATUS_FAILED.equals(taskStatus) || TASK_STATUS_CANCELLED.equals(taskStatus))
+        {
+            recalcStatus = RECALC_STATUS_FAILED;
+        }
+        String diffSummaryJson = buildRecalcDiffSummary(recalcOrder, task);
+        BigDecimal diffAmount = extractDiffAmount(diffSummaryJson);
+        recalcOrderMapper.update(null, Wrappers.<CostRecalcOrder>lambdaUpdate()
+                .eq(CostRecalcOrder::getRecalcId, recalcOrder.getRecalcId())
+                .set(CostRecalcOrder::getRecalcStatus, recalcStatus)
+                .set(CostRecalcOrder::getDiffSummaryJson, diffSummaryJson)
+                .set(CostRecalcOrder::getDiffAmount, diffAmount)
+                .set(CostRecalcOrder::getFinishTime, DateUtils.getNowDate())
+                .set(CostRecalcOrder::getUpdateBy, firstNonBlank(SecurityUtils.getUsername(), "system"))
+                .set(CostRecalcOrder::getUpdateTime, DateUtils.getNowDate()));
     }
 
-    private static class RuntimeCondition
+    private String buildRecalcDiffSummary(CostRecalcOrder recalcOrder, CostCalcTask task)
     {
-        private String ruleCode;
-        private Integer groupNo;
-        private Integer sortNo;
-        private String variableCode;
-        private String displayName;
-        private String operatorCode;
-        private String compareValue;
+        CostCalcTask baselineTask = recalcOrder.getBaselineTaskId() == null ? null : calcTaskMapper.selectById(recalcOrder.getBaselineTaskId());
+        BigDecimal baselineAmount = sumTaskAmount(recalcOrder.getBaselineTaskId());
+        BigDecimal targetAmount = sumTaskAmount(task.getTaskId());
+        LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
+        summary.put("baselineTaskNo", baselineTask == null ? recalcOrder.getBaselineTaskNo() : baselineTask.getTaskNo());
+        summary.put("targetTaskNo", task.getTaskNo());
+        summary.put("baselineAmount", baselineAmount);
+        summary.put("targetAmount", targetAmount);
+        summary.put("diffAmount", targetAmount.subtract(baselineAmount).setScale(2, RoundingMode.HALF_UP));
+        summary.put("baselineResultCount", countTaskResults(recalcOrder.getBaselineTaskId()));
+        summary.put("targetResultCount", countTaskResults(task.getTaskId()));
+        summary.put("taskStatus", task.getTaskStatus());
+        return writeJson(summary);
     }
 
-    private static class RuntimeTier
+    private BigDecimal extractDiffAmount(String diffSummaryJson)
     {
-        private Long tierId;
-        private String ruleCode;
-        private Integer tierNo;
-        private BigDecimal startValue;
-        private BigDecimal endValue;
-        private BigDecimal rateValue;
-        private String intervalMode;
+        try
+        {
+            Map<String, Object> summary = objectMapper.readValue(diffSummaryJson, new TypeReference<Map<String, Object>>() {});
+            BigDecimal diffAmount = toBigDecimal(summary.get("diffAmount"));
+            return defaultZero(diffAmount).setScale(2, RoundingMode.HALF_UP);
+        }
+        catch (Exception ignored)
+        {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+    }
+
+    private BigDecimal sumTaskAmount(Long taskId)
+    {
+        if (taskId == null)
+        {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        return resultLedgerMapper.selectList(Wrappers.<CostResultLedger>lambdaQuery()
+                        .eq(CostResultLedger::getTaskId, taskId))
+                .stream()
+                .map(CostResultLedger::getAmountValue)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private long countTaskResults(Long taskId)
+    {
+        if (taskId == null)
+        {
+            return 0L;
+        }
+        return resultLedgerMapper.selectCount(Wrappers.<CostResultLedger>lambdaQuery()
+                .eq(CostResultLedger::getTaskId, taskId));
+    }
+
+    private void createTaskAlarm(CostCalcTask task, CostCalcTaskDetail detail, String alarmType,
+            String alarmLevel, String alarmTitle, String alarmContent)
+    {
+        CostAlarmRecord alarm = new CostAlarmRecord();
+        alarm.setSceneId(task.getSceneId());
+        alarm.setVersionId(task.getVersionId());
+        alarm.setTaskId(task.getTaskId());
+        alarm.setDetailId(detail == null ? null : detail.getDetailId());
+        alarm.setBillMonth(task.getBillMonth());
+        alarm.setAlarmType(alarmType);
+        alarm.setAlarmLevel(alarmLevel);
+        alarm.setAlarmTitle(alarmTitle);
+        alarm.setAlarmContent(limitLength(alarmContent, 1000));
+        alarm.setSourceKey(task.getTaskNo() + ":" + alarmType + ":" + (detail == null ? "TASK" : detail.getDetailId()));
+        alarmService.createAlarm(alarm);
+    }
+
+    private String buildRuntimeCacheKey(Long versionId)
+    {
+        return RUNTIME_CACHE_PREFIX + versionId;
+    }
+
+    public static class RuntimeSnapshot
+    {
+        public Long sceneId;
+        public Long versionId;
+        public String sceneCode;
+        public String sceneName;
+        public String versionNo;
+        public List<RuntimeFee> fees = new ArrayList<>();
+        public List<RuntimeVariable> variables = new ArrayList<>();
+        public Map<String, RuntimeRule> rulesByCode = new LinkedHashMap<>();
+        public Map<String, List<RuntimeRule>> rulesByFeeCode = new LinkedHashMap<>();
+        public Map<String, List<RuntimeCondition>> conditionsByRuleCode = new LinkedHashMap<>();
+        public Map<String, List<RuntimeTier>> tiersByRuleCode = new LinkedHashMap<>();
+    }
+
+    public static class RuntimeFee
+    {
+        public Long feeId;
+        public String feeCode;
+        public String feeName;
+        public String objectDimension;
+        public Integer sortNo;
+    }
+
+    public static class RuntimeVariable
+    {
+        public String variableCode;
+        public String variableName;
+        public String sourceType;
+        public String dataType;
+        public String dataPath;
+        public String formulaExpr;
+        public Object defaultValue;
+        public Integer sortNo;
+    }
+
+    public static class RuntimeRule
+    {
+        public Long ruleId;
+        public String feeCode;
+        public String ruleCode;
+        public String ruleName;
+        public String ruleType;
+        public String conditionLogic;
+        public Integer priority;
+        public String quantityVariableCode;
+        public Map<String, Object> pricingConfig;
+        public String amountFormula;
+        public Integer sortNo;
+        public List<RuntimeCondition> conditions = Collections.emptyList();
+        public List<RuntimeTier> tiers = Collections.emptyList();
+    }
+
+    public static class RuntimeCondition
+    {
+        public String ruleCode;
+        public Integer groupNo;
+        public Integer sortNo;
+        public String variableCode;
+        public String displayName;
+        public String operatorCode;
+        public String compareValue;
+    }
+
+    public static class RuntimeTier
+    {
+        public Long tierId;
+        public String ruleCode;
+        public Integer tierNo;
+        public BigDecimal startValue;
+        public BigDecimal endValue;
+        public BigDecimal rateValue;
+        public String intervalMode;
 
         private String buildRangeSummary()
         {
