@@ -12,6 +12,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="orgCode" column="org_code" />
         <result property="sceneType" column="scene_type" />
         <result property="activeVersionId" column="active_version_id" />
+        <result property="activeVersionNo" column="active_version_no" />
         <result property="status" column="status" />
         <result property="remark" column="remark" />
         <result property="createBy" column="create_by" />
@@ -21,28 +22,41 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectSceneVo">
-        select scene_id, scene_code, scene_name, business_domain, org_code, scene_type,
-               active_version_id, status, remark, create_by, create_time, update_by, update_time
-        from cost_scene
+        select s.scene_id,
+               s.scene_code,
+               s.scene_name,
+               s.business_domain,
+               s.org_code,
+               s.scene_type,
+               s.active_version_id,
+               pv.version_no as active_version_no,
+               s.status,
+               s.remark,
+               s.create_by,
+               s.create_time,
+               s.update_by,
+               s.update_time
+        from cost_scene s
+        left join cost_publish_version pv on pv.version_id = s.active_version_id
     </sql>
 
     <sql id="sceneWhere">
         <where>
             <if test="keyword != null and keyword != ''">
-                and (scene_code like concat('%', #{keyword}, '%')
-                or scene_name like concat('%', #{keyword}, '%'))
+                and (s.scene_code like concat('%', #{keyword}, '%')
+                or s.scene_name like concat('%', #{keyword}, '%'))
             </if>
             <if test="businessDomain != null and businessDomain != ''">
-                and business_domain = #{businessDomain}
+                and s.business_domain = #{businessDomain}
             </if>
             <if test="sceneType != null and sceneType != ''">
-                and scene_type = #{sceneType}
+                and s.scene_type = #{sceneType}
             </if>
             <if test="orgCode != null and orgCode != ''">
-                and org_code like concat('%', #{orgCode}, '%')
+                and s.org_code like concat('%', #{orgCode}, '%')
             </if>
             <if test="status != null and status != ''">
-                and status = #{status}
+                and s.status = #{status}
             </if>
         </where>
     </sql>
@@ -50,20 +64,20 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectSceneList" parameterType="com.ruoyi.system.domain.cost.CostScene" resultMap="CostSceneResult">
         <include refid="selectSceneVo"/>
         <include refid="sceneWhere"/>
-        order by update_time desc, scene_id desc
+        order by s.update_time desc, s.scene_id desc
     </select>
 
     <select id="selectSceneOptions" parameterType="com.ruoyi.system.domain.cost.CostScene" resultMap="CostSceneResult">
         <include refid="selectSceneVo"/>
         <include refid="sceneWhere"/>
-        order by scene_name asc, scene_id asc
+        order by s.scene_name asc, s.scene_id asc
     </select>
 
     <select id="selectSceneStats" parameterType="com.ruoyi.system.domain.cost.CostScene" resultType="java.util.HashMap">
         select count(1) as sceneCount,
-               coalesce(sum(case when status = '0' then 1 else 0 end), 0) as enabledSceneCount,
-               count(distinct case when business_domain is not null and business_domain != '' then business_domain end) as businessDomainCount
-        from cost_scene
+               coalesce(sum(case when s.status = '0' then 1 else 0 end), 0) as enabledSceneCount,
+               count(distinct case when s.business_domain is not null and s.business_domain != '' then s.business_domain end) as businessDomainCount
+        from cost_scene s
         <include refid="sceneWhere"/>
     </select>
 

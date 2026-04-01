@@ -97,6 +97,26 @@ public class CostPublishServiceImpl implements ICostPublishService
         result.put("versionCount", getLongValue(stats, "versionCount"));
         result.put("activeVersionCount", getLongValue(stats, "activeVersionCount"));
         result.put("rolledBackVersionCount", getLongValue(stats, "rolledBackVersionCount"));
+        result.put("latestWarningCount", 0);
+        result.put("latestBlockingCount", 0);
+        result.put("latestCheckResult", "UNAVAILABLE");
+        result.put("latestCheckLabel", "暂无校验");
+        if (query != null && query.getSceneId() != null)
+        {
+            CostPublishVersion activeVersion = publishVersionMapper.selectActiveVersionByScene(query.getSceneId());
+            CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(query.getSceneId());
+            result.put("activeVersionId", activeVersion == null ? null : activeVersion.getVersionId());
+            result.put("activeVersionNo", activeVersion == null ? null : activeVersion.getVersionNo());
+            result.put("latestVersionId", latestVersion == null ? null : latestVersion.getVersionId());
+            result.put("latestVersionNo", latestVersion == null ? null : latestVersion.getVersionNo());
+            Map<String, Object> latestValidation = latestVersion == null ? Collections.emptyMap() : parseJsonMap(latestVersion.getValidationResultJson());
+            long warningCount = getLongValue(latestValidation, "warningCount");
+            long blockingCount = getLongValue(latestValidation, "blockingCount");
+            result.put("latestWarningCount", warningCount);
+            result.put("latestBlockingCount", blockingCount);
+            result.put("latestCheckResult", resolveCheckResult(blockingCount, warningCount, latestVersion));
+            result.put("latestCheckLabel", resolveCheckLabel(blockingCount, warningCount, latestVersion));
+        }
         return result;
     }
 
@@ -331,7 +351,19 @@ public class CostPublishServiceImpl implements ICostPublishService
         CostPublishVersion currentActive = publishVersionMapper.selectActiveVersionByScene(targetVersion.getSceneId());
         if (currentActive != null && Objects.equals(currentActive.getVersionId(), targetVersion.getVersionId()))
         {
+            if (rollback)
+            {
+                throw new ServiceException("褰撳墠鐗堟湰宸茬粡鏄敓鏁堢増鏈紝涓嶉渶鍥炴粴");
+            }
             return;
+        }
+        if (!rollback && !StringUtils.equalsAny(targetVersion.getVersionStatus(), VERSION_STATUS_PUBLISHED, VERSION_STATUS_ROLLED_BACK))
+        {
+            throw new ServiceException("鍙湁宸插彂甯冩垨宸插洖婊氱殑鐗堟湰鎵嶈兘璁句负鐢熸晥");
+        }
+        if (rollback && !StringUtils.equalsAny(targetVersion.getVersionStatus(), VERSION_STATUS_PUBLISHED, VERSION_STATUS_ROLLED_BACK))
+        {
+            throw new ServiceException("鍙湁鍘嗗彶鍙戝竷鐗堟湰鎵嶈兘浣滀负鍥炴粴鐩爣");
         }
         if (currentActive != null)
         {
@@ -668,7 +700,14 @@ public class CostPublishServiceImpl implements ICostPublishService
             item.put("directChanged", feeDirectChanged);
             item.put("ruleChangeCount", ruleChangeCount);
             item.put("variableChangeCount", variableChangeCount);
+            item.put("changedFields", compareChangedFields(fromFee, toFee));
             item.put("summaryText", buildFeeSummaryText(changeType, feeDirectChanged, ruleChangeCount, variableChangeCount));
+            item.put("fromFee", fromFee);
+            item.put("toFee", toFee);
+            item.put("fromRules", buildFeeRuleList(fromBundle, code));
+            item.put("toRules", buildFeeRuleList(toBundle, code));
+            item.put("fromVariables", buildFeeVariableList(fromBundle, code));
+            item.put("toVariables", buildFeeVariableList(toBundle, code));
             result.add(item);
         }
         return result;
@@ -711,6 +750,12 @@ public class CostPublishServiceImpl implements ICostPublishService
             item.put("tierChangeCount", countCollectionDiff(
                     fromBundle == null ? null : fromBundle.ruleTiersByRuleCode.get(ruleCode),
                     toBundle == null ? null : toBundle.ruleTiersByRuleCode.get(ruleCode)));
+            item.put("fromRule", fromRule);
+            item.put("toRule", toRule);
+            item.put("fromConditions", normalizeCollection(fromBundle == null ? null : fromBundle.ruleConditionsByRuleCode.get(ruleCode)));
+            item.put("toConditions", normalizeCollection(toBundle == null ? null : toBundle.ruleConditionsByRuleCode.get(ruleCode)));
+            item.put("fromTiers", normalizeCollection(fromBundle == null ? null : fromBundle.ruleTiersByRuleCode.get(ruleCode)));
+            item.put("toTiers", normalizeCollection(toBundle == null ? null : toBundle.ruleTiersByRuleCode.get(ruleCode)));
             result.add(item);
         }
         return result;
@@ -991,6 +1036,56 @@ public class CostPublishServiceImpl implements ICostPublishService
             return 0L;
         }
         return Long.parseLong(String.valueOf(map.get(key)));
+    }
+
+    /**
+     * 解析最近一次发布校验结果编码。
+     *
+     * @param blockingCount 阻断数量
+     * @param warningCount 告警数量
+     * @param latestVersion 最近版本
+     * @return 校验结果
+     */
+    private String resolveCheckResult(long blockingCount, long warningCount, CostPublishVersion latestVersion)
+    {
+        if (latestVersion == null)
+        {
+            return "UNAVAILABLE";
+        }
+        if (blockingCount > 0)
+        {
+            return "BLOCK";
+        }
+        if (warningCount > 0)
+        {
+            return "WARN";
+        }
+        return "PASS";
+    }
+
+    /**
+     * 解析最近一次发布校验结果文案。
+     *
+     * @param blockingCount 阻断数量
+     * @param warningCount 告警数量
+     * @param latestVersion 最近版本
+     * @return 文案
+     */
+    private String resolveCheckLabel(long blockingCount, long warningCount, CostPublishVersion latestVersion)
+    {
+        if (latestVersion == null)
+        {
+            return "暂无校验";
+        }
+        if (blockingCount > 0)
+        {
+            return "存在阻断";
+        }
+        if (warningCount > 0)
+        {
+            return "存在告警";
+        }
+        return "校验通过";
     }
 
     private String determineChangeType(Map<String, Object> fromObject, Map<String, Object> toObject)

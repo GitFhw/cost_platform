@@ -29,12 +29,15 @@ import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.mapper.cost.CostSimulationRecordMapper;
 import com.ruoyi.system.service.cost.ICostRunService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.expression.MapAccessor;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -297,7 +300,7 @@ public class CostRunServiceImpl implements ICostRunService
             detail.setErrorMessage("");
             calcTaskDetailMapper.insert(detail);
         }
-        threadPoolTaskExecutor.execute(() -> runTaskAsync(task.getTaskId()));
+        dispatchTaskAfterCommit(task.getTaskId());
         return selectTaskDetail(task.getTaskId());
     }
 
@@ -347,7 +350,7 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_INIT)
                 .set(CostCalcTaskDetail::getRetryCount, (detail.getRetryCount() == null ? 0 : detail.getRetryCount()) + 1)
                 .set(CostCalcTaskDetail::getErrorMessage, ""));
-        threadPoolTaskExecutor.execute(() -> runTaskAsync(task.getTaskId()));
+        dispatchTaskAfterCommit(task.getTaskId());
         return 1;
     }
 
@@ -452,17 +455,18 @@ public class CostRunServiceImpl implements ICostRunService
         {
             return;
         }
-        RuntimeSnapshot snapshot = loadRuntimeSnapshot(task.getSceneId(), task.getVersionId(), true);
         Date startedTime = DateUtils.getNowDate();
-        calcTaskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
-                .eq(CostCalcTask::getTaskId, taskId)
-                .notIn(CostCalcTask::getTaskStatus, TASK_STATUS_CANCELLED)
-                .set(CostCalcTask::getTaskStatus, TASK_STATUS_RUNNING)
-                .set(CostCalcTask::getStartedTime, startedTime)
-                .set(CostCalcTask::getUpdateTime, startedTime));
 
         try
         {
+            RuntimeSnapshot snapshot = loadRuntimeSnapshot(task.getSceneId(), task.getVersionId(), true);
+            calcTaskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
+                    .eq(CostCalcTask::getTaskId, taskId)
+                    .notIn(CostCalcTask::getTaskStatus, TASK_STATUS_CANCELLED)
+                    .set(CostCalcTask::getTaskStatus, TASK_STATUS_RUNNING)
+                    .set(CostCalcTask::getStartedTime, startedTime)
+                    .set(CostCalcTask::getUpdateTime, startedTime));
+
             List<CostCalcTaskDetail> details = calcTaskDetailMapper.selectList(Wrappers.<CostCalcTaskDetail>lambdaQuery()
                     .eq(CostCalcTaskDetail::getTaskId, taskId)
                     .in(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_INIT, DETAIL_STATUS_FAILED)
@@ -508,6 +512,27 @@ public class CostRunServiceImpl implements ICostRunService
                     .set(CostCalcTask::getDurationMs, DateUtils.getNowDate().getTime() - startedTime.getTime())
                     .set(CostCalcTask::getUpdateTime, DateUtils.getNowDate()));
         }
+    }
+
+    /**
+     * 在事务提交后再触发异步任务，避免新建任务尚未提交时工作线程读不到数据。
+     */
+    private void dispatchTaskAfterCommit(Long taskId)
+    {
+        Runnable runnable = () -> threadPoolTaskExecutor.execute(() -> runTaskAsync(taskId));
+        if (TransactionSynchronizationManager.isActualTransactionActive())
+        {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization()
+            {
+                @Override
+                public void afterCommit()
+                {
+                    runnable.run();
+                }
+            });
+            return;
+        }
+        runnable.run();
     }
 
     /**
@@ -1279,7 +1304,8 @@ public class CostRunServiceImpl implements ICostRunService
         }
         try
         {
-            StandardEvaluationContext evaluationContext = new StandardEvaluationContext();
+            StandardEvaluationContext evaluationContext = new StandardEvaluationContext(context);
+            evaluationContext.addPropertyAccessor(new MapAccessor());
             context.forEach(evaluationContext::setVariable);
             return expressionParser.parseExpression(rewriteExpression(expression)).getValue(evaluationContext);
         }

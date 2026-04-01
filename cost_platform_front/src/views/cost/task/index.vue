@@ -195,6 +195,8 @@ const taskStatusOptions = ref([])
 const detailOpen = ref(false)
 const detailData = ref({})
 const stats = reactive({ taskCount: 0, runningCount: 0, successCount: 0, failedCount: 0 })
+let detailTimer = null
+const activeTaskStatuses = ['INIT', 'RUNNING']
 
 const queryParams = reactive({
   pageNum: 1,
@@ -289,6 +291,7 @@ async function handleQuerySceneChange(sceneId) {
 async function handleFormSceneChange(sceneId) {
   form.versionId = undefined
   await loadVersionOptions(sceneId, formVersionOptions)
+  fillExample()
 }
 
 function fillExample() {

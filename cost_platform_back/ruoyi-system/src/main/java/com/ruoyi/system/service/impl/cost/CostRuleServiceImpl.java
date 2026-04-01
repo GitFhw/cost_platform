@@ -349,6 +349,7 @@ public class CostRuleServiceImpl implements ICostRuleService
             {
                 throw new ServiceException(String.format("第%1$d条条件未选择操作符", index));
             }
+            condition.setCompareValue(normalizeCompareValue(condition.getCompareValue(), condition.getOperatorCode()));
             if (requiresCompareValue(condition.getOperatorCode()) && StringUtils.isEmpty(String.valueOf(condition.getCompareValue())))
             {
                 throw new ServiceException(String.format("第%1$d条条件未填写条件值", index));
@@ -492,6 +493,42 @@ public class CostRuleServiceImpl implements ICostRuleService
     private boolean requiresCompareValue(String operatorCode)
     {
         return !Arrays.asList("IS_NULL", "IS_NOT_NULL").contains(StringUtils.isEmpty(operatorCode) ? "" : operatorCode.toUpperCase());
+    }
+
+    /**
+     * 统一归一化条件比较值。
+     *
+     * 规则中心当前沿用 compareValue 字符串落库口径：
+     * 1. IN / NOT_IN / BETWEEN 统一使用英文逗号分隔；
+     * 2. 自动清理中英文逗号、空格和空片段；
+     * 3. 其它操作符保持单值字符串语义。
+     */
+    private String normalizeCompareValue(String compareValue, String operatorCode)
+    {
+        if (compareValue == null)
+        {
+            return null;
+        }
+        String normalized = compareValue.replace('，', ',').trim();
+        if (StringUtils.isEmpty(normalized))
+        {
+            return "";
+        }
+        String upperOperator = StringUtils.isEmpty(operatorCode) ? "" : operatorCode.toUpperCase();
+        if (Arrays.asList("IN", "NOT_IN", "BETWEEN").contains(upperOperator))
+        {
+            List<String> items = new ArrayList<>();
+            for (String piece : normalized.split(","))
+            {
+                String item = StringUtils.trim(piece);
+                if (StringUtils.isNotEmpty(item))
+                {
+                    items.add(item);
+                }
+            }
+            return String.join(",", items);
+        }
+        return normalized;
     }
 
     /**

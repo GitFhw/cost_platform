@@ -258,7 +258,7 @@
           </el-table-column>
           <el-table-column label="操作符" min-width="150" align="center">
             <template #default="scope">
-              <el-select v-model="scope.row.operatorCode" style="width: 100%">
+              <el-select v-model="scope.row.operatorCode" style="width: 100%" @change="value => handleConditionOperatorChange(scope.row, value)">
                 <el-option v-for="item in operatorOptions" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </template>
@@ -814,6 +814,13 @@ async function handleConditionVariableChange(row, value) {
   }
 }
 
+function handleConditionOperatorChange(row, value) {
+  const normalizedOperator = (value || '').toUpperCase()
+  if (!['IN', 'NOT_IN'].includes(normalizedOperator) && typeof row.compareValue === 'string' && row.compareValue.includes(',')) {
+    row.compareValue = row.compareValue.split(',').map(item => item.trim()).filter(Boolean)[0] || ''
+  }
+}
+
 function createConditionRow() {
   return {
     conditionId: undefined,
@@ -876,7 +883,8 @@ function buildSubmitPayload(source) {
     ...item,
     sceneId,
     sortNo: index + 1,
-    displayName: item.displayName || resolveVariableName(item.variableCode)
+    displayName: item.displayName || resolveVariableName(item.variableCode),
+    compareValue: normalizeConditionCompareValue(item.compareValue)
   }))
   payload.tiers = (payload.tiers || []).map((item, index) => ({
     ...item,
@@ -1055,6 +1063,13 @@ function requiresCompareValue(operatorCode) {
 
 function isBlankValue(value) {
   return value == null || value === ''
+}
+
+function normalizeConditionCompareValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(item => `${item ?? ''}`.trim()).filter(Boolean).join(',')
+  }
+  return typeof value === 'string' ? value.split(',').map(item => item.trim()).filter(Boolean).join(',') : value
 }
 
 function resolveTagLabel(options, value) {

@@ -198,7 +198,8 @@
       <el-table-column label="适用组织" align="center" prop="orgCode" min-width="140" :show-overflow-tooltip="true" />
       <el-table-column label="当前生效版本" align="center" prop="activeVersionId" width="140">
         <template #default="scope">
-          <el-tag v-if="scope.row.activeVersionId" type="success">#{{ scope.row.activeVersionId }}</el-tag>
+          <el-tag v-if="scope.row.activeVersionNo" type="success">{{ scope.row.activeVersionNo }}</el-tag>
+          <el-tag v-else-if="scope.row.activeVersionId" type="success">#{{ scope.row.activeVersionId }}</el-tag>
           <span v-else class="scene-center__muted">未生效</span>
         </template>
       </el-table-column>
