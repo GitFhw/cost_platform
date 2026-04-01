@@ -1,0 +1,24 @@
+package com.ruoyi.system.domain.vo;
+
+import lombok.Data;
+
+/**
+ * 公式实验室治理检查结果。
+ *
+ * @author codex
+ */
+@Data
+public class CostFormulaGovernanceCheckVo
+{
+    private Long formulaId;
+    private Long sceneId;
+    private String formulaCode;
+    private String formulaName;
+    private Long variableRefCount;
+    private Long ruleRefCount;
+    private Long publishedVersionCount;
+    private Boolean canDelete;
+    private Boolean canDisable;
+    private String removeBlockingReason;
+    private String disableBlockingReason;
+}

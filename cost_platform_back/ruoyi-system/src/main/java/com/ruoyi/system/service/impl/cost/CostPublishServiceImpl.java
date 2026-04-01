@@ -10,6 +10,7 @@ import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.cost.CostFeeItem;
+import com.ruoyi.system.domain.cost.CostFormula;
 import com.ruoyi.system.domain.cost.CostPublishSnapshot;
 import com.ruoyi.system.domain.cost.CostPublishVersion;
 import com.ruoyi.system.domain.cost.CostRule;
@@ -18,6 +19,7 @@ import com.ruoyi.system.domain.cost.CostVariable;
 import com.ruoyi.system.domain.cost.bo.CostPublishCreateBo;
 import com.ruoyi.system.domain.vo.CostPublishCheckItemVo;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
+import com.ruoyi.system.mapper.cost.CostFormulaMapper;
 import com.ruoyi.system.mapper.cost.CostPublishSnapshotMapper;
 import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
 import com.ruoyi.system.mapper.cost.CostRuleMapper;
@@ -62,6 +64,7 @@ public class CostPublishServiceImpl implements ICostPublishService
     private static final String SNAPSHOT_SCENE = "SCENE";
     private static final String SNAPSHOT_FEE = "FEE";
     private static final String SNAPSHOT_VARIABLE = "VARIABLE";
+    private static final String SNAPSHOT_FORMULA = "FORMULA";
     private static final String SNAPSHOT_RULE = "RULE";
     private static final String SNAPSHOT_RULE_CONDITION = "RULE_CONDITION";
     private static final String SNAPSHOT_RULE_TIER = "RULE_TIER";
@@ -84,6 +87,9 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     @Autowired
     private CostVariableMapper variableMapper;
+
+    @Autowired
+    private CostFormulaMapper formulaMapper;
 
     @Autowired
     private CostRuleMapper ruleMapper;
@@ -408,6 +414,11 @@ public class CostPublishServiceImpl implements ICostPublishService
         variableQuery.setStatus(STATUS_ENABLED);
         List<CostVariable> variables = variableMapper.selectVariableOptions(variableQuery);
 
+        CostFormula formulaQuery = new CostFormula();
+        formulaQuery.setSceneId(sceneId);
+        formulaQuery.setStatus(STATUS_ENABLED);
+        List<CostFormula> formulas = formulaMapper.selectFormulaOptions(formulaQuery);
+
         CostRule ruleQuery = new CostRule();
         ruleQuery.setSceneId(sceneId);
         ruleQuery.setStatus(STATUS_ENABLED);
@@ -424,6 +435,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         addSceneSnapshot(bundle, scene);
         addFeeSnapshots(bundle, feeItems);
         addVariableSnapshots(bundle, variables);
+        addFormulaSnapshots(bundle, formulas);
         addRuleSnapshots(bundle, rules);
         addConditionSnapshots(bundle, publishVersionMapper.selectRuleConditionsForPublish(sceneId));
         addTierSnapshots(bundle, publishVersionMapper.selectRuleTiersForPublish(sceneId));
@@ -454,6 +466,10 @@ public class CostPublishServiceImpl implements ICostPublishService
             else if (SNAPSHOT_VARIABLE.equals(snapshot.getSnapshotType()))
             {
                 bundle.variablesByCode.put(snapshot.getObjectCode(), json);
+            }
+            else if (SNAPSHOT_FORMULA.equals(snapshot.getSnapshotType()))
+            {
+                bundle.formulasByCode.put(snapshot.getObjectCode(), json);
             }
             else if (SNAPSHOT_RULE.equals(snapshot.getSnapshotType()))
             {
@@ -533,6 +549,7 @@ public class CostPublishServiceImpl implements ICostPublishService
             json.put("remoteApi", variable.getRemoteApi());
             json.put("dataPath", variable.getDataPath());
             json.put("formulaExpr", variable.getFormulaExpr());
+            json.put("formulaCode", variable.getFormulaCode());
             json.put("dataType", variable.getDataType());
             json.put("defaultValue", variable.getDefaultValue());
             json.put("precisionScale", variable.getPrecisionScale());
@@ -545,6 +562,34 @@ public class CostPublishServiceImpl implements ICostPublishService
             snapshot.setSnapshotType(SNAPSHOT_VARIABLE);
             snapshot.setObjectCode(variable.getVariableCode());
             snapshot.setObjectName(variable.getVariableName());
+            snapshot.setSnapshotJson(writeJson(json));
+            snapshot.setSortNo(sortNo++);
+            bundle.snapshotRows.add(snapshot);
+        }
+    }
+
+    private void addFormulaSnapshots(SnapshotBundle bundle, List<CostFormula> formulas)
+    {
+        int sortNo = 1500;
+        for (CostFormula formula : formulas)
+        {
+            Map<String, Object> json = new LinkedHashMap<>();
+            json.put("formulaCode", formula.getFormulaCode());
+            json.put("formulaName", formula.getFormulaName());
+            json.put("formulaDesc", formula.getFormulaDesc());
+            json.put("businessFormula", formula.getBusinessFormula());
+            json.put("formulaExpr", formula.getFormulaExpr());
+            json.put("namespaceScope", formula.getNamespaceScope());
+            json.put("returnType", formula.getReturnType());
+            json.put("sortNo", formula.getSortNo());
+            json.put("status", formula.getStatus());
+            json.put("remark", formula.getRemark());
+            bundle.formulasByCode.put(formula.getFormulaCode(), json);
+
+            CostPublishSnapshot snapshot = new CostPublishSnapshot();
+            snapshot.setSnapshotType(SNAPSHOT_FORMULA);
+            snapshot.setObjectCode(formula.getFormulaCode());
+            snapshot.setObjectName(formula.getFormulaName());
             snapshot.setSnapshotJson(writeJson(json));
             snapshot.setSortNo(sortNo++);
             bundle.snapshotRows.add(snapshot);
@@ -568,6 +613,8 @@ public class CostPublishServiceImpl implements ICostPublishService
             json.put("pricingMode", rule.getPricingMode());
             json.put("pricingJson", parseJsonMap(rule.getPricingJson()));
             json.put("amountFormula", rule.getAmountFormula());
+            json.put("amountFormulaCode", rule.getAmountFormulaCode());
+            json.put("amountBusinessFormula", rule.getAmountBusinessFormula());
             json.put("noteTemplate", rule.getNoteTemplate());
             json.put("sortNo", rule.getSortNo());
             json.put("status", rule.getStatus());
@@ -791,6 +838,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         counts.put("scene", 1);
         counts.put("fee", StringUtils.isEmpty(feeCode) ? bundle.feesByCode.size() : (bundle.feesByCode.containsKey(feeCode) ? 1 : 0));
         counts.put("variable", buildFeeVariableList(bundle, feeCode).size());
+        counts.put("formula", bundle.formulasByCode.size());
         counts.put("rule", buildFeeRuleList(bundle, feeCode).size());
         counts.put("condition", buildFeeConditionList(bundle, feeCode).size());
         counts.put("tier", buildFeeTierList(bundle, feeCode).size());
@@ -803,6 +851,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         groups.put("scene", bundle.sceneSnapshot);
         groups.put("fees", buildFeeList(bundle, feeCode));
         groups.put("variables", buildFeeVariableList(bundle, feeCode));
+        groups.put("formulas", new ArrayList<>(bundle.formulasByCode.values()));
         groups.put("rules", buildFeeRuleList(bundle, feeCode));
         groups.put("conditions", buildFeeConditionList(bundle, feeCode));
         groups.put("tiers", buildFeeTierList(bundle, feeCode));
@@ -1254,6 +1303,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         private Map<String, Object> sceneSnapshot = new LinkedHashMap<>();
         private Map<String, Map<String, Object>> feesByCode = new LinkedHashMap<>();
         private Map<String, Map<String, Object>> variablesByCode = new LinkedHashMap<>();
+        private Map<String, Map<String, Object>> formulasByCode = new LinkedHashMap<>();
         private Map<String, Map<String, Object>> rulesByCode = new LinkedHashMap<>();
         private Map<String, List<Map<String, Object>>> ruleConditionsByRuleCode = new LinkedHashMap<>();
         private Map<String, List<Map<String, Object>>> ruleTiersByRuleCode = new LinkedHashMap<>();

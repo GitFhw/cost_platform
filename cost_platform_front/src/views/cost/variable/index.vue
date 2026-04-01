@@ -145,7 +145,19 @@
             <el-col :span="8"><el-form-item label="失败兜底" prop="fallbackPolicy"><el-select v-model="form.fallbackPolicy" style="width: 100%"><el-option v-for="item in fallbackPolicyOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
           </el-row>
         </template>
-        <el-form-item v-if="form.sourceType === 'FORMULA'" label="公式表达式" prop="formulaExpr"><el-input v-model="form.formulaExpr" type="textarea" :rows="3" /></el-form-item>
+        <template v-if="form.sourceType === 'FORMULA'">
+          <el-form-item label="公式编码" prop="formulaCode">
+            <el-select v-model="form.formulaCode" clearable filterable style="width: 100%" placeholder="优先引用公式实验室中的公式编码">
+              <el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaCode} / ${item.formulaName}`" :value="item.formulaCode" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="中文公式">
+            <div class="variable-center__formula-preview">{{ selectedFormulaMeta.businessFormula || '未选择公式编码时，可继续填写下方标准表达式作为兼容兜底。' }}</div>
+          </el-form-item>
+          <el-form-item label="标准表达式" prop="formulaExpr">
+            <el-input v-model="form.formulaExpr" type="textarea" :rows="3" placeholder="未选择公式编码时，可直接维护标准表达式" />
+          </el-form-item>
+        </template>
         <el-form-item label="备注" prop="remark"><el-input v-model="form.remark" type="textarea" :rows="3" /></el-form-item>
       </el-form>
       <template #footer>
@@ -329,6 +341,8 @@
           <el-descriptions-item label="缓存策略">{{ resolveDictLabel(cachePolicyOptions, detailInfo.cachePolicy) }}</el-descriptions-item>
           <el-descriptions-item label="失败兜底">{{ resolveDictLabel(fallbackPolicyOptions, detailInfo.fallbackPolicy) }}</el-descriptions-item>
           <el-descriptions-item label="默认值">{{ detailInfo.defaultValue || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="公式编码">{{ detailInfo.formulaCode || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="中文公式">{{ detailInfo.businessFormula || '-' }}</el-descriptions-item>
           <el-descriptions-item label="公式表达式">{{ detailInfo.formulaExpr || '-' }}</el-descriptions-item>
           <el-descriptions-item label="鉴权配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.authConfigJson) }}</pre></el-descriptions-item>
           <el-descriptions-item label="映射配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.mappingConfigJson) }}</pre></el-descriptions-item>
@@ -356,6 +370,7 @@
 import { computed, getCurrentInstance, reactive, ref, toRefs } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
+import { optionselectFormula } from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
 import {
   addVariable,
@@ -403,6 +418,7 @@ const authTypeOptions = ref([])
 const syncModeOptions = ref([])
 const cachePolicyOptions = ref([])
 const fallbackPolicyOptions = ref([])
+const formulaOptions = ref([])
 
 const governanceOpen = ref(false)
 const governanceLoading = ref(false)
@@ -420,6 +436,7 @@ const copyOpen = ref(false)
 const copySource = ref({})
 const templateOpen = ref(false)
 const statistics = reactive({ variableCount: 0, enabledVariableCount: 0, remoteVariableCount: 0, formulaVariableCount: 0 })
+const selectedFormulaMeta = computed(() => formulaOptions.value.find(item => item.formulaCode === form.value.formulaCode) || {})
 
 const data = reactive({
   queryParams: { pageNum: 1, pageSize: 10, sceneId: undefined, groupId: undefined, variableCode: undefined, variableName: undefined, sourceType: undefined, sourceSystem: undefined },
@@ -508,9 +525,22 @@ async function handleSceneChange() {
   groupOptions.value = await loadGroups(queryParams.value.sceneId)
 }
 
+async function loadFormulaOptions(sceneId) {
+  if (!sceneId) {
+    formulaOptions.value = []
+    return
+  }
+  const response = await optionselectFormula({ sceneId, status: '0', pageNum: 1, pageSize: 1000 })
+  formulaOptions.value = response?.data || []
+}
+
 async function loadFormGroups() {
   form.value.groupId = undefined
-  formGroupOptions.value = await loadGroups(form.value.sceneId)
+  const [groups] = await Promise.all([
+    loadGroups(form.value.sceneId),
+    loadFormulaOptions(form.value.sceneId)
+  ])
+  formGroupOptions.value = groups
 }
 
 async function loadCopyGroups() {
@@ -546,6 +576,7 @@ function resetFormModel() {
     syncMode: 'REALTIME',
     cachePolicy: 'MANUAL_REFRESH',
     fallbackPolicy: 'FAIL_FAST',
+    formulaCode: undefined,
     formulaExpr: undefined,
     dataType: 'STRING',
     defaultValue: undefined,
@@ -597,6 +628,7 @@ async function handleUpdate(row) {
   form.value = { ...response.data }
   initialStatus.value = response.data?.status
   formGroupOptions.value = await loadGroups(form.value.sceneId)
+  await loadFormulaOptions(form.value.sceneId)
   open.value = true
   title.value = '修改变量'
 }
@@ -835,6 +867,7 @@ getList()
 .variable-center__metric-label, .variable-center__metric-desc { font-size: 12px; color: var(--el-text-color-secondary); }
 .variable-center__metric-value { font-size: 24px; color: var(--el-color-primary); }
 .variable-center__drawer-tip { margin-bottom: 16px; padding: 12px 14px; border-radius: 12px; color: var(--el-text-color-regular); background: color-mix(in srgb, var(--el-color-primary-light-9) 32%, var(--el-bg-color-overlay)); line-height: 1.8; }
+.variable-center__formula-preview { width: 100%; padding: 12px 14px; border-radius: 12px; background: var(--el-fill-color-light); line-height: 1.7; color: var(--el-text-color-regular); }
 .variable-detail { display: grid; gap: 14px; }
 .variable-detail__header { padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 12px; }
 .variable-detail__title { font-size: 18px; font-weight: 700; }

@@ -35,12 +35,9 @@ import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.mapper.cost.CostSimulationRecordMapper;
 import com.ruoyi.system.service.cost.ICostAlarmService;
 import com.ruoyi.system.service.cost.ICostAuditService;
+import com.ruoyi.system.service.cost.ICostExpressionService;
 import com.ruoyi.system.service.cost.ICostRunService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.expression.MapAccessor;
-import org.springframework.expression.ExpressionParser;
-import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -128,7 +125,6 @@ public class CostRunServiceImpl implements ICostRunService
     private static final DecimalFormat PARTITION_FORMAT = new DecimalFormat("000");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ExpressionParser expressionParser = new SpelExpressionParser();
 
     @Autowired
     private CostSimulationRecordMapper simulationRecordMapper;
@@ -171,6 +167,9 @@ public class CostRunServiceImpl implements ICostRunService
 
     @Autowired
     private ICostAlarmService alarmService;
+
+    @Autowired
+    private ICostExpressionService expressionService;
 
     @Override
     public Map<String, Object> selectSimulationStats(Long sceneId)
@@ -725,6 +724,7 @@ public class CostRunServiceImpl implements ICostRunService
         List<FeeExecutionResult> feeResults = new ArrayList<>();
         List<Map<String, Object>> timeline = new ArrayList<>();
 
+        LinkedHashMap<String, Object> feeResultContext = new LinkedHashMap<>();
         for (RuntimeFee fee : snapshot.fees)
         {
             List<RuntimeRule> rules = snapshot.rulesByFeeCode.getOrDefault(fee.feeCode, Collections.emptyList());
@@ -734,7 +734,7 @@ public class CostRunServiceImpl implements ICostRunService
                 timeline.add(buildStep("FEE_SKIP", fee.feeCode, fee.feeName, "当前费用未命中任何启用规则"));
                 continue;
             }
-            PricingResult pricingResult = calculateAmount(matchResult.rule, matchResult.tier, variableValues, baseContext);
+            PricingResult pricingResult = calculateAmount(matchResult.rule, matchResult.tier, variableValues, baseContext, feeResultContext, snapshot);
             FeeExecutionResult feeResult = new FeeExecutionResult();
             feeResult.feeId = fee.feeId;
             feeResult.feeCode = fee.feeCode;
@@ -752,6 +752,7 @@ public class CostRunServiceImpl implements ICostRunService
             feeResult.pricingExplain = pricingResult.pricingExplain;
             feeResult.timelineSteps = buildFeeTimeline(fee, matchResult, pricingResult);
             feeResults.add(feeResult);
+            feeResultContext.put(fee.feeCode, feeResult.toExplainView());
             timeline.add(buildStep("FEE_RESULT", fee.feeCode, fee.feeName,
                     String.format(Locale.ROOT, "命中规则 %s，金额 %s", feeResult.ruleCode, feeResult.amountValue)));
         }
@@ -784,7 +785,7 @@ public class CostRunServiceImpl implements ICostRunService
             Object value;
             if (SOURCE_TYPE_FORMULA.equals(variable.sourceType) && StringUtils.isNotEmpty(variable.formulaExpr))
             {
-                value = evaluateExpression(variable.formulaExpr, mergeContext(baseContext, values));
+                value = evaluateExpression(resolveVariableFormula(snapshot, variable), mergeContext(baseContext, values, Collections.emptyMap()));
             }
             else
             {
@@ -837,7 +838,7 @@ public class CostRunServiceImpl implements ICostRunService
             for (RuntimeCondition condition : entry.getValue())
             {
                 Object leftValue = variableValues.get(condition.variableCode);
-                boolean pass = evaluateCondition(condition, leftValue, mergeContext(baseContext, variableValues));
+                boolean pass = evaluateCondition(condition, leftValue, mergeContext(baseContext, variableValues, Collections.emptyMap()));
                 LinkedHashMap<String, Object> item = new LinkedHashMap<>();
                 item.put("groupNo", entry.getKey());
                 item.put("displayName", condition.displayName);
@@ -938,7 +939,8 @@ public class CostRunServiceImpl implements ICostRunService
         return null;
     }
 
-    private PricingResult calculateAmount(RuntimeRule rule, RuntimeTier tier, Map<String, Object> variableValues, Map<String, Object> baseContext)
+    private PricingResult calculateAmount(RuntimeRule rule, RuntimeTier tier, Map<String, Object> variableValues,
+            Map<String, Object> baseContext, Map<String, Object> feeResultContext, RuntimeSnapshot snapshot)
     {
         BigDecimal quantityValue = toBigDecimal(variableValues.get(rule.quantityVariableCode));
         if (quantityValue == null)
@@ -968,12 +970,17 @@ public class CostRunServiceImpl implements ICostRunService
         }
         else if (RULE_TYPE_FORMULA.equals(rule.ruleType))
         {
-            Object amountValue = evaluateExpression(rule.amountFormula, mergeContext(baseContext, variableValues));
+            RuntimeFormula formula = resolveRuleFormula(snapshot, rule);
+            String expression = formula == null ? rule.amountFormula : formula.formulaExpr;
+            Object amountValue = evaluateExpression(expression, mergeContext(baseContext, variableValues, feeResultContext));
             BigDecimal computed = defaultZero(toBigDecimal(amountValue)).setScale(2, RoundingMode.HALF_UP);
             result.unitPrice = computed.setScale(6, RoundingMode.HALF_UP);
             result.amountValue = computed;
             result.pricingExplain.put("pricingSource", "FORMULA");
-            result.pricingExplain.put("formula", rule.amountFormula);
+            result.pricingExplain.put("formula", expression);
+            result.pricingExplain.put("formulaCode", formula == null ? rule.amountFormulaCode : formula.formulaCode);
+            result.pricingExplain.put("formulaName", formula == null ? null : formula.formulaName);
+            result.pricingExplain.put("businessFormula", formula == null ? rule.amountBusinessFormula : formula.businessFormula);
         }
         else if (RULE_TYPE_TIER_RATE.equals(rule.ruleType))
         {
@@ -1090,9 +1097,20 @@ public class CostRunServiceImpl implements ICostRunService
                 variable.dataType = stringValue(json.get("dataType"));
                 variable.dataPath = stringValue(json.get("dataPath"));
                 variable.formulaExpr = stringValue(json.get("formulaExpr"));
+                variable.formulaCode = stringValue(json.get("formulaCode"));
                 variable.defaultValue = json.get("defaultValue");
                 variable.sortNo = intValue(json.get("sortNo"));
                 snapshot.variables.add(variable);
+            }
+            else if ("FORMULA".equals(item.getSnapshotType()))
+            {
+                RuntimeFormula formula = new RuntimeFormula();
+                formula.formulaCode = stringValue(json.get("formulaCode"));
+                formula.formulaName = stringValue(json.get("formulaName"));
+                formula.businessFormula = stringValue(json.get("businessFormula"));
+                formula.formulaExpr = stringValue(json.get("formulaExpr"));
+                formula.returnType = stringValue(json.get("returnType"));
+                snapshot.formulasByCode.put(formula.formulaCode, formula);
             }
             else if ("RULE".equals(item.getSnapshotType()))
             {
@@ -1106,6 +1124,8 @@ public class CostRunServiceImpl implements ICostRunService
                 rule.quantityVariableCode = stringValue(json.get("quantityVariableCode"));
                 rule.pricingConfig = json.get("pricingJson") instanceof Map ? castMap(json.get("pricingJson")) : new LinkedHashMap<>();
                 rule.amountFormula = stringValue(json.get("amountFormula"));
+                rule.amountFormulaCode = stringValue(json.get("amountFormulaCode"));
+                rule.amountBusinessFormula = stringValue(json.get("amountBusinessFormula"));
                 rule.sortNo = intValue(json.get("sortNo"));
                 snapshot.rulesByCode.put(rule.ruleCode, rule);
             }
@@ -1397,10 +1417,7 @@ public class CostRunServiceImpl implements ICostRunService
         }
         try
         {
-            StandardEvaluationContext evaluationContext = new StandardEvaluationContext(context);
-            evaluationContext.addPropertyAccessor(new MapAccessor());
-            context.forEach(evaluationContext::setVariable);
-            return expressionParser.parseExpression(rewriteExpression(expression)).getValue(evaluationContext);
+            return expressionService.evaluate(expression, context);
         }
         catch (Exception e)
         {
@@ -1408,23 +1425,50 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private String rewriteExpression(String expression)
-    {
-        return expression.replace("&&", " and ").replace("||", " or ");
-    }
-
-    private Map<String, Object> mergeContext(Map<String, Object> left, Map<String, Object> right)
+    private Map<String, Object> mergeContext(Map<String, Object> inputContext, Map<String, Object> variableValues, Map<String, Object> feeResultContext)
     {
         LinkedHashMap<String, Object> context = new LinkedHashMap<>();
-        if (left != null)
+        if (inputContext != null)
         {
-            context.putAll(left);
+            context.putAll(inputContext);
         }
-        if (right != null)
+        if (variableValues != null)
         {
-            context.putAll(right);
+            context.putAll(variableValues);
         }
+        context.put("I", inputContext == null ? new LinkedHashMap<>() : new LinkedHashMap<>(inputContext));
+        context.put("V", variableValues == null ? new LinkedHashMap<>() : new LinkedHashMap<>(variableValues));
+        LinkedHashMap<String, Object> common = new LinkedHashMap<>();
+        common.put("sceneCode", inputContext == null ? null : inputContext.get("sceneCode"));
+        common.put("sceneName", inputContext == null ? null : inputContext.get("sceneName"));
+        common.put("versionNo", inputContext == null ? null : inputContext.get("versionNo"));
+        common.put("billMonth", inputContext == null ? null : inputContext.get("billMonth"));
+        context.put("C", common);
+        context.put("F", feeResultContext == null ? new LinkedHashMap<>() : new LinkedHashMap<>(feeResultContext));
+        context.put("T", new LinkedHashMap<>());
         return context;
+    }
+
+    private String resolveVariableFormula(RuntimeSnapshot snapshot, RuntimeVariable variable)
+    {
+        if (StringUtils.isNotEmpty(variable.formulaCode))
+        {
+            RuntimeFormula formula = snapshot.formulasByCode.get(variable.formulaCode);
+            if (formula != null && StringUtils.isNotEmpty(formula.formulaExpr))
+            {
+                return formula.formulaExpr;
+            }
+        }
+        return variable.formulaExpr;
+    }
+
+    private RuntimeFormula resolveRuleFormula(RuntimeSnapshot snapshot, RuntimeRule rule)
+    {
+        if (StringUtils.isEmpty(rule.amountFormulaCode))
+        {
+            return null;
+        }
+        return snapshot.formulasByCode.get(rule.amountFormulaCode);
     }
 
     private Object resolveValueFromInput(Map<String, Object> input, String dataPath, String variableCode, Object defaultValue)
@@ -1839,6 +1883,7 @@ public class CostRunServiceImpl implements ICostRunService
         public String versionNo;
         public List<RuntimeFee> fees = new ArrayList<>();
         public List<RuntimeVariable> variables = new ArrayList<>();
+        public Map<String, RuntimeFormula> formulasByCode = new LinkedHashMap<>();
         public Map<String, RuntimeRule> rulesByCode = new LinkedHashMap<>();
         public Map<String, List<RuntimeRule>> rulesByFeeCode = new LinkedHashMap<>();
         public Map<String, List<RuntimeCondition>> conditionsByRuleCode = new LinkedHashMap<>();
@@ -1862,8 +1907,18 @@ public class CostRunServiceImpl implements ICostRunService
         public String dataType;
         public String dataPath;
         public String formulaExpr;
+        public String formulaCode;
         public Object defaultValue;
         public Integer sortNo;
+    }
+
+    public static class RuntimeFormula
+    {
+        public String formulaCode;
+        public String formulaName;
+        public String businessFormula;
+        public String formulaExpr;
+        public String returnType;
     }
 
     public static class RuntimeRule
@@ -1878,6 +1933,8 @@ public class CostRunServiceImpl implements ICostRunService
         public String quantityVariableCode;
         public Map<String, Object> pricingConfig;
         public String amountFormula;
+        public String amountFormulaCode;
+        public String amountBusinessFormula;
         public Integer sortNo;
         public List<RuntimeCondition> conditions = Collections.emptyList();
         public List<RuntimeTier> tiers = Collections.emptyList();
