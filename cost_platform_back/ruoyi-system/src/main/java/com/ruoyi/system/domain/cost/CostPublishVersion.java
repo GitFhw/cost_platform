@@ -5,25 +5,26 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.ruoyi.common.annotation.Excel;
-import com.ruoyi.common.core.domain.BaseEntity;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.ToString;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.Date;
 
 /**
  * 发布版本对象 cost_publish_version
  *
+ * <p>发布版本表只有 create/update 审计字段，没有 remark 字段，
+ * 因此这里不继承 BaseEntity，避免默认 SQL 访问不存在的列。</p>
+ *
  * @author codex
  */
 @Data
-@ToString(callSuper = true)
-@EqualsAndHashCode(callSuper = true)
 @TableName("cost_publish_version")
-public class CostPublishVersion extends BaseEntity
+public class CostPublishVersion implements Serializable
 {
+    @Serial
     private static final long serialVersionUID = 1L;
 
     /** 发布版本主键 */
@@ -103,6 +104,22 @@ public class CostPublishVersion extends BaseEntity
     @Excel(name = "回滚时间")
     @TableField("rollback_time")
     private Date rollbackTime;
+
+    /** 创建人 */
+    @TableField("create_by")
+    private String createBy;
+
+    /** 创建时间 */
+    @TableField("create_time")
+    private Date createTime;
+
+    /** 更新人 */
+    @TableField("update_by")
+    private String updateBy;
+
+    /** 更新时间 */
+    @TableField("update_time")
+    private Date updateTime;
 
     /** 是否当前生效版本 */
     @TableField(exist = false)

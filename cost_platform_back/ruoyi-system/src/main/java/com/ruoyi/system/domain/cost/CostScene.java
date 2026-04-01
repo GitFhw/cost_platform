@@ -72,6 +72,10 @@ public class CostScene extends BaseEntity
     @TableField("active_version_id")
     private Long activeVersionId;
 
+    /** 当前生效版本号 */
+    @TableField(exist = false)
+    private String activeVersionNo;
+
     /** 状态 */
     @Excel(name = "状态", dictType = "cost_scene_status")
     @TableField("status")

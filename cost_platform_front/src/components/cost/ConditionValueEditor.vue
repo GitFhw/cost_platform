@@ -1,12 +1,15 @@
 <template>
   <el-select
     v-if="usesDictSelect"
-    :model-value="modelValue"
+    :model-value="dictModelValue"
     clearable
     filterable
+    :multiple="isMultiValueOperator"
+    collapse-tags
+    collapse-tags-tooltip
     placeholder="请选择条件值"
     style="width: 100%"
-    @update:model-value="emit('update:modelValue', $event)"
+    @update:model-value="handleDictChange"
   >
     <el-option v-for="item in dictOptions" :key="item.value" :label="item.label" :value="item.value" />
   </el-select>
@@ -37,7 +40,7 @@
 <script setup>
 const props = defineProps({
   modelValue: {
-    type: [String, Number],
+    type: [String, Number, Array],
     default: ''
   },
   variableMeta: {
@@ -58,8 +61,24 @@ const emit = defineEmits(['update:modelValue'])
 
 const usesDictSelect = computed(() => Boolean(props.variableMeta?.dictType))
 const dictOptions = computed(() => props.dictOptionsMap?.[props.variableMeta?.dictType] || [])
+const isMultiValueOperator = computed(() => ['IN', 'NOT_IN'].includes((props.operatorCode || '').toUpperCase()))
 const isNumber = computed(() => ['NUMBER'].includes(props.variableMeta?.dataType) || props.variableMeta?.variableType === 'NUMBER')
 const isDate = computed(() => props.variableMeta?.dataType === 'DATE' || props.variableMeta?.variableType === 'DATE')
+const dictModelValue = computed(() => {
+  if (!isMultiValueOperator.value) {
+    return props.modelValue
+  }
+  if (Array.isArray(props.modelValue)) {
+    return props.modelValue
+  }
+  if (props.modelValue === undefined || props.modelValue === null || props.modelValue === '') {
+    return []
+  }
+  return String(props.modelValue)
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+})
 const numberValue = computed(() => {
   if (props.modelValue === undefined || props.modelValue === null || props.modelValue === '') {
     return undefined
@@ -82,5 +101,14 @@ const placeholder = computed(() => {
 
 function handleNumberChange(value) {
   emit('update:modelValue', value === undefined || value === null ? '' : String(value))
+}
+
+function handleDictChange(value) {
+  if (isMultiValueOperator.value) {
+    const normalized = Array.isArray(value) ? value.filter(item => item !== undefined && item !== null && item !== '') : []
+    emit('update:modelValue', normalized.join(','))
+    return
+  }
+  emit('update:modelValue', value)
 }
 </script>
