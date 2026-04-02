@@ -218,7 +218,7 @@
 import { ElMessageBox } from 'element-plus'
 import { addFee, delFee, getFee, getFeeGovernance, getFeeStats, listFee, updateFee } from '@/api/cost/fee'
 import { optionselectScene } from '@/api/cost/scene'
-import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
@@ -302,18 +302,10 @@ async function loadBaseOptions() {
   feeStatusOptions.value = dictMap.cost_fee_status || []
   unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResponse?.data || []
-  const preferredSceneId = resolvePreferredCostSceneId(
-    sceneOptions.value,
-    form.value.sceneId,
-    queryParams.value.sceneId,
-    getCostSceneContextId()
-  )
-  if (preferredSceneId) {
-    queryParams.value.sceneId = preferredSceneId
-    if (!form.value.feeId && !form.value.sceneId) {
-      form.value.sceneId = preferredSceneId
-    }
-    setCostSceneContextId(preferredSceneId)
+  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.value.sceneId = preferredSceneId
+  if (!form.value.feeId) {
+    form.value.sceneId = preferredSceneId
   }
 }
 
@@ -328,8 +320,8 @@ function normalizeStats(data = {}) {
 async function getList() {
   loading.value = true
   try {
-    const [, listResponse, statsResponse] = await Promise.all([
-      loadBaseOptions(),
+    await loadBaseOptions()
+    const [listResponse, statsResponse] = await Promise.all([
       listFee(queryParams.value),
       getFeeStats(queryParams.value)
     ])
@@ -373,7 +365,6 @@ function handleSelectionChange(selection) {
 
 function handleQuery() {
   queryParams.value.pageNum = 1
-  setCostSceneContextId(queryParams.value.sceneId)
   getList()
 }
 
@@ -387,7 +378,7 @@ function resetQuery() {
 async function handleAdd() {
   await loadBaseOptions()
   reset()
-  form.value.sceneId = queryParams.value.sceneId || resolvePreferredCostSceneId(sceneOptions.value, getCostSceneContextId())
+  form.value.sceneId = queryParams.value.sceneId || resolveWorkingCostSceneId(sceneOptions.value)
   open.value = true
   title.value = '新增费用'
 }
@@ -398,15 +389,13 @@ async function handleUpdate(row) {
   const feeId = row?.feeId || ids.value[0]
   const response = await getFee(feeId)
   form.value = { ...response.data }
-  setCostSceneContextId(form.value.sceneId)
   initialStatus.value = response.data?.status
   open.value = true
   title.value = '修改费用'
 }
 
 function handleSceneChange(sceneId) {
-  queryParams.value.sceneId = sceneId
-  setCostSceneContextId(sceneId)
+  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
 }
 
 function submitForm() {
@@ -528,6 +517,10 @@ async function ensureDisableAllowed() {
   }
   return true
 }
+
+onActivated(() => {
+  getList()
+})
 
 getList()
 </script>

@@ -488,7 +488,7 @@ import { optionselectFormula } from '@/api/cost/formula'
 import { addRule, copyRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, updateRule } from '@/api/cost/rule'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
-import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 
@@ -648,16 +648,7 @@ async function loadBaseOptions() {
   intervalModeOptions.value = dictMap.cost_rule_interval_mode || []
   unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResponse?.data || []
-  const preferredSceneId = resolvePreferredCostSceneId(
-    sceneOptions.value,
-    form.value.sceneId,
-    queryParams.value.sceneId,
-    getCostSceneContextId()
-  )
-  if (preferredSceneId) {
-    queryParams.value.sceneId = preferredSceneId
-    setCostSceneContextId(preferredSceneId)
-  }
+  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
 }
 
 async function loadFees() {
@@ -741,10 +732,10 @@ function handleSelectionChange(selection) {
 }
 
 async function handleSceneChange() {
+  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
   selectedFeeId.value = undefined
   queryParams.value.feeId = undefined
   feeKeyword.value = ''
-  setCostSceneContextId(queryParams.value.sceneId)
   await loadFees()
   handleQuery()
 }
@@ -752,15 +743,13 @@ async function handleSceneChange() {
 async function handleFeeSelect(item) {
   selectedFeeId.value = item.feeId
   queryParams.value.feeId = item.feeId
-  queryParams.value.sceneId = item.sceneId
-  setCostSceneContextId(item.sceneId)
-  await loadVariables(item.sceneId)
+  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  await loadVariables(queryParams.value.sceneId || item.sceneId)
   handleQuery()
 }
 
 function handleQuery() {
   queryParams.value.pageNum = 1
-  setCostSceneContextId(queryParams.value.sceneId)
   getList()
 }
 
@@ -1129,6 +1118,10 @@ function resolveTagLabel(options, value) {
   const match = normalized.find(item => item.value === value)
   return match ? match.label : value
 }
+
+onActivated(() => {
+  getList()
+})
 
 getList()
 </script>

@@ -345,7 +345,7 @@
 import { ElMessageBox } from 'element-plus'
 import { activatePublishVersion, addPublishVersion, getPublishDiff, getPublishPrecheck, getPublishStats, getPublishVersion, listPublish, rollbackPublishVersion } from '@/api/cost/publish'
 import { optionselectScene } from '@/api/cost/scene'
-import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
@@ -442,18 +442,9 @@ async function loadBaseOptions() {
   businessDomainOptions.value = dictMap.cost_business_domain || []
   versionStatusOptions.value = dictMap.cost_publish_version_status || []
   sceneOptions.value = sceneResponse?.data || []
-  const preferredSceneId = resolvePreferredCostSceneId(
-    sceneOptions.value,
-    publishForm.sceneId,
-    queryParams.sceneId,
-    route.query.sceneId,
-    getCostSceneContextId()
-  )
-  if (preferredSceneId) {
-    queryParams.sceneId = queryParams.sceneId || preferredSceneId
-    publishForm.sceneId = publishForm.sceneId || preferredSceneId
-    setCostSceneContextId(preferredSceneId)
-  }
+  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.sceneId = preferredSceneId
+  publishForm.sceneId = preferredSceneId
 }
 
 async function getList() {
@@ -471,9 +462,6 @@ async function getList() {
 
 function handleQuery() {
   queryParams.pageNum = 1
-  if (queryParams.sceneId) {
-    setCostSceneContextId(queryParams.sceneId)
-  }
   getList()
 }
 
@@ -485,19 +473,15 @@ function resetQuery() {
 }
 
 function handleQuerySceneChange(sceneId) {
-  queryParams.sceneId = sceneId
-  if (!publishForm.sceneId) {
-    publishForm.sceneId = sceneId
-  }
-  setCostSceneContextId(sceneId)
+  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.sceneId = workingSceneId
+  publishForm.sceneId = workingSceneId
 }
 
 function handlePublishSceneChange(sceneId) {
-  publishForm.sceneId = sceneId
-  if (!queryParams.sceneId) {
-    queryParams.sceneId = sceneId
-  }
-  setCostSceneContextId(sceneId)
+  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  publishForm.sceneId = workingSceneId
+  queryParams.sceneId = workingSceneId
 }
 
 async function handlePrecheck() {
@@ -505,7 +489,6 @@ async function handlePrecheck() {
     proxy.$modal.msgWarning('请先选择要发布的场景')
     return
   }
-  setCostSceneContextId(publishForm.sceneId)
   const response = await getPublishPrecheck(publishForm.sceneId)
   precheck.value = response.data || { items: [], impactedFees: [] }
   if (precheck.value.suggestActivateNow) {
@@ -518,7 +501,6 @@ async function handlePublish() {
     proxy.$modal.msgWarning('请先选择发布场景并填写发布说明')
     return
   }
-  setCostSceneContextId(publishForm.sceneId)
   await handlePrecheck()
   if (!precheck.value.publishable) {
     proxy.$modal.msgWarning('当前仍存在阻断项，请先处理后再发布')
@@ -532,7 +514,6 @@ async function handlePublish() {
 
 async function handleDetail(row) {
   detailFeeCode.value = undefined
-  setCostSceneContextId(row.sceneId)
   const response = await getPublishVersion(row.versionId)
   detailData.value = response.data || {}
   detailOpen.value = true
@@ -549,7 +530,6 @@ async function handleDiff(row) {
   diffFeeCode.value = undefined
   selectedFeeDiffCode.value = undefined
   selectedRuleDiffCode.value = undefined
-  setCostSceneContextId(row.sceneId)
   diffForm.toVersionId = row.versionId
   const response = await listPublish({ sceneId: row.sceneId, pageNum: 1, pageSize: 1000 })
   diffVersionOptions.value = (response.rows || []).filter(item => item.versionId !== row.versionId)
@@ -578,7 +558,6 @@ function handleRuleDiffRowChange(row) {
 
 async function handleActivate(row) {
   await ElMessageBox.confirm(`确认将版本 ${row.versionNo} 设为当前生效版本吗？`, '生效切换', { type: 'warning' })
-  setCostSceneContextId(row.sceneId)
   await activatePublishVersion(row.versionId)
   proxy.$modal.msgSuccess('生效切换成功')
   getList()
@@ -586,7 +565,6 @@ async function handleActivate(row) {
 
 async function handleRollback(row) {
   await ElMessageBox.confirm(`确认将场景回滚到版本 ${row.versionNo} 吗？`, '版本回滚', { type: 'warning' })
-  setCostSceneContextId(row.sceneId)
   await rollbackPublishVersion(row.versionId)
   proxy.$modal.msgSuccess('回滚成功')
   getList()
@@ -922,6 +900,10 @@ function stringifyValue(value) {
   }
   return String(value)
 }
+
+onActivated(() => {
+  getList()
+})
 
 getList()
 </script>

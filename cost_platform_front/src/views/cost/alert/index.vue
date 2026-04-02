@@ -17,6 +17,77 @@
       </div>
     </section>
 
+    <section class="alert-page__overview-grid">
+      <div class="alert-page__panel">
+        <div class="alert-page__section-head">
+          <div>
+            <h3>近 7 天趋势</h3>
+            <p>快速查看最近 7 天的告警波动、未关闭量和严重告警量。</p>
+          </div>
+        </div>
+        <el-table :data="overview.recentTrend" size="small" border>
+          <el-table-column label="日期" prop="date" width="120" />
+          <el-table-column label="总量" prop="count" width="90" align="center" />
+          <el-table-column label="未关闭" prop="openCount" width="90" align="center" />
+          <el-table-column label="严重" prop="errorCount" width="90" align="center" />
+        </el-table>
+      </div>
+
+      <div class="alert-page__panel">
+        <div class="alert-page__section-head">
+          <div>
+            <h3>高频类型</h3>
+            <p>帮助先处理重复出现最多的异常类型。</p>
+          </div>
+        </div>
+        <el-table :data="overview.topAlarmTypes" size="small" border>
+          <el-table-column label="告警类型" prop="alarmType" min-width="220" />
+          <el-table-column label="总量" prop="count" width="80" align="center" />
+          <el-table-column label="未关闭" prop="openCount" width="90" align="center" />
+          <el-table-column label="最近触发" width="170" align="center">
+            <template #default="scope">{{ scope.row.latestTime ? proxy.parseTime(scope.row.latestTime) : '-' }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div class="alert-page__panel">
+        <div class="alert-page__section-head">
+          <div>
+            <h3>任务热点</h3>
+            <p>定位告警最集中的任务，优先回到任务中心排查分片和失败明细。</p>
+          </div>
+        </div>
+        <el-table :data="overview.topTasks" size="small" border>
+          <el-table-column label="任务ID" prop="taskId" width="90" align="center" />
+          <el-table-column label="场景" prop="sceneName" min-width="140" />
+          <el-table-column label="账期" prop="billMonth" width="100" align="center" />
+          <el-table-column label="总量" prop="count" width="80" align="center" />
+          <el-table-column label="未关闭" prop="openCount" width="90" align="center" />
+          <el-table-column label="操作" width="130" align="center">
+            <template #default="scope">
+              <el-button link type="primary" icon="Histogram" @click="openTaskCenter(scope.row.taskId, scope.row.billMonth, 'partition')">查看分片</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div class="alert-page__panel">
+        <div class="alert-page__section-head">
+          <div>
+            <h3>等级分布</h3>
+            <p>判断当前告警更偏提示、警告还是严重异常。</p>
+          </div>
+        </div>
+        <div class="alert-page__level-list">
+          <div v-for="item in overview.levelDistribution" :key="item.alarmLevel" class="alert-page__level-item">
+            <dict-tag :options="alarmLevelOptions" :value="item.alarmLevel" />
+            <strong>{{ item.count }}</strong>
+          </div>
+          <el-empty v-if="!overview.levelDistribution.length" description="暂无数据" :image-size="60" />
+        </div>
+      </div>
+    </section>
+
     <section class="alert-page__panel alert-page__panel--cache">
       <div class="alert-page__section-head">
         <div>
@@ -78,6 +149,14 @@
       </el-form-item>
     </el-form>
 
+    <el-alert
+      v-if="routeContext.taskId"
+      class="alert-page__context"
+      type="info"
+      :closable="false"
+      :title="`当前正在查看任务 ${routeContext.taskId} 的告警，已自动带入场景、账期和未关闭状态过滤。`"
+    />
+
     <section class="alert-page__panel">
       <div class="alert-page__section-head">
         <div>
@@ -110,6 +189,7 @@
         </el-table-column>
         <el-table-column label="操作" width="190" fixed="right" align="center">
           <template #default="scope">
+            <el-button link type="primary" icon="View" :disabled="!scope.row.taskId" @click="openTaskCenter(scope.row.taskId, scope.row.billMonth, 'detail')">任务详情</el-button>
             <el-button link type="warning" icon="Bell" :disabled="scope.row.alarmStatus !== 'OPEN'" @click="handleAck(scope.row)" v-hasPermi="['cost:alarm:ack']">确认</el-button>
             <el-button link type="success" icon="CircleCheck" :disabled="scope.row.alarmStatus === 'RESOLVED'" @click="handleResolve(scope.row)" v-hasPermi="['cost:alarm:resolve']">关闭</el-button>
           </template>
@@ -125,9 +205,12 @@
 import { ElMessageBox } from 'element-plus'
 import { optionselectScene } from '@/api/cost/scene'
 import { listVersionOptions } from '@/api/cost/run'
-import { ackAlarm, getAlarmStats, getRuntimeCacheStats, listAlarm, refreshRuntimeCache, resolveAlarm } from '@/api/cost/governance'
+import { ackAlarm, getAlarmOverview, getAlarmStats, getRuntimeCacheStats, listAlarm, refreshRuntimeCache, resolveAlarm } from '@/api/cost/governance'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
+import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 
+const route = useRoute()
+const router = useRouter()
 const { proxy } = getCurrentInstance()
 
 const loading = ref(false)
@@ -140,15 +223,26 @@ const alarmLevelOptions = ref([])
 const alarmStatusOptions = ref([])
 const cacheStats = ref({})
 const stats = reactive({ alarmCount: 0, openCount: 0, ackedCount: 0, resolvedCount: 0 })
+const overview = reactive({
+  recentTrend: [],
+  topAlarmTypes: [],
+  topTasks: [],
+  levelDistribution: []
+})
 
 const queryParams = reactive({
   pageNum: 1,
   pageSize: 10,
   sceneId: undefined,
+  taskId: route.query.taskId ? Number(route.query.taskId) : undefined,
   billMonth: '',
   alarmLevel: undefined,
   alarmStatus: undefined,
   alarmTitle: ''
+})
+
+const routeContext = reactive({
+  taskId: route.query.taskId ? Number(route.query.taskId) : undefined
 })
 
 const cacheForm = reactive({
@@ -171,6 +265,11 @@ async function loadBaseOptions() {
   alarmLevelOptions.value = dictMap.cost_alarm_level || []
   alarmStatusOptions.value = dictMap.cost_alarm_status || []
   sceneOptions.value = sceneResp?.data || []
+  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.sceneId = route.query.sceneId ? Number(route.query.sceneId) : workingSceneId
+  queryParams.billMonth = route.query.billMonth || queryParams.billMonth
+  queryParams.alarmStatus = route.query.alarmStatus || queryParams.alarmStatus
+  cacheForm.sceneId = workingSceneId
 }
 
 async function getList() {
@@ -190,9 +289,20 @@ async function getList() {
     alarmList.value = listResp.rows || []
     total.value = listResp.total || 0
     Object.assign(stats, statsResp.data || {})
+    await loadOverview()
   } finally {
     loading.value = false
   }
+}
+
+async function loadOverview() {
+  const resp = await getAlarmOverview(queryParams)
+  Object.assign(overview, {
+    recentTrend: resp?.data?.recentTrend || [],
+    topAlarmTypes: resp?.data?.topAlarmTypes || [],
+    topTasks: resp?.data?.topTasks || [],
+    levelDistribution: resp?.data?.levelDistribution || []
+  })
 }
 
 async function loadCacheStats() {
@@ -201,13 +311,15 @@ async function loadCacheStats() {
 }
 
 async function handleCacheSceneChange(sceneId) {
+  const targetSceneId = resolveWorkingCostSceneId(sceneOptions.value) ?? sceneId
+  cacheForm.sceneId = targetSceneId
   cacheForm.versionId = undefined
-  if (!sceneId) {
+  if (!targetSceneId) {
     cacheVersionOptions.value = []
     cacheStats.value = {}
     return
   }
-  const resp = await listVersionOptions(sceneId)
+  const resp = await listVersionOptions(targetSceneId)
   cacheVersionOptions.value = resp.data || []
 }
 
@@ -220,6 +332,10 @@ function resetQuery() {
   proxy.resetForm('queryRef')
   queryParams.pageNum = 1
   queryParams.pageSize = 10
+  queryParams.taskId = routeContext.taskId
+  queryParams.sceneId = route.query.sceneId ? Number(route.query.sceneId) : queryParams.sceneId
+  queryParams.billMonth = route.query.billMonth || ''
+  queryParams.alarmStatus = route.query.alarmStatus || undefined
   getList()
 }
 
@@ -235,6 +351,19 @@ async function handleResolve(row) {
   getList()
 }
 
+function openTaskCenter(taskId, billMonth, view) {
+  if (!taskId) return
+  router.push({
+    path: '/cost/task',
+    query: {
+      sceneId: queryParams.sceneId,
+      billMonth: billMonth || queryParams.billMonth,
+      taskId,
+      view
+    }
+  })
+}
+
 async function handleRefreshCache() {
   await ElMessageBox.confirm('确认清理当前条件下的运行快照缓存吗？数据库仍为真实来源。', '提示', { type: 'warning' })
   await refreshRuntimeCache({ sceneId: cacheForm.sceneId, versionId: cacheForm.versionId })
@@ -244,6 +373,11 @@ async function handleRefreshCache() {
 }
 
 onMounted(async () => {
+  await getList()
+  await loadCacheStats()
+})
+
+onActivated(async () => {
   await getList()
   await loadCacheStats()
 })
@@ -299,6 +433,12 @@ onMounted(async () => {
   &__metrics {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  &__overview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
   }
 
@@ -365,11 +505,31 @@ onMounted(async () => {
     font-size: 16px !important;
     line-height: 1.6;
   }
+
+  &__level-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  &__level-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: #f8fafc;
+
+    strong {
+      color: #10233e;
+      font-size: 24px;
+    }
+  }
 }
 
 @media (max-width: 1360px) {
   .alert-page {
     &__metrics,
+    &__overview-grid,
     &__cache-grid {
       grid-template-columns: 1fr;
     }

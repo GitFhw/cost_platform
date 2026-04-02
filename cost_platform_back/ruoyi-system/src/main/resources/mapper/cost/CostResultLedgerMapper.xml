@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.cost.CostResultLedgerMapper">
+
+    <insert id="insertBatch">
+        insert into cost_result_ledger (
+            result_id,
+            task_id,
+            task_no,
+            scene_id,
+            version_id,
+            fee_id,
+            fee_code,
+            fee_name,
+            biz_no,
+            bill_month,
+            object_dimension,
+            object_code,
+            object_name,
+            quantity_value,
+            unit_price,
+            amount_value,
+            currency_code,
+            result_status,
+            trace_id
+        )
+        values
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.resultId},
+                #{item.taskId},
+                #{item.taskNo},
+                #{item.sceneId},
+                #{item.versionId},
+                #{item.feeId},
+                #{item.feeCode},
+                #{item.feeName},
+                #{item.bizNo},
+                #{item.billMonth},
+                #{item.objectDimension},
+                #{item.objectCode},
+                #{item.objectName},
+                #{item.quantityValue},
+                #{item.unitPrice},
+                #{item.amountValue},
+                #{item.currencyCode},
+                #{item.resultStatus},
+                #{item.traceId}
+            )
+        </foreach>
+    </insert>
+
+</mapper>

@@ -24,6 +24,7 @@ import com.ruoyi.system.mapper.cost.CostPublishSnapshotMapper;
 import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
 import com.ruoyi.system.mapper.cost.CostRuleMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
+import com.ruoyi.system.mapper.cost.CostSimulationRecordMapper;
 import com.ruoyi.system.mapper.cost.CostVariableMapper;
 import com.ruoyi.system.service.cost.ICostPublishService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,6 +62,7 @@ public class CostPublishServiceImpl implements ICostPublishService
     private static final String VERSION_STATUS_PUBLISHED = "PUBLISHED";
     private static final String VERSION_STATUS_ACTIVE = "ACTIVE";
     private static final String VERSION_STATUS_ROLLED_BACK = "ROLLED_BACK";
+    private static final String SIMULATION_STATUS_SUCCESS = "SUCCESS";
     private static final String SNAPSHOT_SCENE = "SCENE";
     private static final String SNAPSHOT_FEE = "FEE";
     private static final String SNAPSHOT_VARIABLE = "VARIABLE";
@@ -93,6 +95,9 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     @Autowired
     private CostRuleMapper ruleMapper;
+
+    @Autowired
+    private CostSimulationRecordMapper simulationRecordMapper;
 
     @Override
     public Map<String, Object> selectPublishStats(CostPublishVersion query)
@@ -131,7 +136,7 @@ public class CostPublishServiceImpl implements ICostPublishService
     {
         SnapshotBundle draftBundle = buildDraftSnapshotBundle(sceneId);
         CostPublishVersion activeVersion = publishVersionMapper.selectActiveVersionByScene(sceneId);
-        SnapshotBundle activeBundle = activeVersion == null ? null : loadSnapshotBundle(activeVersion.getVersionId());
+        SnapshotBundle activeBundle = normalizeBundle(activeVersion == null ? null : loadSnapshotBundle(activeVersion.getVersionId()));
         CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
 
         List<CostPublishCheckItemVo> items = new ArrayList<>();
@@ -177,9 +182,9 @@ public class CostPublishServiceImpl implements ICostPublishService
     public Map<String, Object> selectPublishVersionDetail(Long versionId, String feeCode)
     {
         CostPublishVersion version = requireVersion(versionId);
-        SnapshotBundle currentBundle = loadSnapshotBundle(versionId);
+        SnapshotBundle currentBundle = normalizeBundle(loadSnapshotBundle(versionId));
         CostPublishVersion previousVersion = publishVersionMapper.selectPreviousVersion(version.getSceneId(), versionId);
-        SnapshotBundle previousBundle = previousVersion == null ? null : loadSnapshotBundle(previousVersion.getVersionId());
+        SnapshotBundle previousBundle = normalizeBundle(previousVersion == null ? null : loadSnapshotBundle(previousVersion.getVersionId()));
 
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("version", version);
@@ -201,8 +206,8 @@ public class CostPublishServiceImpl implements ICostPublishService
         {
             throw new ServiceException("版本差异只能在同一场景下比较");
         }
-        SnapshotBundle fromBundle = loadSnapshotBundle(fromVersionId);
-        SnapshotBundle toBundle = loadSnapshotBundle(toVersionId);
+        SnapshotBundle fromBundle = normalizeBundle(loadSnapshotBundle(fromVersionId));
+        SnapshotBundle toBundle = normalizeBundle(loadSnapshotBundle(toVersionId));
         List<Map<String, Object>> feeDiffs = buildFeeDiffSummary(fromBundle, toBundle, feeCode);
         List<Map<String, Object>> ruleDiffs = buildRuleDiffSummary(fromBundle, toBundle, feeCode);
         List<Map<String, Object>> sceneDiffs = buildSceneDiffSummary(fromBundle.sceneSnapshot, toBundle.sceneSnapshot);
@@ -333,6 +338,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         if (activeVersion == null)
         {
             items.add(createCheckItem("WARN", "FIRST_RELEASE", "首发提醒", "当前场景还没有生效版本，本次发布后建议尽快设为生效。"));
+            appendFirstReleaseSimulationCheck(sceneId, items);
         }
         else if (StringUtils.equals(draftBundle.snapshotHash, activeVersion.getSnapshotHash()))
         {
@@ -345,6 +351,30 @@ public class CostPublishServiceImpl implements ICostPublishService
             items.add(createCheckItem("PASS", "SNAPSHOT_CHANGED", "版本差异提醒",
                     String.format(Locale.ROOT, "当前草稿相较生效版本%1$s识别到%2$d个受影响费用。", activeVersion.getVersionNo(), impactedFeeCount)));
         }
+    }
+
+    /**
+     * 首发发布时补充试算提醒。
+     *
+     * <p>首发缺少成功试算记录只做警告，不阻断发布，以便业务人员先感知风险、
+     * 再决定是否继续发布。</p>
+     *
+     * @param sceneId 场景主键
+     * @param items 校验项集合
+     */
+    private void appendFirstReleaseSimulationCheck(Long sceneId, List<CostPublishCheckItemVo> items)
+    {
+        long successSimulationCount = simulationRecordMapper.selectCount(Wrappers.lambdaQuery(com.ruoyi.system.domain.cost.CostSimulationRecord.class)
+                .eq(com.ruoyi.system.domain.cost.CostSimulationRecord::getSceneId, sceneId)
+                .eq(com.ruoyi.system.domain.cost.CostSimulationRecord::getStatus, SIMULATION_STATUS_SUCCESS));
+        if (successSimulationCount > 0)
+        {
+            items.add(createCheckItem("PASS", "FIRST_RELEASE_SIMULATION_READY", "试算提醒",
+                    String.format(Locale.ROOT, "当前场景已有%1$d条成功试算记录，可作为首次发布前的业务核对依据。", successSimulationCount)));
+            return;
+        }
+        items.add(createCheckItem("WARN", "FIRST_RELEASE_NO_SIMULATION", "试算提醒",
+                "当前场景为首次发布，且尚无成功试算记录，建议先完成至少1次试算核对再发布。"));
     }
 
     private void activateVersionInternal(CostPublishVersion targetVersion, boolean rollback, String operator, Date operateTime)
@@ -834,8 +864,9 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     private Map<String, Object> buildSnapshotCounts(SnapshotBundle bundle, String feeCode)
     {
+        bundle = normalizeBundle(bundle);
         LinkedHashMap<String, Object> counts = new LinkedHashMap<>();
-        counts.put("scene", 1);
+        counts.put("scene", bundle.sceneSnapshot.isEmpty() ? 0 : 1);
         counts.put("fee", StringUtils.isEmpty(feeCode) ? bundle.feesByCode.size() : (bundle.feesByCode.containsKey(feeCode) ? 1 : 0));
         counts.put("variable", buildFeeVariableList(bundle, feeCode).size());
         counts.put("formula", bundle.formulasByCode.size());
@@ -847,6 +878,7 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     private Map<String, Object> buildSnapshotGroups(SnapshotBundle bundle, String feeCode)
     {
+        bundle = normalizeBundle(bundle);
         LinkedHashMap<String, Object> groups = new LinkedHashMap<>();
         groups.put("scene", bundle.sceneSnapshot);
         groups.put("fees", buildFeeList(bundle, feeCode));
@@ -886,10 +918,7 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     private List<Map<String, Object>> buildFeeRuleCompositeList(SnapshotBundle bundle, String feeCode)
     {
-        if (bundle == null)
-        {
-            return Collections.emptyList();
-        }
+        bundle = normalizeBundle(bundle);
         List<Map<String, Object>> result = new ArrayList<>();
         for (String ruleCode : bundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>()))
         {
@@ -951,6 +980,7 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     private List<Map<String, Object>> buildFeeList(SnapshotBundle bundle, String feeCode)
     {
+        bundle = normalizeBundle(bundle);
         if (StringUtils.isNotEmpty(feeCode))
         {
             return bundle.feesByCode.containsKey(feeCode) ? Collections.singletonList(bundle.feesByCode.get(feeCode)) : Collections.emptyList();
@@ -960,6 +990,7 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     private List<Map<String, Object>> buildFeeVariableList(SnapshotBundle bundle, String feeCode)
     {
+        bundle = normalizeBundle(bundle);
         if (StringUtils.isEmpty(feeCode))
         {
             return new ArrayList<>(bundle.variablesByCode.values());
@@ -978,6 +1009,7 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     private List<Map<String, Object>> buildFeeRuleList(SnapshotBundle bundle, String feeCode)
     {
+        bundle = normalizeBundle(bundle);
         if (StringUtils.isEmpty(feeCode))
         {
             return new ArrayList<>(bundle.rulesByCode.values());
@@ -996,6 +1028,7 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     private List<Map<String, Object>> buildFeeConditionList(SnapshotBundle bundle, String feeCode)
     {
+        bundle = normalizeBundle(bundle);
         Collection<String> ruleCodes = StringUtils.isEmpty(feeCode) ? bundle.rulesByCode.keySet() : bundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>());
         List<Map<String, Object>> result = new ArrayList<>();
         for (String ruleCode : ruleCodes)
@@ -1007,6 +1040,7 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     private List<Map<String, Object>> buildFeeTierList(SnapshotBundle bundle, String feeCode)
     {
+        bundle = normalizeBundle(bundle);
         Collection<String> ruleCodes = StringUtils.isEmpty(feeCode) ? bundle.rulesByCode.keySet() : bundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>());
         List<Map<String, Object>> result = new ArrayList<>();
         for (String ruleCode : ruleCodes)
@@ -1014,6 +1048,17 @@ public class CostPublishServiceImpl implements ICostPublishService
             result.addAll(bundle.ruleTiersByRuleCode.getOrDefault(ruleCode, Collections.emptyList()));
         }
         return result;
+    }
+
+    /**
+     * 将空快照归一化为空对象，避免发布前检查、版本详情与差异视图在“无历史版本/无快照”场景下空指针。
+     *
+     * @param bundle 快照包
+     * @return 可安全访问的快照包
+     */
+    private SnapshotBundle normalizeBundle(SnapshotBundle bundle)
+    {
+        return bundle == null ? new SnapshotBundle() : bundle;
     }
 
     private void sortBundleCollections(SnapshotBundle bundle)

@@ -304,7 +304,7 @@ import { ElMessageBox } from 'element-plus'
 import { addFormula, delFormula, getFormula, getFormulaGovernance, getFormulaStats, listFormula, optionselectFormula, testFormula, updateFormula } from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
-import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
@@ -492,17 +492,9 @@ async function loadBaseOptions() {
   statusOptions.value = dictMap.cost_formula_status || []
   returnTypeOptions.value = dictMap.cost_formula_return_type || []
   sceneOptions.value = sceneResponse?.data || []
-  const preferredSceneId = resolvePreferredCostSceneId(
-    sceneOptions.value,
-    form.sceneId,
-    queryParams.sceneId,
-    getCostSceneContextId()
-  )
-  if (preferredSceneId) {
-    queryParams.sceneId = preferredSceneId
-    form.sceneId = preferredSceneId
-    setCostSceneContextId(preferredSceneId)
-  }
+  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.sceneId = preferredSceneId
+  form.sceneId = preferredSceneId
 }
 
 async function loadSceneAssets(sceneId) {
@@ -554,7 +546,7 @@ function resetWorkbench() {
 }
 
 function resetFormModel() {
-  const currentSceneId = form.sceneId || queryParams.sceneId || resolvePreferredCostSceneId(sceneOptions.value, getCostSceneContextId())
+  const currentSceneId = resolveWorkingCostSceneId(sceneOptions.value) || form.sceneId || queryParams.sceneId
   form.formulaId = undefined
   form.sceneId = currentSceneId
   form.formulaCode = undefined
@@ -765,7 +757,6 @@ async function handleCreate() {
   resetFormModel()
   if (form.sceneId) {
     queryParams.sceneId = form.sceneId
-    setCostSceneContextId(form.sceneId)
     await loadSceneAssets(form.sceneId)
   }
 }
@@ -774,7 +765,6 @@ async function handleEdit(row) {
   const response = await getFormula(row.formulaId)
   Object.assign(form, response.data || {})
   queryParams.sceneId = form.sceneId
-  setCostSceneContextId(form.sceneId)
   testInputJson.value = form.testCaseJson || ''
   testResult.value = response.data?.sampleResultJson ? safeJsonParse(response.data.sampleResultJson) : undefined
   workbench.mode = 'EXPERT'
@@ -826,17 +816,17 @@ async function handleGenerateSample() {
 }
 
 async function handleWorkbenchSceneChange(sceneId) {
-  form.sceneId = sceneId
-  queryParams.sceneId = sceneId
-  setCostSceneContextId(sceneId)
-  await loadSceneAssets(sceneId)
+  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  form.sceneId = workingSceneId
+  queryParams.sceneId = workingSceneId
+  await loadSceneAssets(workingSceneId)
 }
 
 async function handleQuerySceneChange(sceneId) {
-  queryParams.sceneId = sceneId
-  form.sceneId = sceneId
-  setCostSceneContextId(sceneId)
-  await loadSceneAssets(sceneId)
+  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.sceneId = workingSceneId
+  form.sceneId = workingSceneId
+  await loadSceneAssets(workingSceneId)
 }
 
 function handleQuery() {
@@ -863,6 +853,16 @@ function safeJsonParse(text) {
 }
 
 onMounted(async () => {
+  await loadBaseOptions()
+  resetFormModel()
+  if (queryParams.sceneId) {
+    form.sceneId = queryParams.sceneId
+    await loadSceneAssets(queryParams.sceneId)
+  }
+  await getList()
+})
+
+onActivated(async () => {
   await loadBaseOptions()
   resetFormModel()
   if (queryParams.sceneId) {

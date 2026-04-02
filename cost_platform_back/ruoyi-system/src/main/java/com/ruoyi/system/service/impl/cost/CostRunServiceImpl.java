@@ -1,5 +1,6 @@
 package com.ruoyi.system.service.impl.cost;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -11,8 +12,11 @@ import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.cost.CostAlarmRecord;
 import com.ruoyi.system.domain.cost.CostBillPeriod;
+import com.ruoyi.system.domain.cost.CostCalcInputBatch;
+import com.ruoyi.system.domain.cost.CostCalcInputBatchItem;
 import com.ruoyi.system.domain.cost.CostCalcTask;
 import com.ruoyi.system.domain.cost.CostCalcTaskDetail;
+import com.ruoyi.system.domain.cost.CostCalcTaskPartition;
 import com.ruoyi.system.domain.cost.CostFeeItem;
 import com.ruoyi.system.domain.cost.CostPublishSnapshot;
 import com.ruoyi.system.domain.cost.CostPublishVersion;
@@ -23,9 +27,13 @@ import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.CostSimulationRecord;
 import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
 import com.ruoyi.system.domain.cost.bo.CostSimulationExecuteBo;
+import com.ruoyi.system.domain.cost.bo.CostCalcInputBatchCreateBo;
 import com.ruoyi.system.mapper.cost.CostBillPeriodMapper;
+import com.ruoyi.system.mapper.cost.CostCalcInputBatchItemMapper;
+import com.ruoyi.system.mapper.cost.CostCalcInputBatchMapper;
 import com.ruoyi.system.mapper.cost.CostCalcTaskDetailMapper;
 import com.ruoyi.system.mapper.cost.CostCalcTaskMapper;
+import com.ruoyi.system.mapper.cost.CostCalcTaskPartitionMapper;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
 import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
 import com.ruoyi.system.mapper.cost.CostRecalcOrderMapper;
@@ -37,17 +45,21 @@ import com.ruoyi.system.service.cost.ICostAlarmService;
 import com.ruoyi.system.service.cost.ICostAuditService;
 import com.ruoyi.system.service.cost.ICostExpressionService;
 import com.ruoyi.system.service.cost.ICostRunService;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -62,7 +74,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -81,8 +95,14 @@ public class CostRunServiceImpl implements ICostRunService
 {
     private static final String SIMULATION_STATUS_SUCCESS = "SUCCESS";
     private static final String SIMULATION_STATUS_FAILED = "FAILED";
+    private static final String TASK_TYPE_SIMULATION_BATCH = "SIMULATION_BATCH";
     private static final String TASK_TYPE_FORMAL_SINGLE = "FORMAL_SINGLE";
     private static final String TASK_TYPE_FORMAL_BATCH = "FORMAL_BATCH";
+    private static final String INPUT_SOURCE_INLINE_JSON = "INLINE_JSON";
+    private static final String INPUT_SOURCE_BATCH = "INPUT_BATCH";
+    private static final String INPUT_BATCH_STATUS_READY = "READY";
+    private static final String INPUT_BATCH_STATUS_SUBMITTED = "SUBMITTED";
+    private static final String INPUT_BATCH_STATUS_CONSUMED = "CONSUMED";
     private static final String TASK_STATUS_INIT = "INIT";
     private static final String TASK_STATUS_RUNNING = "RUNNING";
     private static final String TASK_STATUS_SUCCESS = "SUCCESS";
@@ -123,6 +143,8 @@ public class CostRunServiceImpl implements ICostRunService
     private static final String RUNTIME_CACHE_PREFIX = "cost:runtime:snapshot:";
     private static final DateTimeFormatter NO_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final DecimalFormat PARTITION_FORMAT = new DecimalFormat("000");
+    private static final int DEFAULT_TASK_PARTITION_SIZE = 500;
+    private static final int DEFAULT_TASK_PARALLELISM = 8;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -133,7 +155,16 @@ public class CostRunServiceImpl implements ICostRunService
     private CostCalcTaskMapper calcTaskMapper;
 
     @Autowired
+    private CostCalcInputBatchMapper calcInputBatchMapper;
+
+    @Autowired
+    private CostCalcInputBatchItemMapper calcInputBatchItemMapper;
+
+    @Autowired
     private CostCalcTaskDetailMapper calcTaskDetailMapper;
+
+    @Autowired
+    private CostCalcTaskPartitionMapper calcTaskPartitionMapper;
 
     @Autowired
     private CostResultLedgerMapper resultLedgerMapper;
@@ -171,6 +202,9 @@ public class CostRunServiceImpl implements ICostRunService
     @Autowired
     private ICostExpressionService expressionService;
 
+    @Autowired
+    private TransactionTemplate transactionTemplate;
+
     @Override
     public Map<String, Object> selectSimulationStats(Long sceneId)
     {
@@ -202,6 +236,44 @@ public class CostRunServiceImpl implements ICostRunService
     {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false);
         Map<String, Object> input = parseObjectJson(bo.getInputJson(), "试算输入必须是 JSON 对象");
+        CostSimulationRecord record = executeAndPersistSimulation(snapshot, input, "");
+        return selectSimulationDetail(record.getSimulationId());
+    }
+
+    @Override
+    public Map<String, Object> executeSimulationBatch(CostSimulationExecuteBo bo)
+    {
+        RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false);
+        List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "批量试算输入必须是 JSON 数组");
+        if (inputs.isEmpty())
+        {
+            throw new ServiceException("批量试算输入不能为空数组");
+        }
+        validateDuplicateBizNo(inputs);
+        List<CostSimulationRecord> records = new ArrayList<>();
+        for (int i = 0; i < inputs.size(); i++)
+        {
+            Map<String, Object> input = inputs.get(i);
+            String bizNo = resolveBizNo(input, i + 1);
+            records.add(executeAndPersistSimulation(snapshot, input, bizNo));
+        }
+
+        enrichSimulationRecords(records);
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("sceneId", snapshot.sceneId);
+        result.put("sceneCode", snapshot.sceneCode);
+        result.put("sceneName", snapshot.sceneName);
+        result.put("versionId", snapshot.versionId);
+        result.put("versionNo", snapshot.versionNo);
+        result.put("totalCount", records.size());
+        result.put("successCount", records.stream().filter(item -> SIMULATION_STATUS_SUCCESS.equals(item.getStatus())).count());
+        result.put("failedCount", records.stream().filter(item -> SIMULATION_STATUS_FAILED.equals(item.getStatus())).count());
+        result.put("records", records.stream().map(this::buildSimulationBatchItem).collect(Collectors.toList()));
+        return result;
+    }
+
+    private CostSimulationRecord executeAndPersistSimulation(RuntimeSnapshot snapshot, Map<String, Object> input, String bizNo)
+    {
         Date now = DateUtils.getNowDate();
         String operator = firstNonBlank(SecurityUtils.getUsername(), "system");
         CostSimulationRecord record = new CostSimulationRecord();
@@ -220,7 +292,7 @@ public class CostRunServiceImpl implements ICostRunService
             record.setStatus(SIMULATION_STATUS_SUCCESS);
             record.setErrorMessage("");
             simulationRecordMapper.insert(record);
-            return selectSimulationDetail(record.getSimulationId());
+            return record;
         }
         catch (Exception e)
         {
@@ -230,8 +302,24 @@ public class CostRunServiceImpl implements ICostRunService
             record.setStatus(SIMULATION_STATUS_FAILED);
             record.setErrorMessage(limitLength(e.getMessage(), 1000));
             simulationRecordMapper.insert(record);
-            throw e instanceof ServiceException ? (ServiceException) e : new ServiceException("试算执行失败：" + e.getMessage());
+            if (StringUtils.isEmpty(bizNo))
+            {
+                throw e instanceof ServiceException ? (ServiceException) e : new ServiceException("试算执行失败：" + e.getMessage());
+            }
+            return record;
         }
+    }
+
+    private Map<String, Object> buildSimulationBatchItem(CostSimulationRecord record)
+    {
+        LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+        item.put("simulationId", record.getSimulationId());
+        item.put("simulationNo", record.getSimulationNo());
+        item.put("status", record.getStatus());
+        item.put("bizNo", resolveString(parseObjectJson(record.getInputJson(), "试算输入必须是 JSON 对象"), "bizNo", "biz_no"));
+        item.put("errorMessage", record.getErrorMessage());
+        item.put("simulationTime", record.getCreateTime());
+        return item;
     }
 
     @Override
@@ -262,6 +350,21 @@ public class CostRunServiceImpl implements ICostRunService
         stats.put("successCount", tasks.stream().filter(item -> TASK_STATUS_SUCCESS.equals(item.getTaskStatus())).count());
         stats.put("failedCount", tasks.stream().filter(item -> TASK_STATUS_FAILED.equals(item.getTaskStatus()) || TASK_STATUS_PART_SUCCESS.equals(item.getTaskStatus())).count());
         return stats;
+    }
+
+    @Override
+    public Map<String, Object> selectTaskOverview(CostCalcTask query)
+    {
+        List<CostCalcTask> tasks = selectTaskListInternal(query);
+        enrichTasks(tasks);
+        List<CostCalcTaskPartition> partitions = selectTaskPartitions(tasks);
+        LinkedHashMap<String, Object> overview = new LinkedHashMap<>();
+        overview.put("recentTaskTrend", buildTaskTrend(tasks, 7));
+        overview.put("recentPartitionTrend", buildPartitionTrend(partitions, 7));
+        overview.put("topRiskTasks", buildTopRiskTasks(tasks, partitions, 5));
+        overview.put("taskStatusDistribution", buildTaskStatusDistribution(tasks));
+        overview.put("inputSourceDistribution", buildInputSourceDistribution(tasks));
+        return overview;
     }
 
     @Override
@@ -309,6 +412,8 @@ public class CostRunServiceImpl implements ICostRunService
         task.setProgressPercent(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
         task.setRequestNo(firstNonBlank(bo.getRequestNo(), ""));
         task.setExecuteNode(resolveExecuteNode());
+        task.setInputSourceType(resolveInputSourceType(bo));
+        task.setSourceBatchNo(firstNonBlank(bo.getSourceBatchNo(), ""));
         task.setErrorMessage("");
         task.setRemark(bo.getRemark());
         task.setCreateBy(operator);
@@ -318,25 +423,102 @@ public class CostRunServiceImpl implements ICostRunService
         calcTaskMapper.insert(task);
         markPeriodInProgress(period, task);
 
-        AtomicInteger partitionCounter = new AtomicInteger(1);
-        for (Map<String, Object> input : inputs)
+        List<CostCalcTaskDetail> details = buildTaskDetails(task, inputs);
+        if (!details.isEmpty())
         {
-            CostCalcTaskDetail detail = new CostCalcTaskDetail();
-            detail.setTaskId(task.getTaskId());
-            detail.setTaskNo(task.getTaskNo());
-            detail.setBizNo(resolveBizNo(input, partitionCounter.get()));
-            detail.setPartitionNo(partitionCounter.getAndIncrement());
-            detail.setDetailStatus(DETAIL_STATUS_INIT);
-            detail.setRetryCount(0);
-            detail.setInputJson(writeJson(input));
-            detail.setResultSummary("");
-            detail.setErrorMessage("");
-            calcTaskDetailMapper.insert(detail);
+            calcTaskDetailMapper.insertBatch(details);
+            calcTaskPartitionMapper.insertBatch(buildTaskPartitions(task, details));
+            markInputBatchSubmitted(task.getSourceBatchNo(), operator);
         }
         auditService.recordAudit(snapshot.sceneId, "CALC_TASK", task.getTaskNo(),
                 "SUBMIT", "提交正式核算任务", null, task, task.getRequestNo());
         dispatchTaskAfterCommit(task.getTaskId());
         return selectTaskDetail(task.getTaskId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> createInputBatch(CostCalcInputBatchCreateBo bo)
+    {
+        RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), true);
+        validateBillMonth(bo.getBillMonth());
+        List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "导入批次输入必须是 JSON 数组");
+        if (inputs.isEmpty())
+        {
+            throw new ServiceException("导入批次输入不能为空数组");
+        }
+        validateDuplicateBizNo(inputs);
+        Date now = DateUtils.getNowDate();
+        String operator = firstNonBlank(SecurityUtils.getUsername(), "system");
+
+        CostCalcInputBatch batch = new CostCalcInputBatch();
+        batch.setBatchNo(buildRunNo("INPUT"));
+        batch.setSceneId(snapshot.sceneId);
+        batch.setVersionId(snapshot.versionId);
+        batch.setBillMonth(bo.getBillMonth());
+        batch.setSourceType("JSON_IMPORT");
+        batch.setBatchStatus(INPUT_BATCH_STATUS_READY);
+        batch.setTotalCount(inputs.size());
+        batch.setValidCount(inputs.size());
+        batch.setErrorCount(0);
+        batch.setRemark(bo.getRemark());
+        batch.setErrorMessage("");
+        batch.setCreateBy(operator);
+        batch.setCreateTime(now);
+        batch.setUpdateBy(operator);
+        batch.setUpdateTime(now);
+        calcInputBatchMapper.insert(batch);
+
+        List<CostCalcInputBatchItem> items = new ArrayList<>();
+        for (int i = 0; i < inputs.size(); i++)
+        {
+            Map<String, Object> input = inputs.get(i);
+            CostCalcInputBatchItem item = new CostCalcInputBatchItem();
+            item.setBatchId(batch.getBatchId());
+            item.setBatchNo(batch.getBatchNo());
+            item.setItemNo(i + 1);
+            item.setBizNo(resolveBizNo(input, i + 1));
+            item.setItemStatus(INPUT_BATCH_STATUS_READY);
+            item.setInputJson(writeJson(input));
+            item.setErrorMessage("");
+            items.add(item);
+        }
+        calcInputBatchItemMapper.insertBatch(items);
+        return selectInputBatchDetail(batch.getBatchId());
+    }
+
+    @Override
+    public List<CostCalcInputBatch> selectInputBatchList(CostCalcInputBatch query)
+    {
+        List<CostCalcInputBatch> batches = calcInputBatchMapper.selectList(Wrappers.<CostCalcInputBatch>lambdaQuery()
+                .eq(query.getSceneId() != null, CostCalcInputBatch::getSceneId, query.getSceneId())
+                .eq(query.getVersionId() != null, CostCalcInputBatch::getVersionId, query.getVersionId())
+                .eq(StringUtils.isNotEmpty(query.getBillMonth()), CostCalcInputBatch::getBillMonth, query.getBillMonth())
+                .eq(StringUtils.isNotEmpty(query.getBatchStatus()), CostCalcInputBatch::getBatchStatus, query.getBatchStatus())
+                .eq(StringUtils.isNotEmpty(query.getSourceType()), CostCalcInputBatch::getSourceType, query.getSourceType())
+                .like(StringUtils.isNotEmpty(query.getBatchNo()), CostCalcInputBatch::getBatchNo, query.getBatchNo())
+                .orderByDesc(CostCalcInputBatch::getBatchId));
+        enrichInputBatches(batches);
+        return batches;
+    }
+
+    @Override
+    public Map<String, Object> selectInputBatchDetail(Long batchId)
+    {
+        CostCalcInputBatch batch = calcInputBatchMapper.selectById(batchId);
+        enrichInputBatches(Collections.singletonList(batch));
+        if (batch == null)
+        {
+            throw new ServiceException("输入批次不存在，请刷新后重试");
+        }
+        List<CostCalcInputBatchItem> items = calcInputBatchItemMapper.selectList(Wrappers.<CostCalcInputBatchItem>lambdaQuery()
+                .eq(CostCalcInputBatchItem::getBatchId, batchId)
+                .orderByAsc(CostCalcInputBatchItem::getItemNo)
+                .orderByAsc(CostCalcInputBatchItem::getItemId));
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("batch", batch);
+        result.put("items", items);
+        return result;
     }
 
     @Override
@@ -352,18 +534,56 @@ public class CostRunServiceImpl implements ICostRunService
                 .eq(CostCalcTaskDetail::getTaskId, taskId)
                 .orderByAsc(CostCalcTaskDetail::getPartitionNo)
                 .orderByAsc(CostCalcTaskDetail::getDetailId));
+        List<CostCalcTaskPartition> partitions = calcTaskPartitionMapper.selectList(Wrappers.<CostCalcTaskPartition>lambdaQuery()
+                .eq(CostCalcTaskPartition::getTaskId, taskId)
+                .orderByAsc(CostCalcTaskPartition::getPartitionNo)
+                .orderByAsc(CostCalcTaskPartition::getPartitionId));
         LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
         summary.put("sourceCount", task.getSourceCount());
         summary.put("successCount", task.getSuccessCount());
         summary.put("failCount", task.getFailCount());
         summary.put("progressPercent", task.getProgressPercent());
         summary.put("detailCount", details.size());
+        summary.put("partitionCount", partitions.size());
+        summary.put("failedPartitionCount", partitions.stream().filter(item -> NumberUtils.toInt(String.valueOf(item.getFailCount()), 0) > 0).count());
         summary.put("retryableCount", details.stream().filter(item -> DETAIL_STATUS_FAILED.equals(item.getDetailStatus())).count());
+        summary.put("topErrors", details.stream()
+                .filter(item -> DETAIL_STATUS_FAILED.equals(item.getDetailStatus()) && StringUtils.isNotEmpty(item.getErrorMessage()))
+                .collect(Collectors.groupingBy(item -> limitLength(item.getErrorMessage(), 120), LinkedHashMap::new, Collectors.counting()))
+                .entrySet().stream()
+                .sorted((left, right) -> Long.compare(right.getValue(), left.getValue()))
+                .limit(5)
+                .map(entry ->
+                {
+                    LinkedHashMap<String, Object> error = new LinkedHashMap<>();
+                    error.put("message", entry.getKey());
+                    error.put("count", entry.getValue());
+                    return error;
+                })
+                .collect(Collectors.toList()));
 
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("task", task);
         result.put("summary", summary);
+        result.put("partitions", partitions);
         result.put("details", details);
+        if (StringUtils.isNotEmpty(task.getSourceBatchNo()))
+        {
+            CostCalcInputBatch inputBatch = calcInputBatchMapper.selectOne(Wrappers.<CostCalcInputBatch>lambdaQuery()
+                    .eq(CostCalcInputBatch::getBatchNo, task.getSourceBatchNo())
+                    .last("limit 1"));
+            if (inputBatch != null)
+            {
+                LinkedHashMap<String, Object> inputBatchDetail = new LinkedHashMap<>();
+                inputBatchDetail.put("batch", inputBatch);
+                inputBatchDetail.put("items", calcInputBatchItemMapper.selectList(Wrappers.<CostCalcInputBatchItem>lambdaQuery()
+                        .eq(CostCalcInputBatchItem::getBatchId, inputBatch.getBatchId())
+                        .orderByAsc(CostCalcInputBatchItem::getItemNo)
+                        .orderByAsc(CostCalcInputBatchItem::getItemId)
+                        .last("limit 10")));
+                result.put("inputBatch", inputBatchDetail);
+            }
+        }
         return result;
     }
 
@@ -398,6 +618,54 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
+    public int retryTaskPartition(Long partitionId)
+    {
+        CostCalcTaskPartition partition = calcTaskPartitionMapper.selectById(partitionId);
+        if (partition == null)
+        {
+            throw new ServiceException("任务分片不存在，请刷新后重试");
+        }
+        CostCalcTask task = calcTaskMapper.selectById(partition.getTaskId());
+        if (task == null)
+        {
+            throw new ServiceException("所属核算任务不存在，请刷新后重试");
+        }
+        List<CostCalcTaskDetail> failedDetails = calcTaskDetailMapper.selectList(Wrappers.<CostCalcTaskDetail>lambdaQuery()
+                .eq(CostCalcTaskDetail::getTaskId, partition.getTaskId())
+                .eq(CostCalcTaskDetail::getPartitionNo, partition.getPartitionNo())
+                .eq(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_FAILED)
+                .orderByAsc(CostCalcTaskDetail::getDetailId));
+        if (failedDetails.isEmpty())
+        {
+            return 0;
+        }
+        for (CostCalcTaskDetail detail : failedDetails)
+        {
+            int nextRetryCount = (detail.getRetryCount() == null ? 0 : detail.getRetryCount()) + 1;
+            calcTaskDetailMapper.update(null, Wrappers.<CostCalcTaskDetail>lambdaUpdate()
+                    .eq(CostCalcTaskDetail::getDetailId, detail.getDetailId())
+                    .set(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_INIT)
+                    .set(CostCalcTaskDetail::getRetryCount, nextRetryCount)
+                    .set(CostCalcTaskDetail::getErrorMessage, "")
+                    .set(CostCalcTaskDetail::getResultSummary, ""));
+        }
+        calcTaskPartitionMapper.update(null, Wrappers.<CostCalcTaskPartition>lambdaUpdate()
+                .eq(CostCalcTaskPartition::getPartitionId, partitionId)
+                .set(CostCalcTaskPartition::getPartitionStatus, TASK_STATUS_INIT)
+                .set(CostCalcTaskPartition::getProcessedCount, 0)
+                .set(CostCalcTaskPartition::getSuccessCount, 0)
+                .set(CostCalcTaskPartition::getFailCount, 0)
+                .set(CostCalcTaskPartition::getStartedTime, null)
+                .set(CostCalcTaskPartition::getFinishedTime, null)
+                .set(CostCalcTaskPartition::getDurationMs, 0)
+                .set(CostCalcTaskPartition::getLastError, ""));
+        auditService.recordAudit(task.getSceneId(), "CALC_TASK_PARTITION", task.getTaskNo() + "#" + partition.getPartitionNo(),
+                "RETRY", "重试正式核算分片", partition, calcTaskPartitionMapper.selectById(partitionId), task.getRequestNo());
+        dispatchTaskAfterCommit(task.getTaskId());
+        return 1;
+    }
+
+    @Override
     public int cancelTask(Long taskId)
     {
         CostCalcTask task = calcTaskMapper.selectById(taskId);
@@ -415,6 +683,13 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostCalcTask::getErrorMessage, "任务已手工终止")
                 .set(CostCalcTask::getUpdateBy, firstNonBlank(SecurityUtils.getUsername(), "system"))
                 .set(CostCalcTask::getUpdateTime, DateUtils.getNowDate()));
+        calcTaskPartitionMapper.update(null, Wrappers.<CostCalcTaskPartition>lambdaUpdate()
+                .eq(CostCalcTaskPartition::getTaskId, taskId)
+                .in(CostCalcTaskPartition::getPartitionStatus, TASK_STATUS_INIT, TASK_STATUS_RUNNING)
+                .set(CostCalcTaskPartition::getPartitionStatus, TASK_STATUS_CANCELLED)
+                .set(CostCalcTaskPartition::getLastError, "任务已手工终止")
+                .set(CostCalcTaskPartition::getFinishedTime, DateUtils.getNowDate())
+                .set(CostCalcTaskPartition::getUpdateTime, DateUtils.getNowDate()));
         refreshBillPeriod(task.getSceneId(), task.getBillMonth(), task);
         syncRecalcByTask(task, TASK_STATUS_CANCELLED);
         auditService.recordAudit(task.getSceneId(), "CALC_TASK", task.getTaskNo(),
@@ -513,6 +788,14 @@ public class CostRunServiceImpl implements ICostRunService
             result.put("inputJson", writeJson(samples));
             return result;
         }
+        if (TASK_TYPE_SIMULATION_BATCH.equals(normalizedTaskType))
+        {
+            List<Map<String, Object>> samples = new ArrayList<>();
+            samples.add(buildSingleInputTemplate(snapshot, normalizedTaskType, 1));
+            samples.add(buildSingleInputTemplate(snapshot, normalizedTaskType, 2));
+            result.put("inputJson", writeJson(samples));
+            return result;
+        }
         result.put("inputJson", writeJson(buildSingleInputTemplate(snapshot, normalizedTaskType, 1)));
         return result;
     }
@@ -547,35 +830,66 @@ public class CostRunServiceImpl implements ICostRunService
                     .in(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_INIT, DETAIL_STATUS_FAILED)
                     .orderByAsc(CostCalcTaskDetail::getPartitionNo)
                     .orderByAsc(CostCalcTaskDetail::getDetailId));
-            int total = details.isEmpty() ? 1 : details.size();
+            if (details.isEmpty())
+            {
+                finishTask(taskId, startedTime, 0, 0);
+                return;
+            }
+            List<List<CostCalcTaskDetail>> partitions = splitTaskPartitions(details);
+            ExecutorCompletionService<PartitionExecutionResult> completionService =
+                    new ExecutorCompletionService<>(threadPoolTaskExecutor.getThreadPoolExecutor());
+            Map<Future<PartitionExecutionResult>, List<CostCalcTaskDetail>> futurePartitions = new LinkedHashMap<>();
+            int total = details.size();
             int processed = 0;
             int success = 0;
             int failed = 0;
-            for (CostCalcTaskDetail detail : details)
+            int nextPartitionIndex = 0;
+            int completedCount = 0;
+            int maxParallelism = resolveTaskParallelism(partitions.size());
+            while (nextPartitionIndex < partitions.size() && futurePartitions.size() < maxParallelism)
             {
+                List<CostCalcTaskDetail> partition = partitions.get(nextPartitionIndex++);
+                markPartitionRunning(taskId, partition);
+                Future<PartitionExecutionResult> future =
+                        completionService.submit(() -> executeTaskPartition(taskId, snapshot, partition));
+                futurePartitions.put(future, partition);
+            }
+            while (completedCount < partitions.size())
+            {
+                Future<PartitionExecutionResult> future = completionService.take();
+                List<CostCalcTaskDetail> partition = futurePartitions.remove(future);
+                completedCount++;
+                try
+                {
+                    PartitionExecutionResult partitionResult = future.get();
+                    finishPartition(taskId, partition, partitionResult, null);
+                    processed += partitionResult.processedCount;
+                    success += partitionResult.successCount;
+                    failed += partitionResult.failedCount;
+                }
+                catch (ExecutionException e)
+                {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    PartitionExecutionResult fallbackResult = markPartitionFailed(taskId, partition, cause);
+                    finishPartition(taskId, partition, fallbackResult, cause);
+                    processed += fallbackResult.processedCount;
+                    success += fallbackResult.successCount;
+                    failed += fallbackResult.failedCount;
+                }
+                refreshTaskProgress(taskId, total, processed, success, failed);
                 CostCalcTask latestTask = calcTaskMapper.selectById(taskId);
                 if (latestTask == null || TASK_STATUS_CANCELLED.equals(latestTask.getTaskStatus()))
                 {
                     break;
                 }
-                try
+                if (nextPartitionIndex < partitions.size())
                 {
-                    processTaskDetail(latestTask, detail, snapshot);
-                    success++;
+                    List<CostCalcTaskDetail> nextPartition = partitions.get(nextPartitionIndex++);
+                    markPartitionRunning(taskId, nextPartition);
+                    Future<PartitionExecutionResult> nextFuture =
+                            completionService.submit(() -> executeTaskPartition(taskId, snapshot, nextPartition));
+                    futurePartitions.put(nextFuture, nextPartition);
                 }
-                catch (Exception e)
-                {
-                    failed++;
-                    createTaskAlarm(latestTask, detail, "TASK_DETAIL_FAILED", "WARN",
-                            "任务明细执行失败", "业务单号 " + detail.getBizNo() + " 执行失败：" + limitLength(e.getMessage(), 300));
-                    calcTaskDetailMapper.update(null, Wrappers.<CostCalcTaskDetail>lambdaUpdate()
-                            .eq(CostCalcTaskDetail::getDetailId, detail.getDetailId())
-                            .set(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_FAILED)
-                            .set(CostCalcTaskDetail::getErrorMessage, limitLength(e.getMessage(), 1000))
-                            .set(CostCalcTaskDetail::getResultSummary, "执行失败"));
-                }
-                processed++;
-                refreshTaskProgress(taskId, total, processed, success, failed);
             }
             finishTask(taskId, startedTime, success, failed);
         }
@@ -1384,6 +1698,7 @@ public class CostRunServiceImpl implements ICostRunService
     private List<CostCalcTask> selectTaskListInternal(CostCalcTask query)
     {
         return calcTaskMapper.selectList(Wrappers.<CostCalcTask>lambdaQuery()
+                .eq(query.getTaskId() != null, CostCalcTask::getTaskId, query.getTaskId())
                 .eq(query.getSceneId() != null, CostCalcTask::getSceneId, query.getSceneId())
                 .eq(query.getVersionId() != null, CostCalcTask::getVersionId, query.getVersionId())
                 .eq(StringUtils.isNotEmpty(query.getTaskType()), CostCalcTask::getTaskType, query.getTaskType())
@@ -1396,6 +1711,7 @@ public class CostRunServiceImpl implements ICostRunService
     private List<CostResultLedger> selectResultListInternal(CostResultLedger query)
     {
         return resultLedgerMapper.selectList(Wrappers.<CostResultLedger>lambdaQuery()
+                .eq(query.getTaskId() != null, CostResultLedger::getTaskId, query.getTaskId())
                 .eq(query.getSceneId() != null, CostResultLedger::getSceneId, query.getSceneId())
                 .eq(query.getVersionId() != null, CostResultLedger::getVersionId, query.getVersionId())
                 .eq(StringUtils.isNotEmpty(query.getBillMonth()), CostResultLedger::getBillMonth, query.getBillMonth())
@@ -1458,6 +1774,207 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
+    /**
+     * 按任务集合一次性加载分片台账，避免任务总览按任务逐个查分片。
+     */
+    private List<CostCalcTaskPartition> selectTaskPartitions(List<CostCalcTask> tasks)
+    {
+        if (tasks == null || tasks.isEmpty())
+        {
+            return Collections.emptyList();
+        }
+        Set<Long> taskIds = tasks.stream().map(CostCalcTask::getTaskId).filter(Objects::nonNull).collect(Collectors.toSet());
+        if (taskIds.isEmpty())
+        {
+            return Collections.emptyList();
+        }
+        return calcTaskPartitionMapper.selectList(Wrappers.<CostCalcTaskPartition>lambdaQuery()
+                .in(CostCalcTaskPartition::getTaskId, taskIds)
+                .orderByDesc(CostCalcTaskPartition::getPartitionId));
+    }
+
+    /**
+     * 构建最近 N 天任务趋势，帮助从任务级别观察运行波动。
+     */
+    private List<Map<String, Object>> buildTaskTrend(List<CostCalcTask> tasks, int recentDays)
+    {
+        ZoneId zoneId = ZoneId.systemDefault();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        Map<LocalDate, List<CostCalcTask>> grouped = tasks.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> resolveTaskTrendDate(item) != null)
+                .collect(Collectors.groupingBy(item -> resolveTaskTrendDate(item).toInstant().atZone(zoneId).toLocalDate()));
+        List<Map<String, Object>> result = new ArrayList<>();
+        LocalDate end = LocalDate.now(zoneId);
+        LocalDate start = end.minusDays(Math.max(recentDays - 1L, 0L));
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1))
+        {
+            List<CostCalcTask> dayTasks = grouped.getOrDefault(date, List.of());
+            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+            row.put("date", date.format(formatter));
+            row.put("count", dayTasks.size());
+            row.put("runningCount", dayTasks.stream().filter(item -> TASK_STATUS_RUNNING.equals(item.getTaskStatus())).count());
+            row.put("failedCount", dayTasks.stream().filter(item -> isTaskProblematic(item.getTaskStatus())).count());
+            result.add(row);
+        }
+        return result;
+    }
+
+    /**
+     * 构建最近 N 天分片趋势，便于判断是否存在分片级失败集中爆发。
+     */
+    private List<Map<String, Object>> buildPartitionTrend(List<CostCalcTaskPartition> partitions, int recentDays)
+    {
+        ZoneId zoneId = ZoneId.systemDefault();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        Map<LocalDate, List<CostCalcTaskPartition>> grouped = partitions.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> resolvePartitionTrendDate(item) != null)
+                .collect(Collectors.groupingBy(item -> resolvePartitionTrendDate(item).toInstant().atZone(zoneId).toLocalDate()));
+        List<Map<String, Object>> result = new ArrayList<>();
+        LocalDate end = LocalDate.now(zoneId);
+        LocalDate start = end.minusDays(Math.max(recentDays - 1L, 0L));
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1))
+        {
+            List<CostCalcTaskPartition> dayPartitions = grouped.getOrDefault(date, List.of());
+            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+            row.put("date", date.format(formatter));
+            row.put("count", dayPartitions.size());
+            row.put("failedCount", dayPartitions.stream().filter(item -> isPartitionProblematic(item)).count());
+            row.put("avgDurationMs", dayPartitions.isEmpty() ? 0L : Math.round(dayPartitions.stream()
+                    .map(CostCalcTaskPartition::getDurationMs)
+                    .filter(Objects::nonNull)
+                    .mapToLong(Long::longValue)
+                    .average()
+                    .orElse(0D)));
+            result.add(row);
+        }
+        return result;
+    }
+
+    /**
+     * 构建高风险任务排行，优先暴露失败量高、失败分片多的任务。
+     */
+    private List<Map<String, Object>> buildTopRiskTasks(List<CostCalcTask> tasks, List<CostCalcTaskPartition> partitions, int limit)
+    {
+        Map<Long, List<CostCalcTaskPartition>> partitionMap = partitions.stream()
+                .filter(item -> item.getTaskId() != null)
+                .collect(Collectors.groupingBy(CostCalcTaskPartition::getTaskId));
+        return tasks.stream()
+                .filter(item -> item.getTaskId() != null)
+                .filter(item -> NumberUtils.toInt(String.valueOf(item.getFailCount()), 0) > 0 || isTaskProblematic(item.getTaskStatus()))
+                .sorted(Comparator
+                        .comparingInt((CostCalcTask item) -> item.getFailCount() == null ? 0 : item.getFailCount()).reversed()
+                        .thenComparing(CostCalcTask::getTaskId, Comparator.reverseOrder()))
+                .limit(limit)
+                .map(task -> {
+                    List<CostCalcTaskPartition> taskPartitions = partitionMap.getOrDefault(task.getTaskId(), List.of());
+                    LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+                    row.put("taskId", task.getTaskId());
+                    row.put("taskNo", task.getTaskNo());
+                    row.put("sceneName", firstNonBlank(task.getSceneName(), "-"));
+                    row.put("billMonth", firstNonBlank(task.getBillMonth(), "-"));
+                    row.put("taskStatus", firstNonBlank(task.getTaskStatus(), TASK_STATUS_INIT));
+                    row.put("failCount", task.getFailCount() == null ? 0 : task.getFailCount());
+                    row.put("partitionFailCount", taskPartitions.stream().filter(this::isPartitionProblematic).count());
+                    row.put("sourceCount", task.getSourceCount() == null ? 0 : task.getSourceCount());
+                    return row;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 构建任务状态分布，帮助快速判断任务更多停留在哪个阶段。
+     */
+    private List<Map<String, Object>> buildTaskStatusDistribution(List<CostCalcTask> tasks)
+    {
+        return tasks.stream()
+                .collect(Collectors.groupingBy(item -> firstNonBlank(item.getTaskStatus(), TASK_STATUS_INIT), Collectors.counting()))
+                .entrySet()
+                .stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .map(entry -> {
+                    LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+                    row.put("taskStatus", entry.getKey());
+                    row.put("count", entry.getValue());
+                    return row;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 构建输入来源分布，帮助判断当前正式核算更偏 JSON 还是导入批次。
+     */
+    private List<Map<String, Object>> buildInputSourceDistribution(List<CostCalcTask> tasks)
+    {
+        return tasks.stream()
+                .collect(Collectors.groupingBy(item -> firstNonBlank(item.getInputSourceType(), "INLINE_JSON"), Collectors.counting()))
+                .entrySet()
+                .stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .map(entry -> {
+                    LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+                    row.put("inputSourceType", entry.getKey());
+                    row.put("count", entry.getValue());
+                    return row;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private Date resolveTaskTrendDate(CostCalcTask task)
+    {
+        return task.getStartedTime() != null ? task.getStartedTime() : task.getCreateTime();
+    }
+
+    private Date resolvePartitionTrendDate(CostCalcTaskPartition partition)
+    {
+        return partition.getStartedTime() != null ? partition.getStartedTime() : partition.getCreateTime();
+    }
+
+    private boolean isTaskProblematic(String taskStatus)
+    {
+        return TASK_STATUS_FAILED.equals(taskStatus) || TASK_STATUS_PART_SUCCESS.equals(taskStatus) || TASK_STATUS_CANCELLED.equals(taskStatus);
+    }
+
+    private boolean isPartitionProblematic(CostCalcTaskPartition partition)
+    {
+        return partition != null
+                && (TASK_STATUS_FAILED.equals(partition.getPartitionStatus())
+                || TASK_STATUS_PART_SUCCESS.equals(partition.getPartitionStatus())
+                || (partition.getFailCount() != null && partition.getFailCount() > 0));
+    }
+
+    private void enrichInputBatches(List<CostCalcInputBatch> batches)
+    {
+        if (batches == null || batches.isEmpty())
+        {
+            return;
+        }
+        List<CostCalcInputBatch> filtered = batches.stream().filter(Objects::nonNull).collect(Collectors.toList());
+        if (filtered.isEmpty())
+        {
+            return;
+        }
+        Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(filtered.stream().map(CostCalcInputBatch::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(CostScene::getSceneId, item -> item));
+        Map<Long, CostPublishVersion> versionMap = publishVersionMapper.selectBatchIds(filtered.stream().map(CostCalcInputBatch::getVersionId).filter(Objects::nonNull).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
+        for (CostCalcInputBatch batch : filtered)
+        {
+            CostScene scene = sceneMap.get(batch.getSceneId());
+            if (scene != null)
+            {
+                batch.setSceneCode(scene.getSceneCode());
+                batch.setSceneName(scene.getSceneName());
+            }
+            CostPublishVersion version = versionMap.get(batch.getVersionId());
+            if (version != null)
+            {
+                batch.setVersionNo(version.getVersionNo());
+            }
+        }
+    }
+
     private void enrichResults(List<CostResultLedger> results)
     {
         if (results == null || results.isEmpty())
@@ -1493,6 +2010,10 @@ public class CostRunServiceImpl implements ICostRunService
 
     private List<Map<String, Object>> parseTaskInput(CostCalcTaskSubmitBo bo)
     {
+        if (INPUT_SOURCE_BATCH.equals(resolveInputSourceType(bo)))
+        {
+            return loadInputBatchItems(bo);
+        }
         if (TASK_TYPE_FORMAL_SINGLE.equals(bo.getTaskType()))
         {
             return Collections.singletonList(parseObjectJson(bo.getInputJson(), "单笔正式核算输入必须是 JSON 对象"));
@@ -1508,6 +2029,70 @@ public class CostRunServiceImpl implements ICostRunService
             return inputs;
         }
         throw new ServiceException("暂不支持的任务类型：" + bo.getTaskType());
+    }
+
+    private String resolveInputSourceType(CostCalcTaskSubmitBo bo)
+    {
+        if (StringUtils.isNotEmpty(bo.getInputSourceType()))
+        {
+            return bo.getInputSourceType().trim().toUpperCase(Locale.ROOT);
+        }
+        return StringUtils.isNotEmpty(bo.getSourceBatchNo()) ? INPUT_SOURCE_BATCH : INPUT_SOURCE_INLINE_JSON;
+    }
+
+    private List<Map<String, Object>> loadInputBatchItems(CostCalcTaskSubmitBo bo)
+    {
+        if (StringUtils.isEmpty(bo.getSourceBatchNo()))
+        {
+            throw new ServiceException("批次导入任务缺少来源批次号");
+        }
+        CostCalcInputBatch batch = calcInputBatchMapper.selectOne(Wrappers.<CostCalcInputBatch>lambdaQuery()
+                .eq(CostCalcInputBatch::getBatchNo, bo.getSourceBatchNo())
+                .last("limit 1"));
+        if (batch == null)
+        {
+            throw new ServiceException("来源输入批次不存在，请刷新后重试");
+        }
+        if (!Objects.equals(batch.getSceneId(), bo.getSceneId()))
+        {
+            throw new ServiceException("来源输入批次与当前场景不匹配");
+        }
+        if (StringUtils.isNotEmpty(bo.getBillMonth()) && !Objects.equals(batch.getBillMonth(), bo.getBillMonth()))
+        {
+            throw new ServiceException("来源输入批次与当前账期不匹配");
+        }
+        List<CostCalcInputBatchItem> items = calcInputBatchItemMapper.selectList(Wrappers.<CostCalcInputBatchItem>lambdaQuery()
+                .eq(CostCalcInputBatchItem::getBatchId, batch.getBatchId())
+                .orderByAsc(CostCalcInputBatchItem::getItemNo)
+                .orderByAsc(CostCalcInputBatchItem::getItemId));
+        if (items.isEmpty())
+        {
+            throw new ServiceException("来源输入批次没有可用明细");
+        }
+        List<Map<String, Object>> inputs = new ArrayList<>();
+        for (CostCalcInputBatchItem item : items)
+        {
+            inputs.add(parseObjectJson(item.getInputJson(), "输入批次明细必须是 JSON 对象"));
+        }
+        validateDuplicateBizNo(inputs);
+        return inputs;
+    }
+
+    private void markInputBatchSubmitted(String sourceBatchNo, String operator)
+    {
+        if (StringUtils.isEmpty(sourceBatchNo))
+        {
+            return;
+        }
+        calcInputBatchMapper.update(null, Wrappers.<CostCalcInputBatch>lambdaUpdate()
+                .eq(CostCalcInputBatch::getBatchNo, sourceBatchNo)
+                .set(CostCalcInputBatch::getBatchStatus, INPUT_BATCH_STATUS_SUBMITTED)
+                .set(CostCalcInputBatch::getUpdateBy, operator)
+                .set(CostCalcInputBatch::getUpdateTime, DateUtils.getNowDate()));
+        calcInputBatchItemMapper.update(null, Wrappers.<CostCalcInputBatchItem>lambdaUpdate()
+                .eq(CostCalcInputBatchItem::getBatchNo, sourceBatchNo)
+                .set(CostCalcInputBatchItem::getItemStatus, INPUT_BATCH_STATUS_CONSUMED)
+                .set(CostCalcInputBatchItem::getUpdateTime, DateUtils.getNowDate()));
     }
 
     private void validateDuplicateBizNo(List<Map<String, Object>> inputs)
@@ -1539,6 +2124,321 @@ public class CostRunServiceImpl implements ICostRunService
         }
         BigDecimal total = ledgers.stream().map(CostResultLedger::getAmountValue).reduce(BigDecimal.ZERO, BigDecimal::add);
         return String.format(Locale.ROOT, "已生成 %d 条费用结果，金额合计 %s", ledgers.size(), total.setScale(2, RoundingMode.HALF_UP));
+    }
+
+    private List<CostCalcTaskDetail> buildTaskDetails(CostCalcTask task, List<Map<String, Object>> inputs)
+    {
+        List<CostCalcTaskDetail> details = new ArrayList<>();
+        int partitionSize = resolveTaskPartitionSize(inputs.size());
+        for (int i = 0; i < inputs.size(); i++)
+        {
+            Map<String, Object> input = inputs.get(i);
+            CostCalcTaskDetail detail = new CostCalcTaskDetail();
+            detail.setTaskId(task.getTaskId());
+            detail.setTaskNo(task.getTaskNo());
+            detail.setBizNo(resolveBizNo(input, i + 1));
+            detail.setPartitionNo(i / partitionSize + 1);
+            detail.setDetailStatus(DETAIL_STATUS_INIT);
+            detail.setRetryCount(0);
+            detail.setInputJson(writeJson(input));
+            detail.setResultSummary("");
+            detail.setErrorMessage("");
+            details.add(detail);
+        }
+        return details;
+    }
+
+    /**
+     * 根据任务明细生成分片台账，为分片级监控、重试与失败定位提供基础。
+     */
+    private List<CostCalcTaskPartition> buildTaskPartitions(CostCalcTask task, List<CostCalcTaskDetail> details)
+    {
+        List<CostCalcTaskPartition> partitions = new ArrayList<>();
+        List<List<CostCalcTaskDetail>> grouped = splitTaskPartitions(details);
+        for (List<CostCalcTaskDetail> partitionDetails : grouped)
+        {
+            if (partitionDetails.isEmpty())
+            {
+                continue;
+            }
+            CostCalcTaskPartition partition = new CostCalcTaskPartition();
+            partition.setTaskId(task.getTaskId());
+            partition.setTaskNo(task.getTaskNo());
+            partition.setPartitionNo(partitionDetails.get(0).getPartitionNo());
+            partition.setStartItemNo(resolvePartitionStartItemNo(partition.getPartitionNo()));
+            partition.setEndItemNo(resolvePartitionEndItemNo(partition.getPartitionNo(), partitionDetails.size()));
+            partition.setPartitionStatus(DETAIL_STATUS_INIT);
+            partition.setTotalCount(partitionDetails.size());
+            partition.setProcessedCount(0);
+            partition.setSuccessCount(0);
+            partition.setFailCount(0);
+            partition.setLastError("");
+            partitions.add(partition);
+        }
+        return partitions;
+    }
+
+    private List<List<CostCalcTaskDetail>> splitTaskPartitions(List<CostCalcTaskDetail> details)
+    {
+        return new ArrayList<>(details.stream().collect(Collectors.groupingBy(
+                CostCalcTaskDetail::getPartitionNo,
+                LinkedHashMap::new,
+                Collectors.toList())).values());
+    }
+
+    private int resolveTaskParallelism(int partitionCount)
+    {
+        int poolSize = threadPoolTaskExecutor.getCorePoolSize() > 0
+                ? threadPoolTaskExecutor.getCorePoolSize() : DEFAULT_TASK_PARALLELISM;
+        return Math.max(1, Math.min(Math.min(poolSize, DEFAULT_TASK_PARALLELISM), partitionCount));
+    }
+
+    private int resolveTaskPartitionSize(int inputSize)
+    {
+        return inputSize <= 0 ? DEFAULT_TASK_PARTITION_SIZE : DEFAULT_TASK_PARTITION_SIZE;
+    }
+
+    private int resolvePartitionStartItemNo(Integer partitionNo)
+    {
+        int safePartitionNo = partitionNo == null || partitionNo <= 0 ? 1 : partitionNo;
+        return (safePartitionNo - 1) * DEFAULT_TASK_PARTITION_SIZE + 1;
+    }
+
+    private int resolvePartitionEndItemNo(Integer partitionNo, int partitionItemCount)
+    {
+        return resolvePartitionStartItemNo(partitionNo) + Math.max(partitionItemCount, 1) - 1;
+    }
+
+    private boolean isTaskCancelled(Long taskId)
+    {
+        CostCalcTask task = calcTaskMapper.selectById(taskId);
+        return task == null || TASK_STATUS_CANCELLED.equals(task.getTaskStatus());
+    }
+
+    /**
+     * 分片进入执行前先落运行态，便于任务中心观察分片实时进度。
+     */
+    private void markPartitionRunning(Long taskId, List<CostCalcTaskDetail> partitionDetails)
+    {
+        if (partitionDetails == null || partitionDetails.isEmpty())
+        {
+            return;
+        }
+        Integer partitionNo = partitionDetails.get(0).getPartitionNo();
+        Date now = DateUtils.getNowDate();
+        calcTaskPartitionMapper.update(null, Wrappers.<CostCalcTaskPartition>lambdaUpdate()
+                .eq(CostCalcTaskPartition::getTaskId, taskId)
+                .eq(CostCalcTaskPartition::getPartitionNo, partitionNo)
+                .set(CostCalcTaskPartition::getPartitionStatus, TASK_STATUS_RUNNING)
+                .set(CostCalcTaskPartition::getStartedTime, now)
+                .set(CostCalcTaskPartition::getLastError, "")
+                .set(CostCalcTaskPartition::getUpdateTime, now));
+    }
+
+    /**
+     * 分片完成后回写统计与错误摘要，支撑后续分片级重试和监控。
+     */
+    private void finishPartition(Long taskId, List<CostCalcTaskDetail> partitionDetails,
+            PartitionExecutionResult result, Throwable throwable)
+    {
+        if (partitionDetails == null || partitionDetails.isEmpty())
+        {
+            return;
+        }
+        Integer partitionNo = partitionDetails.get(0).getPartitionNo();
+        String status = result.failedCount <= 0 ? TASK_STATUS_SUCCESS : (result.successCount > 0 ? TASK_STATUS_PART_SUCCESS : TASK_STATUS_FAILED);
+        Date finishedTime = DateUtils.getNowDate();
+        CostCalcTaskPartition partition = calcTaskPartitionMapper.selectOne(Wrappers.<CostCalcTaskPartition>lambdaQuery()
+                .eq(CostCalcTaskPartition::getTaskId, taskId)
+                .eq(CostCalcTaskPartition::getPartitionNo, partitionNo)
+                .last("limit 1"));
+        Long durationMs = partition == null || partition.getStartedTime() == null ? 0L
+                : Math.max(0L, finishedTime.getTime() - partition.getStartedTime().getTime());
+        calcTaskPartitionMapper.update(null, Wrappers.<CostCalcTaskPartition>lambdaUpdate()
+                .eq(CostCalcTaskPartition::getTaskId, taskId)
+                .eq(CostCalcTaskPartition::getPartitionNo, partitionNo)
+                .set(CostCalcTaskPartition::getPartitionStatus, status)
+                .set(CostCalcTaskPartition::getProcessedCount, result.processedCount)
+                .set(CostCalcTaskPartition::getSuccessCount, result.successCount)
+                .set(CostCalcTaskPartition::getFailCount, result.failedCount)
+                .set(CostCalcTaskPartition::getFinishedTime, finishedTime)
+                .set(CostCalcTaskPartition::getDurationMs, durationMs)
+                .set(CostCalcTaskPartition::getLastError, throwable == null ? "" : limitLength(throwable.getMessage(), 1000))
+                .set(CostCalcTaskPartition::getUpdateTime, finishedTime));
+    }
+
+    protected PartitionExecutionResult executeTaskPartition(Long taskId, RuntimeSnapshot snapshot, List<CostCalcTaskDetail> details)
+    {
+        CostCalcTask task = calcTaskMapper.selectById(taskId);
+        if (task == null || TASK_STATUS_CANCELLED.equals(task.getTaskStatus()) || details.isEmpty())
+        {
+            return new PartitionExecutionResult();
+        }
+
+        PartitionExecutionBundle bundle = new PartitionExecutionBundle();
+        for (CostCalcTaskDetail detail : details)
+        {
+            if (isTaskCancelled(taskId))
+            {
+                break;
+            }
+            prepareTaskDetailExecution(task, detail, snapshot, bundle);
+        }
+        if (!bundle.detailUpdates.isEmpty())
+        {
+            transactionTemplate.executeWithoutResult(status -> persistPartitionBundle(taskId, bundle));
+        }
+        for (TaskDetailFailure failure : bundle.failures)
+        {
+            createTaskAlarm(task, failure.detail, "TASK_DETAIL_FAILED", "WARN",
+                    "任务明细执行失败", "业务单号 " + failure.detail.getBizNo() + " 执行失败：" + limitLength(failure.errorMessage, 300));
+        }
+        return bundle.toResult();
+    }
+
+    private void prepareTaskDetailExecution(CostCalcTask task, CostCalcTaskDetail detail, RuntimeSnapshot snapshot, PartitionExecutionBundle bundle)
+    {
+        try
+        {
+            Map<String, Object> input = parseObjectJson(detail.getInputJson(), "任务明细输入必须是 JSON 对象");
+            ExecutionResult executionResult = executeSingle(snapshot, task.getTaskNo(), task.getBillMonth(), input);
+            List<CostResultLedger> detailLedgers = new ArrayList<>();
+            for (FeeExecutionResult feeResult : executionResult.feeResults)
+            {
+                CostResultTrace trace = buildTraceRecord(snapshot, feeResult);
+                CostResultLedger ledger = buildLedgerRecord(task, detail, snapshot, input, feeResult, trace.getTraceId());
+                bundle.traceInserts.add(trace);
+                bundle.ledgerInserts.add(ledger);
+                detailLedgers.add(ledger);
+            }
+            bundle.detailUpdates.add(buildTaskDetailUpdate(detail, DETAIL_STATUS_SUCCESS, buildDetailSummary(detailLedgers), ""));
+            bundle.processedCount++;
+            bundle.successCount++;
+        }
+        catch (Exception e)
+        {
+            String errorMessage = limitLength(e.getMessage(), 1000);
+            bundle.detailUpdates.add(buildTaskDetailUpdate(detail, DETAIL_STATUS_FAILED, "执行失败", errorMessage));
+            bundle.failures.add(new TaskDetailFailure(detail, errorMessage));
+            bundle.processedCount++;
+            bundle.failedCount++;
+        }
+    }
+
+    private void persistPartitionBundle(Long taskId, PartitionExecutionBundle bundle)
+    {
+        purgeExistingTaskResults(taskId, bundle.bizNos());
+        if (!bundle.traceInserts.isEmpty())
+        {
+            resultTraceMapper.insertBatch(bundle.traceInserts);
+        }
+        if (!bundle.ledgerInserts.isEmpty())
+        {
+            resultLedgerMapper.insertBatch(bundle.ledgerInserts);
+        }
+        calcTaskDetailMapper.updateBatchResult(bundle.detailUpdates);
+    }
+
+    private void purgeExistingTaskResults(Long taskId, Collection<String> bizNos)
+    {
+        if (bizNos == null || bizNos.isEmpty())
+        {
+            return;
+        }
+        List<CostResultLedger> existing = resultLedgerMapper.selectList(Wrappers.<CostResultLedger>lambdaQuery()
+                .eq(CostResultLedger::getTaskId, taskId)
+                .in(CostResultLedger::getBizNo, bizNos));
+        if (existing.isEmpty())
+        {
+            return;
+        }
+        List<Long> traceIds = existing.stream().map(CostResultLedger::getTraceId).filter(Objects::nonNull).collect(Collectors.toList());
+        resultLedgerMapper.deleteBatchIds(existing.stream().map(CostResultLedger::getResultId).collect(Collectors.toList()));
+        if (!traceIds.isEmpty())
+        {
+            resultTraceMapper.deleteBatchIds(traceIds);
+        }
+    }
+
+    private CostResultTrace buildTraceRecord(RuntimeSnapshot snapshot, FeeExecutionResult feeResult)
+    {
+        CostResultTrace trace = new CostResultTrace();
+        trace.setTraceId(nextSnowflakeId());
+        trace.setSceneId(snapshot.sceneId);
+        trace.setVersionId(snapshot.versionId);
+        trace.setRuleId(feeResult.ruleId);
+        trace.setTierId(feeResult.tierId);
+        trace.setVariableJson(writeJson(feeResult.variableExplain));
+        trace.setConditionJson(writeJson(feeResult.conditionExplain));
+        trace.setPricingJson(writeJson(feeResult.pricingExplain));
+        trace.setTimelineJson(writeJson(feeResult.timelineSteps));
+        return trace;
+    }
+
+    private CostResultLedger buildLedgerRecord(CostCalcTask task, CostCalcTaskDetail detail, RuntimeSnapshot snapshot,
+            Map<String, Object> input, FeeExecutionResult feeResult, Long traceId)
+    {
+        CostResultLedger ledger = new CostResultLedger();
+        ledger.setResultId(nextSnowflakeId());
+        ledger.setTaskId(task.getTaskId());
+        ledger.setTaskNo(task.getTaskNo());
+        ledger.setSceneId(snapshot.sceneId);
+        ledger.setVersionId(snapshot.versionId);
+        ledger.setFeeId(feeResult.feeId);
+        ledger.setFeeCode(feeResult.feeCode);
+        ledger.setFeeName(feeResult.feeName);
+        ledger.setBizNo(detail.getBizNo());
+        ledger.setBillMonth(task.getBillMonth());
+        ledger.setObjectDimension(firstNonBlank(feeResult.objectDimension, resolveString(input, "objectDimension", "object_dimension")));
+        ledger.setObjectCode(firstNonBlank(resolveString(input, "objectCode", "object_code"), detail.getBizNo()));
+        ledger.setObjectName(resolveString(input, "objectName", "object_name", "name"));
+        ledger.setQuantityValue(feeResult.quantityValue);
+        ledger.setUnitPrice(feeResult.unitPrice);
+        ledger.setAmountValue(feeResult.amountValue);
+        ledger.setCurrencyCode("CNY");
+        ledger.setResultStatus(RESULT_STATUS_SUCCESS);
+        ledger.setTraceId(traceId);
+        return ledger;
+    }
+
+    private CostCalcTaskDetail buildTaskDetailUpdate(CostCalcTaskDetail detail, String status, String resultSummary, String errorMessage)
+    {
+        CostCalcTaskDetail update = new CostCalcTaskDetail();
+        update.setDetailId(detail.getDetailId());
+        update.setBizNo(detail.getBizNo());
+        update.setDetailStatus(status);
+        update.setRetryCount(detail.getRetryCount());
+        update.setResultSummary(resultSummary);
+        update.setErrorMessage(errorMessage);
+        return update;
+    }
+
+    private long nextSnowflakeId()
+    {
+        return IdWorker.getId();
+    }
+
+    private PartitionExecutionResult markPartitionFailed(Long taskId, List<CostCalcTaskDetail> partition, Throwable throwable)
+    {
+        CostCalcTask task = calcTaskMapper.selectById(taskId);
+        if (task == null || partition == null || partition.isEmpty())
+        {
+            return new PartitionExecutionResult();
+        }
+        String errorMessage = limitLength(throwable == null ? "分片执行失败" : throwable.getMessage(), 1000);
+        List<CostCalcTaskDetail> updates = partition.stream()
+                .map(detail -> buildTaskDetailUpdate(detail, DETAIL_STATUS_FAILED, "分片执行失败", errorMessage))
+                .collect(Collectors.toList());
+        transactionTemplate.executeWithoutResult(status -> calcTaskDetailMapper.updateBatchResult(updates));
+        for (CostCalcTaskDetail detail : partition)
+        {
+            createTaskAlarm(task, detail, "TASK_PARTITION_FAILED", "ERROR",
+                    "任务分片执行失败", "分片 " + detail.getPartitionNo() + " 执行失败：" + limitLength(errorMessage, 300));
+        }
+        PartitionExecutionResult result = new PartitionExecutionResult();
+        result.processedCount = partition.size();
+        result.failedCount = partition.size();
+        return result;
     }
 
     private Map<String, Object> parseObjectJson(String json, String errorMessage)
@@ -2237,6 +3137,53 @@ public class CostRunServiceImpl implements ICostRunService
             item.put("pricing", pricingExplain);
             item.put("timeline", timelineSteps);
             return item;
+        }
+    }
+
+    private static class TaskDetailFailure
+    {
+        private final CostCalcTaskDetail detail;
+        private final String errorMessage;
+
+        private TaskDetailFailure(CostCalcTaskDetail detail, String errorMessage)
+        {
+            this.detail = detail;
+            this.errorMessage = errorMessage;
+        }
+    }
+
+    private static class PartitionExecutionResult
+    {
+        private int processedCount;
+        private int successCount;
+        private int failedCount;
+    }
+
+    private static class PartitionExecutionBundle
+    {
+        private final List<CostResultTrace> traceInserts = new ArrayList<>();
+        private final List<CostResultLedger> ledgerInserts = new ArrayList<>();
+        private final List<CostCalcTaskDetail> detailUpdates = new ArrayList<>();
+        private final List<TaskDetailFailure> failures = new ArrayList<>();
+        private int processedCount;
+        private int successCount;
+        private int failedCount;
+
+        private Collection<String> bizNos()
+        {
+            return detailUpdates.stream()
+                    .map(CostCalcTaskDetail::getBizNo)
+                    .filter(StringUtils::isNotEmpty)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+        }
+
+        private PartitionExecutionResult toResult()
+        {
+            PartitionExecutionResult result = new PartitionExecutionResult();
+            result.processedCount = processedCount;
+            result.successCount = successCount;
+            result.failedCount = failedCount;
+            return result;
         }
     }
 

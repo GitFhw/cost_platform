@@ -99,6 +99,7 @@
 <script setup name="CostAudit">
 import { listAudit, getAuditStats } from '@/api/cost/governance'
 import { optionselectScene } from '@/api/cost/scene'
+import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 
 const { proxy } = getCurrentInstance()
 
@@ -131,6 +132,7 @@ const metricItems = computed(() => [
 async function loadScenes() {
   const resp = await optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
   sceneOptions.value = resp?.data || []
+  queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
 }
 
 async function getList() {
@@ -178,6 +180,10 @@ function formatJson(text) {
 }
 
 onMounted(() => {
+  getList()
+})
+
+onActivated(() => {
   getList()
 })
 </script>

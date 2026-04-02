@@ -30,8 +30,13 @@ public class CostCalcTaskSubmitBo
     /** 幂等请求号 */
     private String requestNo;
 
-    /** 输入数据 JSON，单笔时为对象，批量时为数组 */
-    @NotBlank(message = "任务输入数据不能为空")
+    /** 输入来源类型，默认保留原有 INLINE_JSON 提交方式 */
+    private String inputSourceType;
+
+    /** 来源导入批次号 */
+    private String sourceBatchNo;
+
+    /** 输入数据 JSON，单笔时为对象，批量时为数组；保留原有直传方式 */
     private String inputJson;
 
     /** 备注 */

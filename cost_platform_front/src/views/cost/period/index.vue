@@ -250,6 +250,7 @@ import {
   sealPeriod
 } from '@/api/cost/governance'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
+import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 
 const { proxy } = getCurrentInstance()
 
@@ -310,6 +311,12 @@ async function loadBaseOptions() {
   periodStatusOptions.value = dictMap.cost_bill_period_status || []
   recalcStatusOptions.value = dictMap.cost_recalc_status || []
   sceneOptions.value = sceneResp?.data || []
+  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.sceneId = workingSceneId
+  if (workingSceneId) {
+    periodForm.sceneId = workingSceneId
+    recalcForm.sceneId = workingSceneId
+  }
 }
 
 async function loadVersions(sceneId, target) {
@@ -370,16 +377,20 @@ function resetQuery() {
 }
 
 async function handlePeriodSceneChange(sceneId) {
+  const targetSceneId = resolveWorkingCostSceneId(sceneOptions.value) ?? sceneId
+  periodForm.sceneId = targetSceneId
   periodForm.activeVersionId = undefined
-  await loadVersions(sceneId, versionOptions)
+  await loadVersions(targetSceneId, versionOptions)
 }
 
 async function handleRecalcSceneChange(sceneId) {
+  const targetSceneId = resolveWorkingCostSceneId(sceneOptions.value) ?? sceneId
+  recalcForm.sceneId = targetSceneId
   recalcForm.versionId = undefined
   recalcForm.baselineTaskId = undefined
   await Promise.all([
-    loadVersions(sceneId, recalcVersionOptions),
-    loadBaselineTasks(sceneId, recalcForm.billMonth)
+    loadVersions(targetSceneId, recalcVersionOptions),
+    loadBaselineTasks(targetSceneId, recalcForm.billMonth)
   ])
 }
 
@@ -473,6 +484,11 @@ function currentBillMonth() {
 }
 
 onMounted(() => {
+  fillCurrentMonth()
+  getList()
+})
+
+onActivated(() => {
   fillCurrentMonth()
   getList()
 })

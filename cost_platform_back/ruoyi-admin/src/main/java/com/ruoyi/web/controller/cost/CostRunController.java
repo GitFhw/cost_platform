@@ -5,9 +5,11 @@ import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
+import com.ruoyi.system.domain.cost.CostCalcInputBatch;
 import com.ruoyi.system.domain.cost.CostCalcTask;
 import com.ruoyi.system.domain.cost.CostResultLedger;
 import com.ruoyi.system.domain.cost.CostSimulationRecord;
+import com.ruoyi.system.domain.cost.bo.CostCalcInputBatchCreateBo;
 import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
 import com.ruoyi.system.domain.cost.bo.CostSimulationExecuteBo;
 import com.ruoyi.system.service.cost.ICostRunService;
@@ -74,6 +76,17 @@ public class CostRunController extends BaseController
     }
 
     /**
+     * 执行批量试算
+     */
+    @PreAuthorize("@ss.hasPermi('cost:simulation:execute')")
+    @Log(title = "试算中心", businessType = BusinessType.INSERT)
+    @PostMapping("/simulation/batch-execute")
+    public AjaxResult simulationBatchExecute(@Validated @RequestBody CostSimulationExecuteBo bo)
+    {
+        return success(runService.executeSimulationBatch(bo));
+    }
+
+    /**
      * 查询试算详情
      */
     @PreAuthorize("@ss.hasPermi('cost:simulation:query')")
@@ -91,6 +104,16 @@ public class CostRunController extends BaseController
     public AjaxResult taskStats(CostCalcTask query)
     {
         return success(runService.selectTaskStats(query));
+    }
+
+    /**
+     * 查询正式核算任务总览
+     */
+    @PreAuthorize("@ss.hasPermi('cost:task:list')")
+    @GetMapping("/task/overview")
+    public AjaxResult taskOverview(CostCalcTask query)
+    {
+        return success(runService.selectTaskOverview(query));
     }
 
     /**
@@ -117,6 +140,39 @@ public class CostRunController extends BaseController
     }
 
     /**
+     * 创建正式核算导入批次
+     */
+    @PreAuthorize("@ss.hasPermi('cost:task:execute')")
+    @Log(title = "正式核算", businessType = BusinessType.INSERT)
+    @PostMapping("/task/input-batch")
+    public AjaxResult createInputBatch(@Validated @RequestBody CostCalcInputBatchCreateBo bo)
+    {
+        return success(runService.createInputBatch(bo));
+    }
+
+    /**
+     * 查询导入批次列表
+     */
+    @PreAuthorize("@ss.hasPermi('cost:task:list')")
+    @GetMapping("/task/input-batch/list")
+    public TableDataInfo inputBatchList(CostCalcInputBatch query)
+    {
+        startPage();
+        List<CostCalcInputBatch> list = runService.selectInputBatchList(query);
+        return getDataTable(list);
+    }
+
+    /**
+     * 查询导入批次详情
+     */
+    @PreAuthorize("@ss.hasPermi('cost:task:query')")
+    @GetMapping("/task/input-batch/{batchId}")
+    public AjaxResult inputBatchDetail(@PathVariable Long batchId)
+    {
+        return success(runService.selectInputBatchDetail(batchId));
+    }
+
+    /**
      * 查询任务详情
      */
     @PreAuthorize("@ss.hasPermi('cost:task:query')")
@@ -135,6 +191,17 @@ public class CostRunController extends BaseController
     public AjaxResult retryTaskDetail(@PathVariable Long detailId)
     {
         return toAjax(runService.retryTaskDetail(detailId));
+    }
+
+    /**
+     * 重试失败分片
+     */
+    @PreAuthorize("@ss.hasPermi('cost:task:retry')")
+    @Log(title = "正式核算", businessType = BusinessType.UPDATE)
+    @PutMapping("/task/partition/retry/{partitionId}")
+    public AjaxResult retryTaskPartition(@PathVariable Long partitionId)
+    {
+        return toAjax(runService.retryTaskPartition(partitionId));
     }
 
     /**
