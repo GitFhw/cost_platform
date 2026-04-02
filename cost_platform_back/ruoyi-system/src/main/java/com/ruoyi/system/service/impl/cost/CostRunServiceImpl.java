@@ -762,10 +762,13 @@ public class CostRunServiceImpl implements ICostRunService
                 continue;
             }
             PricingResult pricingResult = calculateAmount(matchResult.rule, matchResult.tier, variableValues, baseContext, feeResultContext, snapshot);
+            pricingResult.pricingExplain.put("unitCode", fee.unitCode);
+            pricingResult.pricingExplain.put("unitSemantic", buildUnitSemanticSummary(fee.unitCode));
             FeeExecutionResult feeResult = new FeeExecutionResult();
             feeResult.feeId = fee.feeId;
             feeResult.feeCode = fee.feeCode;
             feeResult.feeName = fee.feeName;
+            feeResult.unitCode = fee.unitCode;
             feeResult.objectDimension = fee.objectDimension;
             feeResult.ruleId = matchResult.rule.ruleId;
             feeResult.ruleCode = matchResult.rule.ruleCode;
@@ -1037,8 +1040,71 @@ public class CostRunServiceImpl implements ICostRunService
             steps.add(buildStep("TIER", String.valueOf(matchResult.tier.tierNo), matchResult.tier.buildRangeSummary(), "命中阶梯区间"));
         }
         steps.add(buildStep("PRICING", fee.feeCode, fee.feeName,
-                String.format(Locale.ROOT, "数量 %s，单价 %s，金额 %s", pricingResult.quantityValue, pricingResult.unitPrice, pricingResult.amountValue)));
+                buildPricingStepSummary(fee.unitCode, pricingResult)));
         return steps;
+    }
+
+    /**
+     * 构建带计价单位语义的定价摘要，便于结果追溯和业务复核。
+     */
+    private String buildPricingStepSummary(String unitCode, PricingResult pricingResult)
+    {
+        String pricingSource = pricingResult.pricingExplain == null ? "" : stringValue(pricingResult.pricingExplain.get("pricingSource"));
+        if (RULE_TYPE_FIXED_AMOUNT.equals(pricingSource) || "FIXED_AMOUNT".equals(pricingSource) || "元".equals(unitCode))
+        {
+            return String.format(Locale.ROOT, "计价单位 %s，按固定金额计价，结果 %s 元", firstNonBlank(unitCode, "元"), pricingResult.amountValue);
+        }
+        if (pricingResult.quantityValue == null)
+        {
+            return String.format(Locale.ROOT, "计价单位 %s，单价 %s，金额 %s", firstNonBlank(unitCode, "-"), pricingResult.unitPrice, pricingResult.amountValue);
+        }
+        String normalizedUnit = firstNonBlank(unitCode, "-");
+        return String.format(Locale.ROOT, "数量 %s %s，单价 %s 元/%s，金额 %s 元",
+                pricingResult.quantityValue,
+                normalizedUnit,
+                pricingResult.unitPrice,
+                normalizedUnit,
+                pricingResult.amountValue);
+    }
+
+    /**
+     * 统一输出计价单位业务口径，供追溯解释和结果页直接展示。
+     */
+    private String buildUnitSemanticSummary(String unitCode)
+    {
+        if ("吨".equals(unitCode))
+        {
+            return "按重量吨数计价";
+        }
+        if ("天".equals(unitCode))
+        {
+            return "按天数计价";
+        }
+        if ("次".equals(unitCode))
+        {
+            return "按次数计价";
+        }
+        if ("航次".equals(unitCode))
+        {
+            return "按航次计价";
+        }
+        if ("人".equals(unitCode))
+        {
+            return "按人数计价";
+        }
+        if ("箱".equals(unitCode))
+        {
+            return "按箱量计价";
+        }
+        if ("元".equals(unitCode))
+        {
+            return "按固定金额计价";
+        }
+        if ("平方米*天".equals(unitCode) || "平方米·天".equals(unitCode))
+        {
+            return "按面积天复合量计价";
+        }
+        return "按当前计价单位口径计价";
     }
 
     private Map<String, Object> buildTraceView(CostResultTrace trace)
@@ -1132,6 +1198,7 @@ public class CostRunServiceImpl implements ICostRunService
                 fee.feeId = findFeeIdByCode(sceneId, stringValue(json.get("feeCode")));
                 fee.feeCode = stringValue(json.get("feeCode"));
                 fee.feeName = stringValue(json.get("feeName"));
+                fee.unitCode = stringValue(json.get("unitCode"));
                 fee.objectDimension = stringValue(json.get("objectDimension"));
                 fee.sortNo = intValue(json.get("sortNo"));
                 snapshot.fees.add(fee);
@@ -1401,6 +1468,8 @@ public class CostRunServiceImpl implements ICostRunService
                 .stream().collect(Collectors.toMap(CostScene::getSceneId, item -> item));
         Map<Long, CostPublishVersion> versionMap = publishVersionMapper.selectBatchIds(results.stream().map(CostResultLedger::getVersionId).filter(Objects::nonNull).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
+        Map<Long, CostFeeItem> feeMap = feeMapper.selectBatchIds(results.stream().map(CostResultLedger::getFeeId).filter(Objects::nonNull).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(CostFeeItem::getFeeId, item -> item));
         for (CostResultLedger result : results)
         {
             CostScene scene = sceneMap.get(result.getSceneId());
@@ -1413,6 +1482,11 @@ public class CostRunServiceImpl implements ICostRunService
             if (version != null)
             {
                 result.setVersionNo(version.getVersionNo());
+            }
+            CostFeeItem fee = feeMap.get(result.getFeeId());
+            if (fee != null)
+            {
+                result.setUnitCode(fee.getUnitCode());
             }
         }
     }
@@ -2027,6 +2101,7 @@ public class CostRunServiceImpl implements ICostRunService
         public Long feeId;
         public String feeCode;
         public String feeName;
+        public String unitCode;
         public String objectDimension;
         public Integer sortNo;
     }
@@ -2121,6 +2196,7 @@ public class CostRunServiceImpl implements ICostRunService
         private Long feeId;
         private String feeCode;
         private String feeName;
+        private String unitCode;
         private String objectDimension;
         private Long ruleId;
         private String ruleCode;
@@ -2140,6 +2216,7 @@ public class CostRunServiceImpl implements ICostRunService
             item.put("feeId", feeId);
             item.put("feeCode", feeCode);
             item.put("feeName", feeName);
+            item.put("unitCode", unitCode);
             item.put("ruleCode", ruleCode);
             item.put("ruleName", ruleName);
             item.put("quantityValue", quantityValue);
@@ -2153,6 +2230,7 @@ public class CostRunServiceImpl implements ICostRunService
             LinkedHashMap<String, Object> item = new LinkedHashMap<>();
             item.put("feeCode", feeCode);
             item.put("feeName", feeName);
+            item.put("unitCode", unitCode);
             item.put("ruleCode", ruleCode);
             item.put("ruleName", ruleName);
             item.put("conditions", conditionExplain);
