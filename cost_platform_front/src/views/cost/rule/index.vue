@@ -226,19 +226,19 @@
           <template v-if="form.ruleType === 'FORMULA'">
             <el-col :span="24">
               <el-form-item label="金额公式" prop="amountFormula">
-                <el-input v-model="form.amountFormula" type="textarea" :rows="4" placeholder="示例：if(V.weightTon > 100, V.weightTon * 5, V.weightTon * 6)" />
+                <el-input v-model="form.amountFormula" type="textarea" :rows="4" readonly placeholder="选择金额公式编码后自动回填，仅用于查看历史表达式" />
               </el-form-item>
             </el-col>
             <el-col :span="24">
               <el-form-item label="公式编码" prop="amountFormulaCode">
-                <el-select v-model="form.amountFormulaCode" clearable filterable style="width: 100%" placeholder="优先引用公式实验室中的金额公式编码">
+                <el-select v-model="form.amountFormulaCode" clearable filterable style="width: 100%" placeholder="请选择公式实验室中的金额公式编码">
                   <el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaCode} / ${item.formulaName}`" :value="item.formulaCode" />
                 </el-select>
               </el-form-item>
             </el-col>
             <el-col :span="24">
               <el-form-item label="中文公式">
-                <div class="rule-center__formula-preview">{{ selectedAmountFormulaMeta.businessFormula || '未选择公式编码时，可继续填写标准表达式作为兼容兜底。' }}</div>
+                <div class="rule-center__formula-preview">{{ selectedAmountFormulaMeta.businessFormula || '请选择公式编码，系统会自动回填金额公式。' }}</div>
               </el-form-item>
             </el-col>
             <el-col :span="24">
@@ -608,6 +608,14 @@ const metricItems = computed(() => [
 ])
 const variableSourceOptions = computed(() => proxy.useDict('cost_variable_source_type').cost_variable_source_type || [])
 const variableDataTypeOptions = computed(() => proxy.useDict('cost_variable_data_type').cost_variable_data_type || [])
+
+watch(() => form.value.amountFormulaCode, value => {
+  if (form.value.ruleType !== 'FORMULA') {
+    return
+  }
+  const meta = formulaOptions.value.find(item => item.formulaCode === value)
+  form.value.amountFormula = meta?.formulaExpr || ''
+})
 
 function resetFormModel() {
   form.value = {

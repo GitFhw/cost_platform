@@ -741,25 +741,57 @@ public class CostVariableServiceImpl implements ICostVariableService
     {
         if (StringUtils.isNotEmpty(variable.getFormulaCode()))
         {
-            CostFormula formula = formulaMapper.selectOne(Wrappers.<CostFormula>lambdaQuery()
-                    .eq(CostFormula::getSceneId, variable.getSceneId())
-                    .eq(CostFormula::getFormulaCode, variable.getFormulaCode()));
-            if (formula == null)
-            {
-                throw new ServiceException("公式变量引用的公式编码不存在，请先到公式实验室维护");
-            }
-            if (!"0".equals(formula.getStatus()))
-            {
-                throw new ServiceException("公式变量引用的公式已停用，不能继续使用");
-            }
+            CostFormula formula = requireEnabledFormulaByCode(variable.getSceneId(), variable.getFormulaCode(), "公式变量");
             variable.setFormulaExpr(formula.getFormulaExpr());
             return;
         }
-        if (StringUtils.isEmpty(variable.getFormulaExpr()))
+        if (StringUtils.isNotEmpty(variable.getFormulaExpr()))
         {
-            throw new ServiceException("公式变量必须选择公式编码或填写公式表达式");
+            CostFormula matchedFormula = resolveFormulaByExpression(variable.getSceneId(), variable.getFormulaExpr());
+            if (matchedFormula != null)
+            {
+                variable.setFormulaCode(matchedFormula.getFormulaCode());
+                variable.setFormulaExpr(matchedFormula.getFormulaExpr());
+                return;
+            }
         }
-        expressionService.validateExpression(variable.getFormulaExpr());
+        throw new ServiceException("公式变量必须引用公式编码；如为历史表达式，请先在公式实验室沉淀后再选择编码");
+    }
+
+    /**
+     * 按公式编码查询可用公式。
+     */
+    private CostFormula requireEnabledFormulaByCode(Long sceneId, String formulaCode, String fieldLabel)
+    {
+        CostFormula formula = formulaMapper.selectOne(Wrappers.<CostFormula>lambdaQuery()
+                .eq(CostFormula::getSceneId, sceneId)
+                .eq(CostFormula::getFormulaCode, formulaCode));
+        if (formula == null)
+        {
+            throw new ServiceException(fieldLabel + "引用的公式编码不存在，请先到公式实验室维护");
+        }
+        if (!"0".equals(formula.getStatus()))
+        {
+            throw new ServiceException(fieldLabel + "引用的公式已停用，不能继续使用");
+        }
+        return formula;
+    }
+
+    /**
+     * 按表达式尝试回溯历史公式资产，帮助旧数据迁移到公式编码。
+     */
+    private CostFormula resolveFormulaByExpression(Long sceneId, String formulaExpr)
+    {
+        if (sceneId == null || StringUtils.isEmpty(formulaExpr))
+        {
+            return null;
+        }
+        List<CostFormula> formulas = formulaMapper.selectList(Wrappers.<CostFormula>lambdaQuery()
+                .eq(CostFormula::getSceneId, sceneId)
+                .eq(CostFormula::getFormulaExpr, StringUtils.trim(formulaExpr))
+                .eq(CostFormula::getStatus, "0")
+                .last("limit 2"));
+        return formulas.size() == 1 ? formulas.get(0) : null;
     }
 
     /**

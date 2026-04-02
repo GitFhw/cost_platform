@@ -147,15 +147,15 @@
         </template>
         <template v-if="form.sourceType === 'FORMULA'">
           <el-form-item label="公式编码" prop="formulaCode">
-            <el-select v-model="form.formulaCode" clearable filterable style="width: 100%" placeholder="优先引用公式实验室中的公式编码">
+            <el-select v-model="form.formulaCode" clearable filterable style="width: 100%" placeholder="请选择公式实验室中的公式编码">
               <el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaCode} / ${item.formulaName}`" :value="item.formulaCode" />
             </el-select>
           </el-form-item>
           <el-form-item label="中文公式">
-            <div class="variable-center__formula-preview">{{ selectedFormulaMeta.businessFormula || '未选择公式编码时，可继续填写下方标准表达式作为兼容兜底。' }}</div>
+            <div class="variable-center__formula-preview">{{ selectedFormulaMeta.businessFormula || '请选择公式编码，系统会自动回填中文公式与标准表达式。' }}</div>
           </el-form-item>
           <el-form-item label="标准表达式" prop="formulaExpr">
-            <el-input v-model="form.formulaExpr" type="textarea" :rows="3" placeholder="未选择公式编码时，可直接维护标准表达式" />
+            <el-input v-model="form.formulaExpr" type="textarea" :rows="3" readonly placeholder="选择公式编码后自动回填，仅用于查看历史表达式" />
           </el-form-item>
         </template>
         <el-form-item label="备注" prop="remark"><el-input v-model="form.remark" type="textarea" :rows="3" /></el-form-item>
@@ -539,6 +539,14 @@ async function loadFormulaOptions(sceneId) {
   const response = await optionselectFormula({ sceneId, status: '0', pageNum: 1, pageSize: 1000 })
   formulaOptions.value = response?.data || []
 }
+
+watch(() => form.value.formulaCode, value => {
+  if (form.value.sourceType !== 'FORMULA') {
+    return
+  }
+  const meta = formulaOptions.value.find(item => item.formulaCode === value)
+  form.value.formulaExpr = meta?.formulaExpr || ''
+})
 
 async function loadFormGroups() {
   form.value.groupId = undefined
