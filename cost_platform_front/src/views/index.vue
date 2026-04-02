@@ -5,12 +5,12 @@
         <div class="dashboard-hero__eyebrow">企业级成本核算平台</div>
         <h1 class="dashboard-hero__title">面向多行业、多场景、多费用的统一核算驾驶舱</h1>
         <p class="dashboard-hero__subtitle">
-          当前基线先收稳“产品底座 + 首页驾驶舱 + 详细设计文档”，后续严格按“业务域 -> 场景 -> 费用 -> 变量 -> 规则 -> 阶梯 -> 发布 -> 核算 -> 追溯”主线分阶段恢复完整能力。
+          统一承接多行业、多场景、多费用对象的规则配置、版本管理、批量核算与结果追溯，帮助企业在同一平台完成成本口径治理与运行管理。
         </p>
         <div class="dashboard-hero__tags">
-          <el-tag type="success">当前阶段：底座产品化</el-tag>
-          <el-tag type="info">首页已切换为核算驾驶舱</el-tag>
-          <el-tag type="warning">规则、发布、运行链按设计文档分步接入</el-tag>
+          <el-tag type="success">多场景统一配置</el-tag>
+          <el-tag type="info">版本化运行管理</el-tag>
+          <el-tag type="warning">结果追溯与治理联动</el-tag>
         </div>
       </div>
       <div class="dashboard-hero__aside">
@@ -34,8 +34,8 @@
       <el-card shadow="never" class="dashboard-panel dashboard-panel--wide">
         <template #header>
           <div class="dashboard-panel__header">
-            <span>平台主线</span>
-            <span class="dashboard-panel__tip">首页先统一心智模型，再逐步恢复业务模块</span>
+            <span>核算主线</span>
+            <span class="dashboard-panel__tip">围绕业务配置、版本治理与运行追踪组织平台能力</span>
           </div>
         </template>
         <div class="dashboard-shortcuts">
@@ -53,8 +53,8 @@
       <el-card shadow="never" class="dashboard-panel">
         <template #header>
           <div class="dashboard-panel__header">
-            <span>设计落点</span>
-            <span class="dashboard-panel__tip">这批内容已沉淀为项目基线文档</span>
+            <span>核心能力</span>
+            <span class="dashboard-panel__tip">统一呈现平台能力边界与关键治理要求</span>
           </div>
         </template>
         <div class="dashboard-list">
@@ -68,8 +68,8 @@
       <el-card shadow="never" class="dashboard-panel">
         <template #header>
           <div class="dashboard-panel__header">
-            <span>治理看板</span>
-            <span class="dashboard-panel__tip">只展示当前已确认的产品基线，不伪造业务数据</span>
+            <span>平台特性</span>
+            <span class="dashboard-panel__tip">突出当前平台定位与运行目标，不展示模拟经营数据</span>
           </div>
         </template>
         <div class="dashboard-governance">
@@ -83,8 +83,8 @@
       <el-card shadow="never" class="dashboard-panel dashboard-panel--wide">
         <template #header>
           <div class="dashboard-panel__header">
-            <span>实施路径</span>
-            <span class="dashboard-panel__tip">后续开发与验证统一以根目录文档为准</span>
+            <span>应用路径</span>
+            <span class="dashboard-panel__tip">从业务建模到运行追溯，形成完整使用闭环</span>
           </div>
         </template>
         <div class="dashboard-steps">
@@ -106,24 +106,24 @@ import { DataAnalysis, Tickets, Connection, Setting, Promotion, Histogram, Magic
 
 const metricItems = [
   {
-    label: '基线文档',
-    value: '10 份',
-    desc: '详细设计、ER、SQL、缓存规范、开发验证规范已齐备'
-  },
-  {
-    label: '平台主链',
+    label: '配置层级',
     value: '8 层',
-    desc: '业务域、场景、费用、变量、规则、阶梯、发布、核算'
+    desc: '覆盖业务域、场景、费用、变量、规则、发布、核算与追溯'
   },
   {
-    label: '性能目标',
+    label: '运行目标',
     value: '100万+/月',
-    desc: '按月百万级计费量设计数据与执行链路'
+    desc: '面向月度百万级计费处理规模设计批量运行能力'
   },
   {
-    label: '当前基线',
-    value: '已收口',
-    desc: '保留首页驾驶舱、品牌裁剪和开发所需规范文档'
+    label: '版本治理',
+    value: '全链路',
+    desc: '发布快照、生效切换、结果解释与审计记录统一关联'
+  },
+  {
+    label: '追溯能力',
+    value: '可解释',
+    desc: '支持按任务、费用、版本和命中规则回看核算过程'
   }
 ]
 
@@ -131,25 +131,25 @@ const shortcuts = [
   {
     title: '业务域与场景',
     desc: '统一组织跨行业、跨合同、跨公司的核算主题。',
-    meta: '先按业务域治理，再按场景组织完整核算链。',
+    meta: '通过业务域统一口径，再按场景组织完整核算链。',
     icon: DataAnalysis
   },
   {
     title: '费用主数据',
     desc: '每个场景下维护多费用对象，为规则与发布建立边界。',
-    meta: '对齐老项目“基础费目维护”的业务认知。',
+    meta: '支持按费用对象组织核算规则、版本与结果追踪。',
     icon: Tickets
   },
   {
     title: '变量中心',
     desc: '变量覆盖字典、接口、公式、业务输入与规则条件来源。',
-    meta: '阶梯费率必须明确绑定具体业务变量。',
+    meta: '统一管理数据来源、字段映射、缓存与业务影响因素。',
     icon: Connection
   },
   {
     title: '费率规则',
     desc: '支持固定费率、公式、阶梯费率及复杂条件组合。',
-    meta: '受货种、内外贸、工种、载重吨等因素影响。',
+    meta: '可按货种、贸易属性、工种、载重吨等因素组合定价。',
     icon: Setting
   },
   {
@@ -160,55 +160,55 @@ const shortcuts = [
   },
   {
     title: '结果台账',
-    desc: '沉淀正式核算结果、差异分析、命中解释和追溯链路。',
-    meta: '业务查看按费用，平台追溯按场景版本。',
+    desc: '统一记录正式核算结果、差异分析、命中解释和追溯链路。',
+    meta: '支持按费用口径查看结果，按场景版本回看运行过程。',
     icon: Histogram
   },
   {
     title: '试算与验证',
     desc: '支持试算、导入预览、命中明细和执行步骤验证。',
-    meta: '开发与交付统一按验证规范执行。',
+    meta: '在正式入账前完成样本核验、输入校对和结果确认。',
     icon: MagicStick
   },
   {
-    title: '设计文档',
-    desc: '所有设计、SQL、ER、缓存规范统一放在仓库根目录。',
-    meta: '后续开发、构建、验证必须与文档保持一致。',
+    title: '治理规范',
+    desc: '统一管理数据结构、版本规则、运行边界与追溯要求。',
+    meta: '保障平台配置、运行与治理口径长期一致。',
     icon: Files
   }
 ]
 
 const designAnchors = [
   {
-    title: '详细设计',
-    desc: '定义产品目标、主链模型、模块边界、性能目标与演进路线。'
+    title: '业务建模',
+    desc: '统一定义业务域、场景、费用对象和变量口径，确保配置边界清晰。'
   },
   {
-    title: '完整 SQL 与 ER 图',
-    desc: '明确 `cost_` 前缀业务表、主外键关系、索引和注释规范。'
+    title: '数据结构',
+    desc: '统一业务表、索引、主外键关系和快照落库边界，保证运行数据可管可查。'
   },
   {
-    title: '缓存与 Redis 规范',
-    desc: '划分哪些数据可缓存、哪些数据必须以数据库和快照为准。'
+    title: '运行治理',
+    desc: '明确缓存刷新、告警联动、任务分片与失败恢复的治理策略。'
   },
   {
-    title: '开发与验证规范',
-    desc: '要求所有开发从设计对齐、实现、构建、验证到交付闭环。'
+    title: '追溯解释',
+    desc: '确保结果、命中规则、变量取值和执行时间线能够完整回看。'
   }
 ]
 
 const governanceItems = [
   {
     label: '首页定位',
-    value: '核算驾驶舱，而不是通用后台欢迎页'
+    value: '统一核算驾驶舱'
   },
   {
-    label: '基础要求',
-    value: '保留若依治理底座，移除与核算无关的默认宣传内容'
+    label: '配置方式',
+    value: '多场景、多费用、多规则统一管理'
   },
   {
-    label: '发布边界',
-    value: '后续严格按场景发布、按费用追溯、按结果解释'
+    label: '运行边界',
+    value: '按场景发布、按版本执行、按结果追溯'
   },
   {
     label: '性能重点',
@@ -219,23 +219,23 @@ const governanceItems = [
 const roadmapSteps = [
   {
     index: '01',
-    title: '收稳底座',
-    desc: '完成首页、品牌、文档、数据设计和开发规范基线。'
+    title: '业务建模',
+    desc: '先梳理业务域、场景和费用对象，明确核算主题与口径边界。'
   },
   {
     index: '02',
-    title: '恢复主链',
-    desc: '按设计恢复业务域、场景、费用、变量、规则、阶梯中心。'
+    title: '规则配置',
+    desc: '围绕变量、条件、费率规则和版本快照完成可运营配置。'
   },
   {
     index: '03',
-    title: '接回治理',
-    desc: '恢复发布、版本、生效、差异对比、审计和删除保护。'
+    title: '版本治理',
+    desc: '通过发布、生效切换、差异对比和审计记录保障版本一致性。'
   },
   {
     index: '04',
-    title: '恢复运行',
-    desc: '接回试算、正式核算、批量任务、台账和监控告警。'
+    title: '运行追溯',
+    desc: '通过试算、正式核算、批量任务、结果台账和告警中心形成闭环。'
   }
 ]
 </script>

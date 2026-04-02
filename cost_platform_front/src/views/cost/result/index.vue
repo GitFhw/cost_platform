@@ -5,10 +5,10 @@
         <div class="result-page__eyebrow">结果追溯</div>
         <h2 class="result-page__title">结果台账与追溯解释</h2>
         <p class="result-page__subtitle">
-          按场景、版本、账期、任务号和费用维度查询正式核算结果，查看命中规则、阶梯、变量值和执行时间线。
+          按场景、版本、账期、任务和费用维度查看正式核算结果，支持命中规则、变量取值和执行过程追溯。
         </p>
       </div>
-      <el-tag type="success">结果台账与追溯解释分离落地</el-tag>
+      <el-tag type="success">支持结果查询、差异定位和过程解释联动查看</el-tag>
     </section>
 
     <section class="result-page__metrics">

@@ -5,10 +5,10 @@
         <div class="variable-center__eyebrow">输入治理</div>
         <h2 class="variable-center__title">变量中心</h2>
         <p class="variable-center__subtitle">
-          变量是费用、规则、发布和运行链共享的输入层，统一承接变量来源类型、第三方接入配置、导入校验、复制复用与共享影响因素模板。
+          统一管理业务输入、字典取值、第三方接入和公式变量，支撑规则配置、批量运行和结果追溯的输入口径。
         </p>
       </div>
-      <el-tag type="info">第三方变量支持来源系统、鉴权、字段映射、缓存与失败兜底配置</el-tag>
+      <el-tag type="info">支持来源系统、鉴权方式、字段映射、缓存策略和异常兜底配置</el-tag>
     </section>
 
     <section class="variable-center__metrics">
@@ -20,7 +20,7 @@
     </section>
 
     <el-alert
-      title="变量中心统一承接输入变量、字典变量、第三方接入变量和公式变量，并提供导入预览、复制与共享模板能力。"
+      title="变量中心统一承接输入变量、字典变量、第三方接入变量和公式变量，并提供导入预览、复制复用与共享模板能力。"
       type="info"
       :closable="false"
       show-icon
