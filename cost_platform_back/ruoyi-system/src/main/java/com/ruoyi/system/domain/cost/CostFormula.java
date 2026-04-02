@@ -85,6 +85,11 @@ public class CostFormula extends BaseEntity
     @TableField("formula_expr")
     private String formulaExpr;
 
+    /** 资产类型 */
+    @Excel(name = "资产类型")
+    @TableField("asset_type")
+    private String assetType;
+
     /** 工作台模式 */
     @TableField("workbench_mode")
     private String workbenchMode;
@@ -146,4 +151,8 @@ public class CostFormula extends BaseEntity
     /** 发布快照引用数量 */
     @TableField(exist = false)
     private Long publishedVersionCount;
+
+    /** 当前版本号 */
+    @TableField(exist = false)
+    private Integer currentVersionNo;
 }

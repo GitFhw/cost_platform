@@ -27,6 +27,11 @@ public interface CostFormulaMapper extends BaseMapper<CostFormula>
     List<CostFormula> selectFormulaOptions(CostFormula formula);
 
     /**
+     * 查询模板库选择项。
+     */
+    List<CostFormula> selectTemplateOptions(CostFormula formula);
+
+    /**
      * 查询公式统计。
      */
     Map<String, Object> selectFormulaStats(CostFormula formula);

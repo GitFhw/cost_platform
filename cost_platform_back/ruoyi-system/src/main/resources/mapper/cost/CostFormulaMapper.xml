@@ -15,6 +15,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="formulaDesc" column="formula_desc" />
         <result property="businessFormula" column="business_formula" />
         <result property="formulaExpr" column="formula_expr" />
+        <result property="assetType" column="asset_type" />
         <result property="workbenchMode" column="workbench_mode" />
         <result property="workbenchPattern" column="workbench_pattern" />
         <result property="templateCode" column="template_code" />
@@ -34,6 +35,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="variableRefCount" column="variable_ref_count" />
         <result property="ruleRefCount" column="rule_ref_count" />
         <result property="publishedVersionCount" column="published_version_count" />
+        <result property="currentVersionNo" column="current_version_no" />
     </resultMap>
 
     <sql id="selectFormulaVo">
@@ -47,6 +49,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                f.formula_desc,
                f.business_formula,
                f.formula_expr,
+               f.asset_type,
                f.workbench_mode,
                f.workbench_pattern,
                f.template_code,
@@ -70,7 +73,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 join cost_publish_version ver on ver.version_id = snap.version_id
                 where ver.scene_id = f.scene_id
                   and snap.snapshot_type = 'FORMULA'
-                  and snap.object_code = f.formula_code) as published_version_count
+                  and snap.object_code = f.formula_code) as published_version_count,
+               (select coalesce(max(ver.version_no), 0)
+                from cost_formula_version ver
+                where ver.formula_id = f.formula_id) as current_version_no
         from cost_formula f
         left join cost_scene s on s.scene_id = f.scene_id
     </sql>
@@ -95,6 +101,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="returnType != null and returnType != ''">
                 and f.return_type = #{returnType}
             </if>
+            <if test="assetType != null and assetType != ''">
+                and f.asset_type = #{assetType}
+            </if>
         </where>
     </sql>
 
@@ -107,6 +116,24 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectFormulaOptions" parameterType="com.ruoyi.system.domain.cost.CostFormula" resultMap="CostFormulaResult">
         <include refid="selectFormulaVo"/>
         <include refid="formulaWhere"/>
+        order by s.scene_name asc, f.sort_no asc, f.formula_id desc
+    </select>
+
+    <select id="selectTemplateOptions" parameterType="com.ruoyi.system.domain.cost.CostFormula" resultMap="CostFormulaResult">
+        <include refid="selectFormulaVo"/>
+        <where>
+            and f.asset_type = 'TEMPLATE'
+            and f.status = '0'
+            <if test="sceneId != null">
+                and f.scene_id = #{sceneId}
+            </if>
+            <if test="formulaCode != null and formulaCode != ''">
+                and f.formula_code like concat('%', #{formulaCode}, '%')
+            </if>
+            <if test="formulaName != null and formulaName != ''">
+                and f.formula_name like concat('%', #{formulaName}, '%')
+            </if>
+        </where>
         order by s.scene_name asc, f.sort_no asc, f.formula_id desc
     </select>
 

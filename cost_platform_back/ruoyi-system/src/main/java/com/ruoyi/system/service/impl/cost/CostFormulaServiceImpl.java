@@ -9,11 +9,13 @@ import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.cost.CostFormula;
+import com.ruoyi.system.domain.cost.CostFormulaVersion;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.bo.CostFormulaTestBo;
 import com.ruoyi.system.domain.vo.CostFormulaGovernanceCheckVo;
 import com.ruoyi.system.mapper.SysDictDataMapper;
 import com.ruoyi.system.mapper.cost.CostFormulaMapper;
+import com.ruoyi.system.mapper.cost.CostFormulaVersionMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.service.cost.ICostExpressionService;
 import com.ruoyi.system.service.cost.ICostFormulaService;
@@ -38,6 +40,8 @@ import java.util.Map;
 public class CostFormulaServiceImpl implements ICostFormulaService
 {
     private static final String STATUS_ENABLED = "0";
+    private static final String ASSET_TYPE_FORMULA = "FORMULA";
+    private static final String ASSET_TYPE_TEMPLATE = "TEMPLATE";
     private static final String DICT_TYPE_FORMULA_STATUS = "cost_formula_status";
     private static final String DICT_TYPE_RETURN_TYPE = "cost_formula_return_type";
 
@@ -48,6 +52,9 @@ public class CostFormulaServiceImpl implements ICostFormulaService
 
     @Autowired
     private CostSceneMapper sceneMapper;
+
+    @Autowired
+    private CostFormulaVersionMapper formulaVersionMapper;
 
     @Autowired
     private SysDictDataMapper dictDataMapper;
@@ -70,7 +77,14 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     @Override
     public List<CostFormula> selectFormulaOptions(CostFormula formula)
     {
+        formula.setAssetType(ASSET_TYPE_FORMULA);
         return formulaMapper.selectFormulaOptions(formula);
+    }
+
+    @Override
+    public List<CostFormula> selectTemplateOptions(CostFormula formula)
+    {
+        return formulaMapper.selectTemplateOptions(formula);
     }
 
     @Override
@@ -127,7 +141,9 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     {
         validateFormula(formula);
         fillDefaultFields(formula);
-        return formulaMapper.insert(formula);
+        int rows = formulaMapper.insert(formula);
+        saveFormulaVersion(formula, "CREATE");
+        return rows;
     }
 
     @Override
@@ -136,7 +152,9 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         validateDisableBeforeUpdate(formula);
         validateFormula(formula);
         fillDefaultFields(formula);
-        return formulaMapper.updateById(formula);
+        int rows = formulaMapper.updateById(formula);
+        saveFormulaVersion(formulaMapper.selectById(formula.getFormulaId()), "UPDATE");
+        return rows;
     }
 
     @Override
@@ -151,6 +169,36 @@ public class CostFormulaServiceImpl implements ICostFormulaService
             }
         }
         return formulaMapper.deleteBatchIds(Arrays.asList(formulaIds));
+    }
+
+    @Override
+    public List<CostFormulaVersion> selectFormulaVersionList(Long formulaId)
+    {
+        return formulaVersionMapper.selectFormulaVersionList(formulaId);
+    }
+
+    @Override
+    public CostFormula selectFormulaVersionDetail(Long versionId)
+    {
+        CostFormulaVersion version = formulaVersionMapper.selectById(versionId);
+        if (version == null)
+        {
+            throw new ServiceException("当前版本不存在，请刷新后重试");
+        }
+        CostFormula formula = parseFormulaSnapshot(version.getSnapshotJson());
+        formula.setFormulaId(version.getFormulaId());
+        formula.setSceneId(version.getSceneId());
+        formula.setFormulaCode(version.getFormulaCode());
+        formula.setFormulaName(version.getFormulaName());
+        formula.setAssetType(version.getAssetType());
+        formula.setBusinessFormula(version.getBusinessFormula());
+        formula.setFormulaExpr(version.getFormulaExpr());
+        formula.setWorkbenchMode(version.getWorkbenchMode());
+        formula.setWorkbenchPattern(version.getWorkbenchPattern());
+        formula.setTemplateCode(version.getTemplateCode());
+        formula.setWorkbenchConfigJson(version.getWorkbenchConfigJson());
+        formula.setCurrentVersionNo(version.getVersionNo());
+        return formula;
     }
 
     @Override
@@ -190,6 +238,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         validateSceneEnabled(formula.getSceneId());
         validateDictValue(DICT_TYPE_FORMULA_STATUS, formula.getStatus(), "公式状态");
         validateDictValue(DICT_TYPE_RETURN_TYPE, formula.getReturnType(), "返回类型");
+        validateAssetType(formula.getAssetType());
         expressionService.validateExpression(formula.getFormulaExpr());
         validateTestCaseJson(formula.getTestCaseJson());
         formula.setFormulaCode(StringUtils.trim(formula.getFormulaCode()));
@@ -240,6 +289,10 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         if (StringUtils.isEmpty(formula.getReturnType()))
         {
             formula.setReturnType("NUMBER");
+        }
+        if (StringUtils.isEmpty(formula.getAssetType()))
+        {
+            formula.setAssetType(ASSET_TYPE_FORMULA);
         }
         if (StringUtils.isEmpty(formula.getWorkbenchMode()))
         {
@@ -320,6 +373,21 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         if (StringUtils.isEmpty(dictLabel))
         {
             throw new ServiceException(label + "不在系统字典范围内");
+        }
+    }
+
+    /**
+     * 校验资产类型。
+     */
+    private void validateAssetType(String assetType)
+    {
+        if (StringUtils.isEmpty(assetType))
+        {
+            return;
+        }
+        if (!ASSET_TYPE_FORMULA.equals(assetType) && !ASSET_TYPE_TEMPLATE.equals(assetType))
+        {
+            throw new ServiceException("资产类型不在系统允许范围内");
         }
     }
 
@@ -459,5 +527,86 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     private String stringValue(Object value)
     {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    /**
+     * 保存公式版本快照。
+     */
+    private void saveFormulaVersion(CostFormula formula, String changeType)
+    {
+        if (formula == null || formula.getFormulaId() == null)
+        {
+            return;
+        }
+        CostFormulaVersion latestVersion = formulaVersionMapper.selectOne(Wrappers.<CostFormulaVersion>lambdaQuery()
+                .select(CostFormulaVersion::getVersionNo)
+                .eq(CostFormulaVersion::getFormulaId, formula.getFormulaId())
+                .orderByDesc(CostFormulaVersion::getVersionNo)
+                .last("limit 1"));
+        CostFormulaVersion version = new CostFormulaVersion();
+        version.setFormulaId(formula.getFormulaId());
+        version.setSceneId(formula.getSceneId());
+        version.setFormulaCode(formula.getFormulaCode());
+        version.setFormulaName(formula.getFormulaName());
+        version.setAssetType(formula.getAssetType());
+        version.setVersionNo(latestVersion == null || latestVersion.getVersionNo() == null ? 1 : latestVersion.getVersionNo() + 1);
+        version.setChangeType(changeType);
+        version.setBusinessFormula(formula.getBusinessFormula());
+        version.setFormulaExpr(formula.getFormulaExpr());
+        version.setWorkbenchMode(formula.getWorkbenchMode());
+        version.setWorkbenchPattern(formula.getWorkbenchPattern());
+        version.setTemplateCode(formula.getTemplateCode());
+        version.setWorkbenchConfigJson(formula.getWorkbenchConfigJson());
+        version.setSnapshotJson(writeJson(buildFormulaSnapshot(formula)));
+        version.setCreateBy(StringUtils.defaultIfEmpty(formula.getUpdateBy(), formula.getCreateBy()));
+        version.setCreateTime(DateUtils.getNowDate());
+        formulaVersionMapper.insert(version);
+    }
+
+    /**
+     * 构造公式快照对象。
+     */
+    private Map<String, Object> buildFormulaSnapshot(CostFormula formula)
+    {
+        LinkedHashMap<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("sceneId", formula.getSceneId());
+        snapshot.put("formulaCode", formula.getFormulaCode());
+        snapshot.put("formulaName", formula.getFormulaName());
+        snapshot.put("formulaDesc", formula.getFormulaDesc());
+        snapshot.put("businessFormula", formula.getBusinessFormula());
+        snapshot.put("formulaExpr", formula.getFormulaExpr());
+        snapshot.put("assetType", formula.getAssetType());
+        snapshot.put("workbenchMode", formula.getWorkbenchMode());
+        snapshot.put("workbenchPattern", formula.getWorkbenchPattern());
+        snapshot.put("templateCode", formula.getTemplateCode());
+        snapshot.put("workbenchConfigJson", formula.getWorkbenchConfigJson());
+        snapshot.put("namespaceScope", formula.getNamespaceScope());
+        snapshot.put("returnType", formula.getReturnType());
+        snapshot.put("testCaseJson", formula.getTestCaseJson());
+        snapshot.put("sampleResultJson", formula.getSampleResultJson());
+        snapshot.put("lastTestTime", formula.getLastTestTime());
+        snapshot.put("status", formula.getStatus());
+        snapshot.put("sortNo", formula.getSortNo());
+        snapshot.put("remark", formula.getRemark());
+        return snapshot;
+    }
+
+    /**
+     * 反序列化公式版本快照。
+     */
+    private CostFormula parseFormulaSnapshot(String snapshotJson)
+    {
+        if (StringUtils.isEmpty(snapshotJson))
+        {
+            return new CostFormula();
+        }
+        try
+        {
+            return objectMapper.readValue(snapshotJson, CostFormula.class);
+        }
+        catch (Exception e)
+        {
+            throw new ServiceException("公式版本快照读取失败，请检查历史数据");
+        }
     }
 }

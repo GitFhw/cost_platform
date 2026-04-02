@@ -1,6 +1,7 @@
 package com.ruoyi.system.service.cost;
 
 import com.ruoyi.system.domain.cost.CostFormula;
+import com.ruoyi.system.domain.cost.CostFormulaVersion;
 import com.ruoyi.system.domain.cost.bo.CostFormulaTestBo;
 import com.ruoyi.system.domain.vo.CostFormulaGovernanceCheckVo;
 
@@ -28,6 +29,11 @@ public interface ICostFormulaService
      * 查询公式选择框。
      */
     List<CostFormula> selectFormulaOptions(CostFormula formula);
+
+    /**
+     * 查询模板库选择框。
+     */
+    List<CostFormula> selectTemplateOptions(CostFormula formula);
 
     /**
      * 查询公式统计。
@@ -58,6 +64,16 @@ public interface ICostFormulaService
      * 删除公式。
      */
     int deleteFormulaByIds(Long[] formulaIds);
+
+    /**
+     * 查询公式版本台账。
+     */
+    List<CostFormulaVersion> selectFormulaVersionList(Long formulaId);
+
+    /**
+     * 查询公式版本详情。
+     */
+    CostFormula selectFormulaVersionDetail(Long versionId);
 
     /**
      * 测试公式。
