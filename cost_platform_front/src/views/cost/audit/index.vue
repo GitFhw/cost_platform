@@ -20,6 +20,32 @@
     <section class="audit-page__panel">
       <div class="audit-page__section-head">
         <div>
+          <h3>回归资料</h3>
+          <p>把现场回归最常用的台账、模板和放行口径集中在一处，方便测试与上线同学直接取用。</p>
+        </div>
+        <el-button type="primary" plain icon="Refresh" @click="loadReadiness">刷新校验</el-button>
+      </div>
+
+      <div class="audit-page__resource-grid">
+        <div v-for="item in resourceItems" :key="item.label" class="audit-page__resource-card">
+          <div class="audit-page__resource-head">
+            <strong>{{ item.label }}</strong>
+            <el-tag size="small" :type="item.tagType">{{ item.tag }}</el-tag>
+          </div>
+          <p>{{ item.desc }}</p>
+          <code>{{ item.path }}</code>
+          <div class="audit-page__resource-actions">
+            <el-button size="small" type="primary" plain v-copyText="item.path" v-copyText:callback="handleCopySuccess">
+              复制路径
+            </el-button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="audit-page__panel">
+      <div class="audit-page__section-head">
+        <div>
           <h3>上线校验总览</h3>
           <p>统一汇总 Flyway、关键库表、菜单补丁和仍待人工执行的上线前检查项。</p>
         </div>
@@ -179,6 +205,37 @@ const metricItems = computed(() => [
   { label: '今日新增', value: stats.todayCount, desc: '当天新增的审计记录数量' }
 ])
 
+const resourceItems = [
+  {
+    label: '总任务台账',
+    tag: '总览',
+    tagType: 'info',
+    desc: '完整拆细后的上线任务清单，适合排优先级和持续消项。',
+    path: 'D:/Desktop/cost_platform/docs/go_live_task_ledger_utf8.xlsx'
+  },
+  {
+    label: '回归执行模板',
+    tag: '执行',
+    tagType: 'warning',
+    desc: '用于现场逐条回填执行状态、证据链接、缺陷单号和下一步动作。',
+    path: 'D:/Desktop/cost_platform/docs/go_live_regression_execution_template.xlsx'
+  },
+  {
+    label: '最小放行条件',
+    tag: '口径',
+    tagType: 'success',
+    desc: '明确什么条件同时满足后，状态才能从接近上线切换到可上线运行。',
+    path: 'D:/Desktop/cost_platform/docs/正式核算上线最小放行条件.md'
+  },
+  {
+    label: '最小执行清单',
+    tag: '现场',
+    tagType: 'danger',
+    desc: '只保留当前真正阻塞上线的最小执行集合，联调时按这份先跑。',
+    path: 'D:/Desktop/cost_platform/docs/正式核算上线最小执行清单.md'
+  }
+]
+
 async function loadScenes() {
   const resp = await optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
   sceneOptions.value = resp?.data || []
@@ -274,6 +331,10 @@ function readinessStatusLabel(status) {
   }
   return '待人工'
 }
+
+function handleCopySuccess() {
+  proxy.$modal.msgSuccess('路径已复制')
+}
 </script>
 
 <style lang="scss" scoped>
@@ -335,6 +396,12 @@ function readinessStatusLabel(status) {
     margin-bottom: 18px;
   }
 
+  &__resource-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
   &__metric-card {
     padding: 18px 22px;
     display: flex;
@@ -378,6 +445,47 @@ function readinessStatusLabel(status) {
 
   &__readiness-card--warning strong {
     color: #d97706;
+  }
+
+  &__resource-card {
+    padding: 18px 22px;
+    border-radius: 18px;
+    border: 1px solid #e7edf7;
+    background: linear-gradient(135deg, #f9fbff, #ffffff);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+
+    p {
+      margin: 0;
+      color: #64748b;
+      line-height: 1.7;
+    }
+
+    code {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #0f172a;
+      color: #dbeafe;
+      word-break: break-all;
+    }
+  }
+
+  &__resource-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    strong {
+      color: #10233e;
+      font-size: 16px;
+    }
+  }
+
+  &__resource-actions {
+    display: flex;
+    justify-content: flex-end;
   }
 
   &__section-head {
@@ -432,6 +540,7 @@ function readinessStatusLabel(status) {
 
 @media (max-width: 1360px) {
   .audit-page {
+    &__resource-grid,
     &__readiness-cards,
     &__metrics,
     &__compare {

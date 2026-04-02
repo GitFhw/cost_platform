@@ -1,30 +1,26 @@
-import { createWebHistory, createRouter } from 'vue-router'
-/* Layout */
+import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '@/layout'
 
 /**
- * Note: 璺敱閰嶇疆椤?
+ * 路由说明
  *
- * hidden: true                     // 褰撹缃?true 鐨勬椂鍊欒璺敱涓嶄細鍐嶄晶杈规爮鍑虹幇 濡?01锛宭ogin绛夐〉闈紝鎴栬€呭涓€浜涚紪杈戦〉闈?edit/1
- * alwaysShow: true                 // 褰撲綘涓€涓矾鐢变笅闈㈢殑 children 澹版槑鐨勮矾鐢卞ぇ浜?涓椂锛岃嚜鍔ㄤ細鍙樻垚宓屽鐨勬ā寮?-濡傜粍浠堕〉闈?
- *                                  // 鍙湁涓€涓椂锛屼細灏嗛偅涓瓙璺敱褰撳仛鏍硅矾鐢辨樉绀哄湪渚ц竟鏍?-濡傚紩瀵奸〉闈?
- *                                  // 鑻ヤ綘鎯充笉绠¤矾鐢变笅闈㈢殑 children 澹版槑鐨勪釜鏁伴兘鏄剧ず浣犵殑鏍硅矾鐢?
- *                                  // 浣犲彲浠ヨ缃?alwaysShow: true锛岃繖鏍峰畠灏变細蹇界暐涔嬪墠瀹氫箟鐨勮鍒欙紝涓€鐩存樉绀烘牴璺敱
- * redirect: noRedirect             // 褰撹缃?noRedirect 鐨勬椂鍊欒璺敱鍦ㄩ潰鍖呭睉瀵艰埅涓笉鍙鐐瑰嚮
- * name:'router-name'               // 璁惧畾璺敱鐨勫悕瀛楋紝涓€瀹氳濉啓涓嶇劧浣跨敤<keep-alive>鏃朵細鍑虹幇鍚勭闂
- * query: '{"id": 1, "name": "ry"}' // 璁块棶璺敱鐨勯粯璁や紶閫掑弬鏁?
- * roles: ['admin', 'common']       // 璁块棶璺敱鐨勮鑹叉潈闄?
- * permissions: ['a:a:a', 'b:b:b']  // 璁块棶璺敱鐨勮彍鍗曟潈闄?
- * meta : {
-    noCache: true                   // 濡傛灉璁剧疆涓簍rue锛屽垯涓嶄細琚?<keep-alive> 缂撳瓨(榛樿 false)
-    title: 'title'                  // 璁剧疆璇ヨ矾鐢卞湪渚ц竟鏍忓拰闈㈠寘灞戜腑灞曠ず鐨勫悕瀛?
-    icon: 'svg-name'                // 璁剧疆璇ヨ矾鐢辩殑鍥炬爣锛屽搴旇矾寰剆rc/assets/icons/svg
-    breadcrumb: false               // 濡傛灉璁剧疆涓篺alse锛屽垯涓嶄細鍦╞readcrumb闈㈠寘灞戜腑鏄剧ず
-    activeMenu: '/system/user'      // 褰撹矾鐢辫缃簡璇ュ睘鎬э紝鍒欎細楂樹寒鐩稿搴旂殑渚ц竟鏍忋€?
-  }
+ * hidden: true                     // 设置为 true 时不会在侧边栏显示
+ * alwaysShow: true                 // 始终显示根路由
+ * redirect: noRedirect             // 面包屑不可点击
+ * name: 'router-name'              // 该名称会被 <keep-alive> 使用
+ * query: '{"id": 1, "name": "ry"}' // 默认携带的 query 参数
+ * roles: ['admin', 'common']       // 角色控制
+ * permissions: ['a:a:a', 'b:b:b']  // 权限控制
+ * meta: {
+ *   noCache: true                  // 不会被 <keep-alive> 缓存
+ *   title: 'title'                 // 侧边栏和面包屑展示名称
+ *   icon: 'svg-name'               // 对应 src/assets/icons/svg
+ *   breadcrumb: false              // 不在面包屑显示
+ *   activeMenu: '/system/user'     // 高亮对应侧边栏菜单
+ * }
  */
 
-// 鍏叡璺敱
+// 常驻路由
 export const constantRoutes = [
   {
     path: '/redirect',
@@ -48,7 +44,7 @@ export const constantRoutes = [
     hidden: true
   },
   {
-    path: "/:pathMatch(.*)*",
+    path: '/:pathMatch(.*)*',
     component: () => import('@/views/error/404'),
     hidden: true
   },
@@ -66,7 +62,7 @@ export const constantRoutes = [
         path: '/index',
         component: () => import('@/views/index'),
         name: 'Index',
-        meta: { title: '棣栭〉', icon: 'dashboard', affix: true }
+        meta: { title: '首页', icon: 'dashboard', affix: true }
       }
     ]
   },
@@ -74,7 +70,7 @@ export const constantRoutes = [
     path: '/lock',
     component: () => import('@/views/lock'),
     hidden: true,
-    meta: { title: '閿佸畾灞忓箷' }
+    meta: { title: '锁屏' }
   },
   {
     path: '/user',
@@ -86,13 +82,13 @@ export const constantRoutes = [
         path: 'profile/:activeTab?',
         component: () => import('@/views/system/user/profile/index'),
         name: 'Profile',
-        meta: { title: '涓汉涓績', icon: 'user' }
+        meta: { title: '个人中心', icon: 'user' }
       }
     ]
   }
 ]
 
-// 鍔ㄦ€佽矾鐢憋紝鍩轰簬鐢ㄦ埛鏉冮檺鍔ㄦ€佸幓鍔犺浇
+// 动态路由，基于权限动态加载
 export const dynamicRoutes = [
   {
     path: '/system/user-auth',
@@ -104,7 +100,7 @@ export const dynamicRoutes = [
         path: 'role/:userId(\\d+)',
         component: () => import('@/views/system/user/authRole'),
         name: 'AuthRole',
-        meta: { title: '鍒嗛厤瑙掕壊', activeMenu: '/system/user' }
+        meta: { title: '分配角色', activeMenu: '/system/user' }
       }
     ]
   },
@@ -118,7 +114,7 @@ export const dynamicRoutes = [
         path: 'user/:roleId(\\d+)',
         component: () => import('@/views/system/role/authUser'),
         name: 'AuthUser',
-        meta: { title: '鍒嗛厤鐢ㄦ埛', activeMenu: '/system/role' }
+        meta: { title: '分配用户', activeMenu: '/system/role' }
       }
     ]
   },
@@ -132,7 +128,7 @@ export const dynamicRoutes = [
         path: 'index/:dictId(\\d+)',
         component: () => import('@/views/system/dict/data'),
         name: 'Data',
-        meta: { title: '瀛楀吀鏁版嵁', activeMenu: '/system/dict' }
+        meta: { title: '字典数据', activeMenu: '/system/dict' }
       }
     ]
   },
@@ -146,7 +142,7 @@ export const dynamicRoutes = [
         path: 'index/:jobId(\\d+)',
         component: () => import('@/views/monitor/job/log'),
         name: 'JobLog',
-        meta: { title: '璋冨害鏃ュ織', activeMenu: '/monitor/job' }
+        meta: { title: '调度日志', activeMenu: '/monitor/job' }
       }
     ]
   },
@@ -160,7 +156,7 @@ export const dynamicRoutes = [
         path: 'index/:tableId(\\d+)',
         component: () => import('@/views/tool/gen/editTable'),
         name: 'GenEdit',
-        meta: { title: '淇敼鐢熸垚閰嶇疆', activeMenu: '/tool/gen' }
+        meta: { title: '修改生成配置', activeMenu: '/tool/gen' }
       }
     ]
   }
@@ -174,7 +170,7 @@ const router = createRouter({
       return savedPosition
     }
     return { top: 0 }
-  },
+  }
 })
 
 export default router
