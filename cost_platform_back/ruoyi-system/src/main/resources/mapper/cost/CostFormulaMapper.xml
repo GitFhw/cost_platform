@@ -15,6 +15,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="formulaDesc" column="formula_desc" />
         <result property="businessFormula" column="business_formula" />
         <result property="formulaExpr" column="formula_expr" />
+        <result property="workbenchMode" column="workbench_mode" />
+        <result property="workbenchPattern" column="workbench_pattern" />
+        <result property="templateCode" column="template_code" />
+        <result property="workbenchConfigJson" column="workbench_config_json" />
         <result property="namespaceScope" column="namespace_scope" />
         <result property="returnType" column="return_type" />
         <result property="testCaseJson" column="test_case_json" />
@@ -43,6 +47,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                f.formula_desc,
                f.business_formula,
                f.formula_expr,
+               f.workbench_mode,
+               f.workbench_pattern,
+               f.template_code,
+               f.workbench_config_json,
                f.namespace_scope,
                f.return_type,
                f.test_case_json,

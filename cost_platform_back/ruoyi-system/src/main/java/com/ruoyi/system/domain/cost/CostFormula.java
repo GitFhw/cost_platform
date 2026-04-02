@@ -85,6 +85,22 @@ public class CostFormula extends BaseEntity
     @TableField("formula_expr")
     private String formulaExpr;
 
+    /** 工作台模式 */
+    @TableField("workbench_mode")
+    private String workbenchMode;
+
+    /** 工作台结构类型 */
+    @TableField("workbench_pattern")
+    private String workbenchPattern;
+
+    /** 工作台模板编码 */
+    @TableField("template_code")
+    private String templateCode;
+
+    /** 工作台点选配置 */
+    @TableField("workbench_config_json")
+    private String workbenchConfigJson;
+
     /** 命名空间范围 */
     @Excel(name = "命名空间范围")
     @Size(max = 128, message = "命名空间范围长度不能超过128个字符")

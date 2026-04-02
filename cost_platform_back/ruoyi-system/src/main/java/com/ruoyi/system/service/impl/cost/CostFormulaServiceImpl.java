@@ -196,6 +196,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         formula.setFormulaName(StringUtils.trim(formula.getFormulaName()));
         formula.setFormulaDesc(StringUtils.defaultString(formula.getFormulaDesc()));
         formula.setBusinessFormula(StringUtils.defaultString(formula.getBusinessFormula()));
+        normalizeWorkbenchConfig(formula);
         formula.setNamespaceScope(StringUtils.defaultIfEmpty(StringUtils.trim(formula.getNamespaceScope()), "V,C,I,F,T"));
     }
 
@@ -239,6 +240,54 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         if (StringUtils.isEmpty(formula.getReturnType()))
         {
             formula.setReturnType("NUMBER");
+        }
+        if (StringUtils.isEmpty(formula.getWorkbenchMode()))
+        {
+            formula.setWorkbenchMode("GUIDED");
+        }
+        if (StringUtils.isEmpty(formula.getWorkbenchPattern()))
+        {
+            formula.setWorkbenchPattern("IF_ELSE");
+        }
+    }
+
+    /**
+     * 规范化工作台点选配置，保证工作台可以按原结构重新回填。
+     */
+    private void normalizeWorkbenchConfig(CostFormula formula)
+    {
+        String mode = StringUtils.defaultIfEmpty(StringUtils.trim(formula.getWorkbenchMode()), "GUIDED");
+        String pattern = StringUtils.defaultIfEmpty(StringUtils.trim(formula.getWorkbenchPattern()), "IF_ELSE");
+        formula.setWorkbenchMode(mode);
+        formula.setWorkbenchPattern(pattern);
+        formula.setTemplateCode(StringUtils.trimToEmpty(formula.getTemplateCode()));
+        String configJson = StringUtils.trimToEmpty(formula.getWorkbenchConfigJson());
+        if (StringUtils.isEmpty(configJson))
+        {
+            formula.setWorkbenchConfigJson("");
+            return;
+        }
+        try
+        {
+            Map<String, Object> config = objectMapper.readValue(configJson, new TypeReference<Map<String, Object>>() {});
+            LinkedHashMap<String, Object> normalized = new LinkedHashMap<>();
+            normalized.put("mode", mode);
+            normalized.put("pattern", pattern);
+            normalized.put("templateCode", formula.getTemplateCode());
+            normalized.put("conditionLogic", StringUtils.defaultIfEmpty(stringValue(config.get("conditionLogic")), "AND"));
+            normalized.put("conditions", config.get("conditions"));
+            normalized.put("trueResultValue", stringValue(config.get("trueResultValue")));
+            normalized.put("falseResultValue", stringValue(config.get("falseResultValue")));
+            normalized.put("rangeVariableCode", stringValue(config.get("rangeVariableCode")));
+            normalized.put("ranges", config.get("ranges"));
+            normalized.put("defaultResultValue", stringValue(config.get("defaultResultValue")));
+            normalized.put("businessFormula", stringValue(config.get("businessFormula")));
+            normalized.put("formulaExpr", stringValue(config.get("formulaExpr")));
+            formula.setWorkbenchConfigJson(writeJson(normalized));
+        }
+        catch (Exception ex)
+        {
+            throw new ServiceException("工作台配置格式不正确，请检查后重试");
         }
     }
 
@@ -405,5 +454,10 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         {
             throw new ServiceException("公式测试结果序列化失败：" + e.getMessage());
         }
+    }
+
+    private String stringValue(Object value)
+    {
+        return value == null ? "" : String.valueOf(value);
     }
 }
