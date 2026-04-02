@@ -351,6 +351,10 @@ const form = reactive({
   formulaDesc: undefined,
   businessFormula: undefined,
   formulaExpr: undefined,
+  workbenchMode: 'GUIDED',
+  workbenchPattern: 'IF_ELSE',
+  templateCode: undefined,
+  workbenchConfigJson: undefined,
   namespaceScope: 'V,C,I,F,T',
   returnType: 'NUMBER',
   testCaseJson: undefined,
@@ -362,6 +366,7 @@ const form = reactive({
 const workbench = reactive({
   mode: 'GUIDED',
   pattern: 'IF_ELSE',
+  templateCode: undefined,
   conditionLogic: 'AND',
   conditions: [],
   trueResultValue: '',
@@ -536,6 +541,7 @@ async function getList() {
 function resetWorkbench() {
   workbench.mode = 'GUIDED'
   workbench.pattern = 'IF_ELSE'
+  workbench.templateCode = undefined
   workbench.conditionLogic = 'AND'
   workbench.conditions = [{ variableCode: '', operatorCode: 'EQ', compareValue: '' }]
   workbench.trueResultValue = ''
@@ -554,6 +560,10 @@ function resetFormModel() {
   form.formulaDesc = undefined
   form.businessFormula = undefined
   form.formulaExpr = undefined
+  form.workbenchMode = 'GUIDED'
+  form.workbenchPattern = 'IF_ELSE'
+  form.templateCode = undefined
+  form.workbenchConfigJson = undefined
   form.namespaceScope = 'V,C,I,F,T'
   form.returnType = 'NUMBER'
   form.testCaseJson = undefined
@@ -660,6 +670,7 @@ function resolveVariablePlaceholder(emptyText = '当前场景暂无变量，请�
 function appendExpertToken(token) {
   if (workbench.mode !== 'EXPERT') {
     workbench.mode = 'EXPERT'
+    workbench.templateCode = undefined
     form.businessFormula = derivedFormula.value.businessFormula
     form.formulaExpr = derivedFormula.value.formulaExpr
   }
@@ -667,6 +678,7 @@ function appendExpertToken(token) {
 }
 
 function applyTemplate(template) {
+  workbench.templateCode = template.code
   if (template.pattern === 'EXPERT') {
     workbench.mode = 'EXPERT'
     form.businessFormula = template.businessFormula
@@ -716,6 +728,10 @@ function buildPayload() {
     ...form,
     businessFormula: derivedFormula.value.businessFormula || form.businessFormula,
     formulaExpr: derivedFormula.value.formulaExpr || form.formulaExpr,
+    workbenchMode: workbench.mode,
+    workbenchPattern: workbench.pattern,
+    templateCode: workbench.templateCode,
+    workbenchConfigJson: JSON.stringify(buildWorkbenchPayload()),
     testCaseJson: testInputJson.value || undefined
   }
   return payload
@@ -767,7 +783,7 @@ async function handleEdit(row) {
   queryParams.sceneId = form.sceneId
   testInputJson.value = form.testCaseJson || ''
   testResult.value = response.data?.sampleResultJson ? safeJsonParse(response.data.sampleResultJson) : undefined
-  workbench.mode = 'EXPERT'
+  restoreWorkbench(response.data)
   await loadSceneAssets(form.sceneId)
 }
 
@@ -849,6 +865,71 @@ function safeJsonParse(text) {
     return typeof text === 'string' ? JSON.parse(text) : text
   } catch (error) {
     return text
+  }
+}
+
+function buildWorkbenchPayload() {
+  return {
+    mode: workbench.mode,
+    pattern: workbench.pattern,
+    templateCode: workbench.templateCode,
+    conditionLogic: workbench.conditionLogic,
+    conditions: (workbench.conditions || []).map(item => ({
+      variableCode: item.variableCode || '',
+      operatorCode: item.operatorCode || 'EQ',
+      compareValue: item.compareValue || ''
+    })),
+    trueResultValue: workbench.trueResultValue || '',
+    falseResultValue: workbench.falseResultValue || '',
+    rangeVariableCode: workbench.rangeVariableCode,
+    ranges: (workbench.ranges || []).map(item => ({
+      startValue: item.startValue || '',
+      endValue: item.endValue || '',
+      resultValue: item.resultValue || ''
+    })),
+    defaultResultValue: workbench.defaultResultValue || '',
+    businessFormula: derivedFormula.value.businessFormula || form.businessFormula || '',
+    formulaExpr: derivedFormula.value.formulaExpr || form.formulaExpr || ''
+  }
+}
+
+function restoreWorkbench(data = {}) {
+  resetWorkbench()
+  const config = safeJsonParse(data.workbenchConfigJson)
+  if (!config || typeof config !== 'object') {
+    workbench.mode = data.workbenchMode || 'EXPERT'
+    workbench.pattern = data.workbenchPattern || 'IF_ELSE'
+    workbench.templateCode = data.templateCode
+    if (workbench.mode !== 'GUIDED') {
+      workbench.mode = 'EXPERT'
+    }
+    return
+  }
+  workbench.mode = config.mode || data.workbenchMode || 'GUIDED'
+  workbench.pattern = config.pattern || data.workbenchPattern || 'IF_ELSE'
+  workbench.templateCode = config.templateCode || data.templateCode
+  workbench.conditionLogic = config.conditionLogic || 'AND'
+  workbench.conditions = Array.isArray(config.conditions) && config.conditions.length
+    ? config.conditions.map(item => ({
+      variableCode: item.variableCode || '',
+      operatorCode: item.operatorCode || 'EQ',
+      compareValue: item.compareValue || ''
+    }))
+    : [{ variableCode: '', operatorCode: 'EQ', compareValue: '' }]
+  workbench.trueResultValue = config.trueResultValue || ''
+  workbench.falseResultValue = config.falseResultValue || ''
+  workbench.rangeVariableCode = config.rangeVariableCode
+  workbench.ranges = Array.isArray(config.ranges) && config.ranges.length
+    ? config.ranges.map(item => ({
+      startValue: item.startValue || '',
+      endValue: item.endValue || '',
+      resultValue: item.resultValue || ''
+    }))
+    : [{ startValue: '', endValue: '', resultValue: '' }]
+  workbench.defaultResultValue = config.defaultResultValue || ''
+  if (workbench.mode === 'EXPERT') {
+    form.businessFormula = config.businessFormula || data.businessFormula
+    form.formulaExpr = config.formulaExpr || data.formulaExpr
   }
 }
 
