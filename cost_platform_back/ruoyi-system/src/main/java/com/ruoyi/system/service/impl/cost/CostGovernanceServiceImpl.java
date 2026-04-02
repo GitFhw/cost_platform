@@ -32,13 +32,17 @@ import com.ruoyi.system.service.cost.ICostAlarmService;
 import com.ruoyi.system.service.cost.ICostAuditService;
 import com.ruoyi.system.service.cost.ICostGovernanceService;
 import com.ruoyi.system.service.cost.ICostRunService;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
@@ -64,8 +68,13 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     private static final String RECALC_STATUS_REJECTED = "REJECTED";
     private static final String RECALC_STATUS_RUNNING = "RUNNING";
     private static final String RUNTIME_CACHE_PREFIX = "cost:runtime:snapshot:";
+    private static final String CHECK_STATUS_PASS = "PASS";
+    private static final String CHECK_STATUS_FAIL = "FAIL";
+    private static final String CHECK_STATUS_PENDING = "PENDING";
+    private static final List<String> GO_LIVE_REQUIRED_MIGRATIONS = Arrays.asList("20260402.012", "20260402.013", "20260402.014");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private CostBillPeriodMapper billPeriodMapper;
@@ -89,6 +98,12 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     private ICostAlarmService alarmService;
     @Autowired
     private RedisCache redisCache;
+
+    @Autowired
+    public void setJdbcTemplate(@Qualifier("masterDataSource") DataSource masterDataSource)
+    {
+        this.jdbcTemplate = new JdbcTemplate(masterDataSource);
+    }
 
     @Override
     public Map<String, Object> selectPeriodStats(Long sceneId)
@@ -353,6 +368,46 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     }
 
     @Override
+    public Map<String, Object> selectGoLiveReadiness()
+    {
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        List<Map<String, Object>> checks = new ArrayList<>();
+        try
+        {
+            checks.addAll(buildMigrationChecks());
+            checks.addAll(buildTableChecks());
+            checks.addAll(buildMenuChecks());
+        }
+        catch (Exception ex)
+        {
+            checks.add(buildCheckItem("SYSTEM", "上线自动校验读取失败", CHECK_STATUS_FAIL,
+                    "读取 Flyway 或库表信息失败：" + limitLength(ex.getMessage(), 300),
+                    "先检查目标库连接、Flyway 历史表和当前账号只读权限。"));
+        }
+        checks.addAll(buildManualChecks());
+
+        long passCount = checks.stream().filter(item -> CHECK_STATUS_PASS.equals(item.get("status"))).count();
+        long failCount = checks.stream().filter(item -> CHECK_STATUS_FAIL.equals(item.get("status"))).count();
+        long pendingCount = checks.stream().filter(item -> CHECK_STATUS_PENDING.equals(item.get("status"))).count();
+
+        LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
+        summary.put("totalCount", checks.size());
+        summary.put("passCount", passCount);
+        summary.put("failCount", failCount);
+        summary.put("pendingCount", pendingCount);
+        summary.put("ready", failCount == 0 && pendingCount == 0);
+        summary.put("sceneCount", sceneMapper.selectCount(null));
+        summary.put("versionCount", publishVersionMapper.selectCount(null));
+        summary.put("taskCount", calcTaskMapper.selectCount(null));
+        summary.put("resultCount", resultLedgerMapper.selectCount(null));
+
+        result.put("summary", summary);
+        result.put("checks", checks);
+        result.put("latestMigration", safeLatestMigration());
+        return result;
+    }
+
+    @Override
     public Map<String, Object> selectRuntimeCacheStats(Long sceneId, Long versionId)
     {
         Collection<String> keys = redisCache.keys(RUNTIME_CACHE_PREFIX + "*");
@@ -416,6 +471,134 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
             alarmService.createAlarm(alarm);
             throw e;
         }
+    }
+
+    /**
+     * 构建 Flyway 迁移校验项，优先确认线程五新增脚本是否已经在目标库生效。
+     */
+    private List<Map<String, Object>> buildMigrationChecks()
+    {
+        List<Map<String, Object>> appliedVersions = jdbcTemplate.queryForList(
+                "select version from flyway_schema_history where success = 1");
+        Set<String> versionSet = appliedVersions.stream()
+                .map(item -> stringValue(item.get("version")))
+                .collect(Collectors.toSet());
+        List<Map<String, Object>> checks = new ArrayList<>();
+        GO_LIVE_REQUIRED_MIGRATIONS.forEach(version -> checks.add(buildCheckItem(
+                "FLYWAY",
+                "迁移脚本 " + version,
+                versionSet.contains(version) ? CHECK_STATUS_PASS : CHECK_STATUS_FAIL,
+                versionSet.contains(version) ? "目标库已记录该版本迁移。" : "目标库未发现该版本迁移记录，请先执行 Flyway。",
+                "核对 flyway_schema_history 与应用启动日志，确认迁移按顺序执行。")));
+        return checks;
+    }
+
+    /**
+     * 构建运行链关键表校验项，避免迁移成功但关键库表缺失。
+     */
+    private List<Map<String, Object>> buildTableChecks()
+    {
+        List<Map<String, Object>> checks = new ArrayList<>();
+        checks.add(buildTableCheck("cost_calc_task_partition", "正式核算分片表"));
+        checks.add(buildTableCheck("cost_calc_input_batch", "导入批次头表"));
+        checks.add(buildTableCheck("cost_calc_input_batch_item", "导入批次明细表"));
+        return checks;
+    }
+
+    /**
+     * 构建菜单校验项，帮助在目标环境快速确认 Flyway 菜单补丁是否生效。
+     */
+    private List<Map<String, Object>> buildMenuChecks()
+    {
+        List<Map<String, Object>> checks = new ArrayList<>();
+        checks.add(buildMenuCheck("/cost/task", "正式核算菜单"));
+        checks.add(buildMenuCheck("/cost/taskBatch", "导入批次菜单"));
+        checks.add(buildMenuCheck("/cost/result", "结果台账菜单"));
+        checks.add(buildMenuCheck("/cost/alert", "告警中心菜单"));
+        return checks;
+    }
+
+    /**
+     * 构建仍需人工执行的校验项，将最后两项上线阻塞清晰暴露给业务和测试。
+     */
+    private List<Map<String, Object>> buildManualChecks()
+    {
+        List<Map<String, Object>> checks = new ArrayList<>();
+        checks.add(buildCheckItem("MANUAL", "正式全链人工回归", CHECK_STATUS_PENDING,
+                "代码链路已具备，仍需按上线回归清单完成真实场景联调与证据沉淀。",
+                "按《正式核算上线回归清单》逐条执行，并回填执行结果与截图链接。"));
+        checks.add(buildCheckItem("MANUAL", "普通角色权限回归", CHECK_STATUS_PENDING,
+                "按钮和接口都已加权限控制，仍需用普通角色实测菜单与按钮可见性。",
+                "使用最小权限账号验证任务、告警、缓存刷新、分片重试等入口。"));
+        return checks;
+    }
+
+    /**
+     * 构建单个库表存在性校验。
+     */
+    private Map<String, Object> buildTableCheck(String tableName, String displayName)
+    {
+        Integer tableCount = jdbcTemplate.queryForObject(
+                "select count(1) from information_schema.tables where table_schema = (select database()) and table_name = ?",
+                Integer.class, tableName);
+        boolean exists = tableCount != null && tableCount > 0;
+        return buildCheckItem("TABLE", displayName, exists ? CHECK_STATUS_PASS : CHECK_STATUS_FAIL,
+                exists ? "目标库已存在表 `" + tableName + "`。" : "目标库缺少表 `" + tableName + "`。",
+                "执行 Flyway 后重新刷新本页，确认表结构已同步。");
+    }
+
+    /**
+     * 构建菜单存在性校验。
+     */
+    private Map<String, Object> buildMenuCheck(String menuPath, String displayName)
+    {
+        Integer menuCount = jdbcTemplate.queryForObject(
+                "select count(1) from sys_menu where path = ?",
+                Integer.class, menuPath);
+        boolean exists = menuCount != null && menuCount > 0;
+        return buildCheckItem("MENU", displayName, exists ? CHECK_STATUS_PASS : CHECK_STATUS_FAIL,
+                exists ? "系统菜单已存在路径 `" + menuPath + "`。" : "系统菜单缺少路径 `" + menuPath + "`。",
+                "执行菜单迁移并重新登录后台，确认菜单数据与权限同时生效。");
+    }
+
+    /**
+     * 查询最近一次已成功执行的 Flyway 记录，方便快速观察目标环境停留在哪个版本。
+     */
+    private Map<String, Object> safeLatestMigration()
+    {
+        try
+        {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                    "select version, description, installed_on from flyway_schema_history where success = 1 order by installed_rank desc limit 1");
+            if (rows.isEmpty())
+            {
+                return Collections.emptyMap();
+            }
+            Map<String, Object> row = rows.get(0);
+            LinkedHashMap<String, Object> latest = new LinkedHashMap<>();
+            latest.put("version", stringValue(row.get("version")));
+            latest.put("description", stringValue(row.get("description")));
+            latest.put("installedOn", row.get("installed_on"));
+            return latest;
+        }
+        catch (Exception ignored)
+        {
+            return Collections.emptyMap();
+        }
+    }
+
+    /**
+     * 构建统一校验项结构，前端可直接按状态渲染颜色与下一步动作。
+     */
+    private Map<String, Object> buildCheckItem(String category, String name, String status, String detail, String nextAction)
+    {
+        LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+        item.put("category", category);
+        item.put("name", name);
+        item.put("status", status);
+        item.put("detail", detail);
+        item.put("nextAction", nextAction);
+        return item;
     }
 
     private CostBillPeriod buildPeriodQuery(Long sceneId)

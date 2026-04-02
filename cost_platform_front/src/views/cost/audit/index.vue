@@ -17,6 +17,53 @@
       </div>
     </section>
 
+    <section class="audit-page__panel">
+      <div class="audit-page__section-head">
+        <div>
+          <h3>上线校验总览</h3>
+          <p>统一汇总 Flyway、关键库表、菜单补丁和仍待人工执行的上线前检查项。</p>
+        </div>
+        <el-tag :type="readinessSummary.ready ? 'success' : 'warning'">
+          {{ readinessSummary.ready ? '已满足上线校验' : '仍有阻塞或待人工项' }}
+        </el-tag>
+      </div>
+
+      <div class="audit-page__readiness-cards">
+        <div class="audit-page__readiness-card">
+          <span>通过项</span>
+          <strong>{{ readinessSummary.passCount }}</strong>
+          <small>系统已自动确认的校验项</small>
+        </div>
+        <div class="audit-page__readiness-card audit-page__readiness-card--danger">
+          <span>失败项</span>
+          <strong>{{ readinessSummary.failCount }}</strong>
+          <small>会直接阻塞上线的环境或数据问题</small>
+        </div>
+        <div class="audit-page__readiness-card audit-page__readiness-card--warning">
+          <span>待人工项</span>
+          <strong>{{ readinessSummary.pendingCount }}</strong>
+          <small>需要联调、角色回归或证据沉淀</small>
+        </div>
+        <div class="audit-page__readiness-card">
+          <span>最近迁移</span>
+          <strong>{{ latestMigration.version || '-' }}</strong>
+          <small>{{ latestMigration.description || '尚未读取到 Flyway 记录' }}</small>
+        </div>
+      </div>
+
+      <el-table :data="readinessChecks" size="small">
+        <el-table-column label="类别" prop="category" width="120" />
+        <el-table-column label="校验项" prop="name" min-width="220" />
+        <el-table-column label="状态" width="120" align="center">
+          <template #default="scope">
+            <el-tag :type="readinessTagType(scope.row.status)">{{ readinessStatusLabel(scope.row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="说明" prop="detail" min-width="280" show-overflow-tooltip />
+        <el-table-column label="下一步" prop="nextAction" min-width="260" show-overflow-tooltip />
+      </el-table>
+    </section>
+
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="88px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable style="width: 240px">
@@ -97,7 +144,7 @@
 </template>
 
 <script setup name="CostAudit">
-import { listAudit, getAuditStats } from '@/api/cost/governance'
+import { listAudit, getAuditStats, getGoLiveReadiness } from '@/api/cost/governance'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 
@@ -111,6 +158,9 @@ const sceneOptions = ref([])
 const detailOpen = ref(false)
 const detailData = ref(null)
 const stats = reactive({ auditCount: 0, sceneCount: 0, operatorCount: 0, todayCount: 0 })
+const readinessSummary = reactive({ ready: false, passCount: 0, failCount: 0, pendingCount: 0 })
+const readinessChecks = ref([])
+const latestMigration = reactive({ version: '', description: '' })
 
 const queryParams = reactive({
   pageNum: 1,
@@ -151,6 +201,22 @@ async function getList() {
   }
 }
 
+async function loadReadiness() {
+  const resp = await getGoLiveReadiness()
+  const data = resp?.data || {}
+  Object.assign(readinessSummary, {
+    ready: Boolean(data.summary?.ready),
+    passCount: data.summary?.passCount || 0,
+    failCount: data.summary?.failCount || 0,
+    pendingCount: data.summary?.pendingCount || 0
+  })
+  readinessChecks.value = data.checks || []
+  Object.assign(latestMigration, {
+    version: data.latestMigration?.version || '',
+    description: data.latestMigration?.description || ''
+  })
+}
+
 function handleQuery() {
   queryParams.pageNum = 1
   getList()
@@ -180,12 +246,34 @@ function formatJson(text) {
 }
 
 onMounted(() => {
+  loadReadiness()
   getList()
 })
 
 onActivated(() => {
+  loadReadiness()
   getList()
 })
+
+function readinessTagType(status) {
+  if (status === 'PASS') {
+    return 'success'
+  }
+  if (status === 'FAIL') {
+    return 'danger'
+  }
+  return 'warning'
+}
+
+function readinessStatusLabel(status) {
+  if (status === 'PASS') {
+    return '通过'
+  }
+  if (status === 'FAIL') {
+    return '失败'
+  }
+  return '待人工'
+}
 </script>
 
 <style lang="scss" scoped>
@@ -240,6 +328,13 @@ onActivated(() => {
     gap: 16px;
   }
 
+  &__readiness-cards {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
   &__metric-card {
     padding: 18px 22px;
     display: flex;
@@ -255,6 +350,34 @@ onActivated(() => {
     small {
       color: #7c8798;
     }
+  }
+
+  &__readiness-card {
+    padding: 18px 22px;
+    border-radius: 18px;
+    border: 1px solid #e7edf7;
+    background: linear-gradient(135deg, #f8fbff, #ffffff);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    strong {
+      color: #0f766e;
+      font-size: 24px;
+    }
+
+    span,
+    small {
+      color: #64748b;
+    }
+  }
+
+  &__readiness-card--danger strong {
+    color: #dc2626;
+  }
+
+  &__readiness-card--warning strong {
+    color: #d97706;
   }
 
   &__section-head {
@@ -309,6 +432,7 @@ onActivated(() => {
 
 @media (max-width: 1360px) {
   .audit-page {
+    &__readiness-cards,
     &__metrics,
     &__compare {
       grid-template-columns: 1fr;
