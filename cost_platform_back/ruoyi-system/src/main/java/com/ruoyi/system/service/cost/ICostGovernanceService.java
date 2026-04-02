@@ -58,6 +58,13 @@ public interface ICostGovernanceService
 
     int resolveAlarm(Long alarmId);
 
+    /**
+     * 查询正式核算上线准备度总览。
+     *
+     * @return 包含 Flyway、库表、菜单和人工回归待办的校验结果
+     */
+    Map<String, Object> selectGoLiveReadiness();
+
     Map<String, Object> selectRuntimeCacheStats(Long sceneId, Long versionId);
 
     int refreshRuntimeCache(Long sceneId, Long versionId);
