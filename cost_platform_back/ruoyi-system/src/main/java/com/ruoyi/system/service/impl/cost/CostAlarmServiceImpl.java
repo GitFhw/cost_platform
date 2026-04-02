@@ -13,6 +13,12 @@ import com.ruoyi.system.service.cost.ICostAlarmService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -81,6 +87,18 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     }
 
     @Override
+    public Map<String, Object> selectAlarmOverview(CostAlarmRecord query)
+    {
+        List<CostAlarmRecord> alarms = selectAlarmList(query);
+        LinkedHashMap<String, Object> overview = new LinkedHashMap<>();
+        overview.put("recentTrend", buildRecentTrend(alarms, 7));
+        overview.put("topAlarmTypes", buildTopAlarmTypes(alarms, 5));
+        overview.put("topTasks", buildTopTasks(alarms, 5));
+        overview.put("levelDistribution", buildLevelDistribution(alarms));
+        return overview;
+    }
+
+    @Override
     public int ackAlarm(Long alarmId)
     {
         requireAlarm(alarmId);
@@ -138,5 +156,99 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     private String firstNonBlank(String first, String second)
     {
         return StringUtils.isNotEmpty(first) ? first : second;
+    }
+
+    /**
+     * 构建最近 N 天告警趋势。
+     */
+    private List<Map<String, Object>> buildRecentTrend(List<CostAlarmRecord> alarms, int recentDays)
+    {
+        ZoneId zoneId = ZoneId.systemDefault();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        Map<LocalDate, List<CostAlarmRecord>> dayGroups = alarms.stream()
+                .filter(item -> item.getTriggerTime() != null)
+                .collect(Collectors.groupingBy(item -> item.getTriggerTime().toInstant().atZone(zoneId).toLocalDate()));
+        List<Map<String, Object>> trend = new ArrayList<>();
+        LocalDate end = LocalDate.now(zoneId);
+        LocalDate start = end.minusDays(Math.max(recentDays - 1L, 0L));
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1))
+        {
+            List<CostAlarmRecord> dayAlarms = dayGroups.getOrDefault(date, List.of());
+            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+            row.put("date", date.format(formatter));
+            row.put("count", dayAlarms.size());
+            row.put("openCount", dayAlarms.stream().filter(item -> ALARM_STATUS_OPEN.equals(item.getAlarmStatus())).count());
+            row.put("errorCount", dayAlarms.stream().filter(item -> "ERROR".equals(item.getAlarmLevel())).count());
+            trend.add(row);
+        }
+        return trend;
+    }
+
+    /**
+     * 构建高频告警类型排行。
+     */
+    private List<Map<String, Object>> buildTopAlarmTypes(List<CostAlarmRecord> alarms, int limit)
+    {
+        return alarms.stream()
+                .collect(Collectors.groupingBy(item -> firstNonBlank(item.getAlarmType(), "UNKNOWN"), Collectors.toList()))
+                .entrySet()
+                .stream()
+                .map(entry -> {
+                    List<CostAlarmRecord> grouped = entry.getValue();
+                    LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+                    row.put("alarmType", entry.getKey());
+                    row.put("count", grouped.size());
+                    row.put("openCount", grouped.stream().filter(item -> ALARM_STATUS_OPEN.equals(item.getAlarmStatus())).count());
+                    row.put("latestTime", grouped.stream().map(CostAlarmRecord::getTriggerTime).filter(Objects::nonNull).max(Date::compareTo).orElse(null));
+                    return row;
+                })
+                .sorted(Comparator.<Map<String, Object>, Integer>comparing(item -> ((Number) item.get("count")).intValue()).reversed())
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 构建任务热点排行，便于定位异常集中任务。
+     */
+    private List<Map<String, Object>> buildTopTasks(List<CostAlarmRecord> alarms, int limit)
+    {
+        return alarms.stream()
+                .filter(item -> item.getTaskId() != null)
+                .collect(Collectors.groupingBy(CostAlarmRecord::getTaskId, Collectors.toList()))
+                .entrySet()
+                .stream()
+                .map(entry -> {
+                    List<CostAlarmRecord> grouped = entry.getValue();
+                    LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+                    row.put("taskId", entry.getKey());
+                    row.put("sceneName", grouped.stream().map(CostAlarmRecord::getSceneName).filter(StringUtils::isNotEmpty).findFirst().orElse("-"));
+                    row.put("billMonth", grouped.stream().map(CostAlarmRecord::getBillMonth).filter(StringUtils::isNotEmpty).findFirst().orElse("-"));
+                    row.put("count", grouped.size());
+                    row.put("openCount", grouped.stream().filter(item -> ALARM_STATUS_OPEN.equals(item.getAlarmStatus())).count());
+                    row.put("latestTitle", grouped.stream().map(CostAlarmRecord::getAlarmTitle).filter(StringUtils::isNotEmpty).findFirst().orElse("-"));
+                    return row;
+                })
+                .sorted(Comparator.<Map<String, Object>, Integer>comparing(item -> ((Number) item.get("count")).intValue()).reversed())
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 构建告警等级分布。
+     */
+    private List<Map<String, Object>> buildLevelDistribution(List<CostAlarmRecord> alarms)
+    {
+        return alarms.stream()
+                .collect(Collectors.groupingBy(item -> firstNonBlank(item.getAlarmLevel(), "WARN"), Collectors.counting()))
+                .entrySet()
+                .stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .map(entry -> {
+                    LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+                    row.put("alarmLevel", entry.getKey());
+                    row.put("count", entry.getValue());
+                    return row;
+                })
+                .collect(Collectors.toList());
     }
 }

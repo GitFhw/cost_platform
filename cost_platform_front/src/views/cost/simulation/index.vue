@@ -4,7 +4,7 @@
       <div>
         <div class="run-page__eyebrow">试算验证</div>
         <h2 class="run-page__title">试算中心</h2>
-        <p class="run-page__subtitle">按已发布快照执行单笔试算，输出变量值、命中规则、费用结果和解释时间线，不污染正式核算结果台账。</p>
+        <p class="run-page__subtitle">按已发布快照执行单笔或批量试算，输出变量值、命中规则、费用结果和解释时间线，不污染正式核算结果台账。</p>
       </div>
       <el-tag type="success">输入模板会按当前场景发布快照自动生成，优先复用最近一次所选场景</el-tag>
     </section>
@@ -50,6 +50,12 @@
         </div>
 
         <el-form :model="form" label-width="92px">
+          <el-form-item label="执行模式">
+            <el-radio-group v-model="form.executeMode" @change="handleExecuteModeChange">
+              <el-radio value="SINGLE">单笔试算</el-radio>
+              <el-radio value="BATCH">批量试算</el-radio>
+            </el-radio-group>
+          </el-form-item>
           <el-form-item label="试算场景" required>
             <el-select v-model="form.sceneId" filterable style="width: 100%" @change="handleFormSceneChange">
               <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
@@ -66,11 +72,18 @@
         </el-form>
 
         <div class="run-page__action-row">
-          <el-button type="primary" icon="Promotion" @click="handleExecute" v-hasPermi="['cost:simulation:execute']">执行试算</el-button>
+          <el-button type="primary" icon="Promotion" @click="handleExecute" v-hasPermi="['cost:simulation:execute']">{{ form.executeMode === 'BATCH' ? '执行批量试算' : '执行试算' }}</el-button>
           <el-button icon="RefreshLeft" @click="fillExample">按配置生成模板</el-button>
         </div>
 
         <el-alert v-if="templateMessage" :title="templateMessage" type="info" :closable="false" class="run-page__template-alert" />
+        <el-alert
+          v-if="batchResult.totalCount"
+          :title="`本次批量试算共 ${batchResult.totalCount} 条，成功 ${batchResult.successCount} 条，失败 ${batchResult.failedCount} 条`"
+          :type="batchResult.failedCount ? 'warning' : 'success'"
+          :closable="false"
+          class="run-page__template-alert"
+        />
         <el-table v-if="templateFields.length" :data="templateFields" size="small" border class="run-page__template-table">
           <el-table-column label="输入路径" prop="path" min-width="180" />
           <el-table-column label="变量" min-width="180">
@@ -140,13 +153,38 @@
         </el-tab-pane>
       </el-tabs>
     </el-drawer>
+
+    <el-dialog v-model="batchOpen" title="批量试算结果" width="1100px" append-to-body>
+      <el-table :data="batchResult.records || []" size="small">
+        <el-table-column label="试算编号" prop="simulationNo" min-width="180" />
+        <el-table-column label="状态" width="100" align="center">
+          <template #default="scope">
+            <dict-tag :options="simulationStatusOptions" :value="scope.row.status" />
+          </template>
+        </el-table-column>
+        <el-table-column label="输入摘要" min-width="320">
+          <template #default="scope">{{ summarizeBatchJson(scope.row.input) }}</template>
+        </el-table-column>
+        <el-table-column label="结果摘要" min-width="240">
+          <template #default="scope">{{ summarizeBatchJson(scope.row.result) }}</template>
+        </el-table-column>
+        <el-table-column label="异常信息" min-width="220" :show-overflow-tooltip="true">
+          <template #default="scope">{{ scope.row.errorMessage || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="100" fixed="right" align="center">
+          <template #default="scope">
+            <el-button link type="primary" icon="View" @click="handleBatchDetail(scope.row)">详情</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="CostSimulation">
-import { executeSimulation, getRunInputTemplate, getSimulationDetail, getSimulationStats, listSimulation, listVersionOptions } from '@/api/cost/run'
+import { executeSimulation, executeSimulationBatch, getRunInputTemplate, getSimulationDetail, getSimulationStats, listSimulation, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
-import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -163,6 +201,8 @@ const simulationStatusOptions = ref([])
 const templateFields = ref([])
 const templateMessage = ref('')
 const detailOpen = ref(false)
+const batchOpen = ref(false)
+const batchResult = ref({})
 const detailData = ref({})
 const stats = reactive({ simulationCount: 0, successCount: 0, failedCount: 0, sceneCount: 0 })
 
@@ -175,6 +215,7 @@ const queryParams = reactive({
 })
 
 const form = reactive({
+  executeMode: 'SINGLE',
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
   versionId: undefined,
   inputJson: ''
@@ -194,18 +235,9 @@ async function loadBaseOptions() {
   ])
   simulationStatusOptions.value = dictMap.cost_simulation_status || []
   sceneOptions.value = sceneResp?.data || []
-  const preferredSceneId = resolvePreferredCostSceneId(
-    sceneOptions.value,
-    form.sceneId,
-    queryParams.sceneId,
-    route.query.sceneId,
-    getCostSceneContextId()
-  )
-  if (preferredSceneId) {
-    queryParams.sceneId = preferredSceneId
-    form.sceneId = preferredSceneId
-    setCostSceneContextId(preferredSceneId)
-  }
+  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.sceneId = preferredSceneId
+  form.sceneId = preferredSceneId
 }
 
 async function loadVersionOptions(sceneId, target) {
@@ -257,21 +289,22 @@ function resetQuery() {
 }
 
 async function handleQuerySceneChange(sceneId) {
+  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
   queryParams.versionId = undefined
-  queryParams.sceneId = sceneId
-  form.sceneId = sceneId
-  setCostSceneContextId(sceneId)
-  await loadVersionOptions(sceneId, versionOptions)
-  await loadVersionOptions(sceneId, formVersionOptions)
+  queryParams.sceneId = workingSceneId
+  form.sceneId = workingSceneId
+  await loadVersionOptions(workingSceneId, versionOptions)
+  await loadVersionOptions(workingSceneId, formVersionOptions)
   await fillExample()
 }
 
 async function handleFormSceneChange(sceneId) {
+  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
   form.versionId = undefined
-  queryParams.sceneId = sceneId
-  setCostSceneContextId(sceneId)
-  await loadVersionOptions(sceneId, formVersionOptions)
-  await loadVersionOptions(sceneId, versionOptions)
+  queryParams.sceneId = workingSceneId
+  form.sceneId = workingSceneId
+  await loadVersionOptions(workingSceneId, formVersionOptions)
+  await loadVersionOptions(workingSceneId, versionOptions)
   await fillExample()
 }
 
@@ -284,7 +317,7 @@ async function fillExample() {
   const response = await getRunInputTemplate({
     sceneId: form.sceneId,
     versionId: form.versionId,
-    taskType: 'SIMULATION'
+    taskType: form.executeMode === 'BATCH' ? 'SIMULATION_BATCH' : 'SIMULATION'
   })
   form.inputJson = response?.data?.inputJson || '{}'
   templateFields.value = response?.data?.fields?.filter(item => item.includedInTemplate) || []
@@ -296,10 +329,25 @@ async function handleExecute() {
     proxy.$modal.msgWarning('请选择试算场景并填写输入 JSON')
     return
   }
-  const resp = await executeSimulation({ ...form })
-  proxy.$modal.msgSuccess('试算执行完成')
-  detailData.value = resp.data || {}
-  detailOpen.value = true
+  if (form.executeMode === 'BATCH') {
+    const resp = await executeSimulationBatch({
+      sceneId: form.sceneId,
+      versionId: form.versionId,
+      inputJson: form.inputJson
+    })
+    batchResult.value = resp.data || {}
+    batchOpen.value = true
+    proxy.$modal.msgSuccess('批量试算执行完成')
+  } else {
+    const resp = await executeSimulation({
+      sceneId: form.sceneId,
+      versionId: form.versionId,
+      inputJson: form.inputJson
+    })
+    proxy.$modal.msgSuccess('试算执行完成')
+    detailData.value = resp.data || {}
+    detailOpen.value = true
+  }
   getList()
 }
 
@@ -307,6 +355,16 @@ async function handleDetail(row) {
   const resp = await getSimulationDetail(row.simulationId)
   detailData.value = resp.data || {}
   detailOpen.value = true
+}
+
+async function handleBatchDetail(row) {
+  batchOpen.value = false
+  await handleDetail(row)
+}
+
+async function handleExecuteModeChange() {
+  batchResult.value = {}
+  await fillExample()
 }
 
 function resolveSimulationStatus(value) {
@@ -317,7 +375,17 @@ function formatJson(value) {
   return JSON.stringify(value || {}, null, 2)
 }
 
+function summarizeBatchJson(value) {
+  const text = JSON.stringify(value || {})
+  return text.length > 120 ? `${text.slice(0, 120)}...` : text
+}
+
 onMounted(async () => {
+  await getList()
+  await fillExample()
+})
+
+onActivated(async () => {
   await getList()
   await fillExample()
 })

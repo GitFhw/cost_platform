@@ -46,6 +46,14 @@ public interface ICostGovernanceService
 
     Map<String, Object> selectAlarmStats(CostAlarmRecord query);
 
+    /**
+     * 查询告警中心运营概览。
+     *
+     * @param query 告警过滤条件
+     * @return 趋势、热点与类型聚合结果
+     */
+    Map<String, Object> selectAlarmOverview(CostAlarmRecord query);
+
     int ackAlarm(Long alarmId);
 
     int resolveAlarm(Long alarmId);

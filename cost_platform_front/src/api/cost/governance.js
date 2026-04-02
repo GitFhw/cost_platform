@@ -100,6 +100,14 @@ export function getAlarmStats(query) {
   })
 }
 
+export function getAlarmOverview(query) {
+  return request({
+    url: '/cost/governance/alarm/overview',
+    method: 'get',
+    params: query
+  })
+}
+
 export function listAlarm(query) {
   return request({
     url: '/cost/governance/alarm/list',

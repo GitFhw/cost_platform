@@ -33,6 +33,9 @@
       <el-form-item label="账期" prop="billMonth">
         <el-input v-model="queryParams.billMonth" clearable placeholder="yyyy-MM" style="width: 160px" />
       </el-form-item>
+      <el-form-item label="任务ID" prop="taskId">
+        <el-input v-model="queryParams.taskId" clearable style="width: 140px" />
+      </el-form-item>
       <el-form-item label="任务号" prop="taskNo">
         <el-input v-model="queryParams.taskNo" clearable style="width: 200px" />
       </el-form-item>
@@ -61,6 +64,14 @@
         </div>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
       </div>
+
+      <el-alert
+        v-if="routeContext.taskId"
+        class="result-page__context"
+        type="info"
+        :closable="false"
+        :title="`当前正在查看任务 ${routeContext.taskId} 的结果台账，已自动带入场景与账期过滤。`"
+      />
 
       <el-table v-loading="loading" :data="resultList">
         <el-table-column label="任务号" prop="taskNo" width="220" />
@@ -147,11 +158,12 @@
 <script setup name="CostResult">
 import { getResultDetail, getResultStats, getTraceDetail, listResult, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
-import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
+const router = useRouter()
 const { proxy } = getCurrentInstance()
 
 const loading = ref(false)
@@ -167,13 +179,18 @@ const traceOpen = ref(false)
 const detailData = ref({})
 const traceData = ref({})
 const stats = reactive({ resultCount: 0, taskCount: 0, traceCount: 0, amountTotal: 0 })
+const routeContext = reactive({
+  taskId: route.query.taskId ? Number(route.query.taskId) : undefined
+})
+const lastOpenedRouteResultKey = ref('')
 
 const queryParams = reactive({
   pageNum: 1,
   pageSize: 10,
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
   versionId: undefined,
-  billMonth: '',
+  billMonth: route.query.billMonth || '',
+  taskId: route.query.taskId ? Number(route.query.taskId) : undefined,
   taskNo: '',
   feeCode: '',
   bizNo: '',
@@ -195,16 +212,7 @@ async function loadBaseOptions() {
   resultStatusOptions.value = dictMap.cost_result_status || []
   unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResp?.data || []
-  const preferredSceneId = resolvePreferredCostSceneId(
-    sceneOptions.value,
-    queryParams.sceneId,
-    route.query.sceneId,
-    getCostSceneContextId()
-  )
-  if (preferredSceneId) {
-    queryParams.sceneId = preferredSceneId
-    setCostSceneContextId(preferredSceneId)
-  }
+  queryParams.sceneId = route.query.sceneId ? Number(route.query.sceneId) : resolveWorkingCostSceneId(sceneOptions.value)
 }
 
 async function loadVersionOptions(sceneId) {
@@ -235,7 +243,6 @@ async function getList() {
 
 function handleQuery() {
   queryParams.pageNum = 1
-  setCostSceneContextId(queryParams.sceneId)
   getList()
 }
 
@@ -243,14 +250,17 @@ function resetQuery() {
   proxy.resetForm('queryRef')
   queryParams.pageNum = 1
   queryParams.pageSize = 10
+  queryParams.taskId = routeContext.taskId
+  queryParams.sceneId = route.query.sceneId ? Number(route.query.sceneId) : queryParams.sceneId
+  queryParams.billMonth = route.query.billMonth || ''
   versionOptions.value = []
   getList()
 }
 
 async function handleSceneChange(sceneId) {
+  queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
   queryParams.versionId = undefined
-  setCostSceneContextId(sceneId)
-  await loadVersionOptions(sceneId)
+  await loadVersionOptions(queryParams.sceneId)
 }
 
 async function handleDetail(row) {
@@ -263,6 +273,14 @@ async function handleTrace(row) {
   const resp = await getTraceDetail(row.traceId)
   traceData.value = resp.data || {}
   traceOpen.value = true
+}
+
+async function openFirstResultByRouteContext() {
+  if (!routeContext.taskId || !resultList.value.length) return
+  const currentKey = `${routeContext.taskId}:${resultList.value[0].resultId}`
+  if (lastOpenedRouteResultKey.value === currentKey) return
+  await handleDetail(resultList.value[0])
+  lastOpenedRouteResultKey.value = currentKey
 }
 
 function resolveUnitLabel(unitCode) {
@@ -293,7 +311,26 @@ function formatJson(value) {
   return JSON.stringify(value || {}, null, 2)
 }
 
-getList()
+watch(
+  () => route.query,
+  value => {
+    routeContext.taskId = value.taskId ? Number(value.taskId) : undefined
+    queryParams.taskId = routeContext.taskId
+    queryParams.sceneId = value.sceneId ? Number(value.sceneId) : queryParams.sceneId
+    queryParams.billMonth = value.billMonth || queryParams.billMonth
+  },
+  { deep: true }
+)
+
+onMounted(async () => {
+  await getList()
+  await openFirstResultByRouteContext()
+})
+
+onActivated(async () => {
+  await getList()
+  await openFirstResultByRouteContext()
+})
 </script>
 
 <style scoped lang="scss">

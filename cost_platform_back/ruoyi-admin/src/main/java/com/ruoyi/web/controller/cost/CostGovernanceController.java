@@ -144,6 +144,13 @@ public class CostGovernanceController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('cost:alarm:list')")
+    @GetMapping("/alarm/overview")
+    public AjaxResult alarmOverview(CostAlarmRecord query)
+    {
+        return success(governanceService.selectAlarmOverview(query));
+    }
+
+    @PreAuthorize("@ss.hasPermi('cost:alarm:list')")
     @GetMapping("/alarm/list")
     public TableDataInfo alarmList(CostAlarmRecord query)
     {

@@ -335,6 +335,12 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     }
 
     @Override
+    public Map<String, Object> selectAlarmOverview(CostAlarmRecord query)
+    {
+        return alarmService.selectAlarmOverview(query);
+    }
+
+    @Override
     public int ackAlarm(Long alarmId)
     {
         return alarmService.ackAlarm(alarmId);

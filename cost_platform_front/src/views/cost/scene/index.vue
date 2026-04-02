@@ -680,8 +680,6 @@ function handleOpenBusinessDomain() {
 }
 
 function handleOpenPublishCenter(row) {
-  setCostSceneContextId(row.sceneId)
-  currentSceneInfo.value = row
   router.push({
     path: '/cost/publish',
     query: {
@@ -706,8 +704,6 @@ async function handleGovernance(row) {
   governanceLoading.value = true
   governanceOpen.value = true
   try {
-    setCostSceneContextId(row.sceneId)
-    currentSceneInfo.value = row
     governanceInfo.value = await fetchSceneGovernance(row.sceneId)
   } finally {
     governanceLoading.value = false

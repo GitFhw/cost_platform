@@ -390,7 +390,7 @@ import {
   updateVariable
 } from '@/api/cost/variable'
 import { optionselectVariableGroup } from '@/api/cost/variableGroup'
-import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
@@ -495,19 +495,9 @@ async function loadBaseOptions() {
   fallbackPolicyOptions.value = dictMap.cost_variable_fallback_policy || []
   sceneOptions.value = sceneResponse?.data || []
   templateList.value = templateResponse?.data || []
-  const preferredSceneId = resolvePreferredCostSceneId(
-    sceneOptions.value,
-    form.value.sceneId,
-    queryParams.value.sceneId,
-    templateForm.value.sceneId,
-    copyForm.value.targetSceneId,
-    getCostSceneContextId()
-  )
-  if (preferredSceneId) {
-    queryParams.value.sceneId = queryParams.value.sceneId || preferredSceneId
-    templateForm.value.sceneId = templateForm.value.sceneId || preferredSceneId
-    setCostSceneContextId(preferredSceneId)
-  }
+  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.value.sceneId = preferredSceneId
+  templateForm.value.sceneId = preferredSceneId
 }
 
 async function loadGroups(sceneId) {
@@ -519,7 +509,8 @@ async function loadGroups(sceneId) {
 async function getList() {
   loading.value = true
   try {
-    const [, rows, statsResponse] = await Promise.all([loadBaseOptions(), listVariable(queryParams.value), getVariableStats(queryParams.value)])
+    await loadBaseOptions()
+    const [rows, statsResponse] = await Promise.all([listVariable(queryParams.value), getVariableStats(queryParams.value)])
     variableList.value = rows.rows
     total.value = rows.total
     groupOptions.value = await loadGroups(queryParams.value.sceneId)
@@ -535,7 +526,7 @@ async function getList() {
 }
 
 async function handleSceneChange(sceneId = queryParams.value.sceneId) {
-  setCostSceneContextId(sceneId)
+  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
   queryParams.value.groupId = undefined
   groupOptions.value = await loadGroups(queryParams.value.sceneId)
 }
@@ -618,9 +609,6 @@ function handleSelectionChange(selection) {
 
 function handleQuery() {
   queryParams.value.pageNum = 1
-  if (queryParams.value.sceneId) {
-    setCostSceneContextId(queryParams.value.sceneId)
-  }
   getList()
 }
 
@@ -635,9 +623,8 @@ function resetQuery() {
 async function handleAdd() {
   await loadBaseOptions()
   resetFormModel()
-  form.value.sceneId = queryParams.value.sceneId || resolvePreferredCostSceneId(sceneOptions.value, getCostSceneContextId())
+  form.value.sceneId = queryParams.value.sceneId || resolveWorkingCostSceneId(sceneOptions.value)
   if (form.value.sceneId) {
-    setCostSceneContextId(form.value.sceneId)
     await loadFormGroups()
   }
   open.value = true
@@ -650,7 +637,6 @@ async function handleUpdate(row) {
   const response = await getVariable(row?.variableId || ids.value[0])
   form.value = { ...response.data }
   initialStatus.value = response.data?.status
-  setCostSceneContextId(form.value.sceneId)
   formGroupOptions.value = await loadGroups(form.value.sceneId)
   await loadFormulaOptions(form.value.sceneId)
   open.value = true
@@ -847,13 +833,10 @@ function submitCopy() {
 
 async function handleTemplateCenter() {
   await loadBaseOptions()
-  templateForm.value.sceneId = queryParams.value.sceneId || resolvePreferredCostSceneId(sceneOptions.value, getCostSceneContextId())
+  templateForm.value.sceneId = queryParams.value.sceneId || resolveWorkingCostSceneId(sceneOptions.value)
   templateForm.value.groupId = queryParams.value.groupId
   templateForm.value.templateCode = templateList.value[0]?.templateCode
   templateForm.value.updateSupport = false
-  if (templateForm.value.sceneId) {
-    setCostSceneContextId(templateForm.value.sceneId)
-  }
   templateGroupOptions.value = await loadGroups(templateForm.value.sceneId)
   templateOpen.value = true
 }
@@ -879,6 +862,10 @@ function formatJson(value) {
     return value
   }
 }
+
+onActivated(() => {
+  getList()
+})
 
 getList()
 </script>

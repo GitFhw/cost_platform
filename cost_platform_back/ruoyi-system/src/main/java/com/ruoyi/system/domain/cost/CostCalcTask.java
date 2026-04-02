@@ -92,6 +92,14 @@ public class CostCalcTask extends BaseEntity
     @TableField("execute_node")
     private String executeNode;
 
+    /** 输入来源类型 */
+    @TableField("input_source_type")
+    private String inputSourceType;
+
+    /** 来源批次号 */
+    @TableField("source_batch_no")
+    private String sourceBatchNo;
+
     /** 失败摘要 */
     @TableField("error_message")
     private String errorMessage;

@@ -24,6 +24,14 @@ export function executeSimulation(data) {
   })
 }
 
+export function executeSimulationBatch(data) {
+  return request({
+    url: '/cost/run/simulation/batch-execute',
+    method: 'post',
+    data
+  })
+}
+
 export function getSimulationDetail(simulationId) {
   return request({
     url: '/cost/run/simulation/' + simulationId,
@@ -34,6 +42,14 @@ export function getSimulationDetail(simulationId) {
 export function getTaskStats(query) {
   return request({
     url: '/cost/run/task/stats',
+    method: 'get',
+    params: query
+  })
+}
+
+export function getTaskOverview(query) {
+  return request({
+    url: '/cost/run/task/overview',
     method: 'get',
     params: query
   })
@@ -55,6 +71,29 @@ export function submitTask(data) {
   })
 }
 
+export function createTaskInputBatch(data) {
+  return request({
+    url: '/cost/run/task/input-batch',
+    method: 'post',
+    data
+  })
+}
+
+export function listTaskInputBatch(query) {
+  return request({
+    url: '/cost/run/task/input-batch/list',
+    method: 'get',
+    params: query
+  })
+}
+
+export function getTaskInputBatchDetail(batchId) {
+  return request({
+    url: '/cost/run/task/input-batch/' + batchId,
+    method: 'get'
+  })
+}
+
 export function getTaskDetail(taskId) {
   return request({
     url: '/cost/run/task/' + taskId,
@@ -65,6 +104,13 @@ export function getTaskDetail(taskId) {
 export function retryTaskDetail(detailId) {
   return request({
     url: '/cost/run/task/retry/' + detailId,
+    method: 'put'
+  })
+}
+
+export function retryTaskPartition(partitionId) {
+  return request({
+    url: '/cost/run/task/partition/retry/' + partitionId,
     method: 'put'
   })
 }
