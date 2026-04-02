@@ -7,6 +7,7 @@ import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostFormula;
+import com.ruoyi.system.domain.cost.CostFormulaVersion;
 import com.ruoyi.system.domain.cost.bo.CostFormulaTestBo;
 import com.ruoyi.system.service.cost.ICostFormulaService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -79,6 +80,16 @@ public class CostFormulaController extends BaseController
     }
 
     /**
+     * 查询模板库选择框。
+     */
+    @PreAuthorize("@ss.hasPermi('cost:formula:list')")
+    @GetMapping("/templateOptions")
+    public AjaxResult templateOptions(CostFormula formula)
+    {
+        return success(formulaService.selectTemplateOptions(formula));
+    }
+
+    /**
      * 导出公式列表。
      */
     @Log(title = "公式实验室", businessType = BusinessType.EXPORT)
@@ -99,6 +110,27 @@ public class CostFormulaController extends BaseController
     public AjaxResult getInfo(@PathVariable Long formulaId)
     {
         return success(formulaService.selectFormulaById(formulaId));
+    }
+
+    /**
+     * 查询公式版本台账。
+     */
+    @PreAuthorize("@ss.hasPermi('cost:formula:query')")
+    @GetMapping("/versions/{formulaId}")
+    public AjaxResult versions(@PathVariable Long formulaId)
+    {
+        List<CostFormulaVersion> list = formulaService.selectFormulaVersionList(formulaId);
+        return success(list);
+    }
+
+    /**
+     * 查询公式版本详情。
+     */
+    @PreAuthorize("@ss.hasPermi('cost:formula:query')")
+    @GetMapping("/version/{versionId}")
+    public AjaxResult version(@PathVariable Long versionId)
+    {
+        return success(formulaService.selectFormulaVersionDetail(versionId));
     }
 
     /**

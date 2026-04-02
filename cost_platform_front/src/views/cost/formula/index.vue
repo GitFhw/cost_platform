@@ -46,6 +46,11 @@
           <el-option v-for="item in returnTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
+      <el-form-item label="资产类型" prop="assetType">
+        <el-select v-model="queryParams.assetType" clearable placeholder="请选择资产类型" style="width: 160px">
+          <el-option v-for="item in assetTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </el-form-item>
       <el-form-item>
         <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
         <el-button icon="Refresh" @click="resetQuery">重置</el-button>
@@ -81,6 +86,11 @@
                 <el-select v-model="form.returnType" style="width: 100%">
                   <el-option v-for="item in returnTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
                 </el-select>
+              </el-form-item>
+              <el-form-item label="资产类型" prop="assetType">
+                <el-radio-group v-model="form.assetType">
+                  <el-radio-button v-for="item in assetTypeOptions" :key="item.value" :value="item.value">{{ item.label }}</el-radio-button>
+                </el-radio-group>
               </el-form-item>
               <el-form-item label="命名空间"><el-input v-model="form.namespaceScope" /></el-form-item>
               <el-form-item label="状态" prop="status">
@@ -225,6 +235,16 @@
           </div>
         </div>
         <div class="formula-lab__tool-section">
+          <div class="formula-lab__tool-title">模板库</div>
+          <div v-if="templateOptionList.length" class="formula-lab__list">
+            <button v-for="item in templateOptionList" :key="item.formulaId" type="button" class="formula-lab__list-item" @click="applyStoredTemplate(item)">
+              <strong>{{ item.formulaName }}</strong>
+              <span>{{ item.formulaCode }} · V{{ item.currentVersionNo || 1 }}</span>
+            </button>
+          </div>
+          <el-empty v-else :image-size="72" description="当前场景还没有沉淀模板资产，可先把常用公式保存为模板。" />
+        </div>
+        <div class="formula-lab__tool-section">
           <div class="formula-lab__tool-title">场景变量</div>
           <div v-if="variableOptions.length" class="formula-lab__list">
             <button v-for="item in variableOptions" :key="item.variableCode" type="button" class="formula-lab__list-item" @click="appendExpertToken(`V.${item.variableCode}`)">
@@ -268,13 +288,22 @@
         <el-table-column label="场景" min-width="200"><template #default="scope">{{ scope.row.sceneCode }} / {{ scope.row.sceneName }}</template></el-table-column>
         <el-table-column label="公式编码" prop="formulaCode" width="180" />
         <el-table-column label="公式名称" prop="formulaName" min-width="180" />
+        <el-table-column label="资产类型" width="110">
+          <template #default="scope">
+            <el-tag :type="scope.row.assetType === 'TEMPLATE' ? 'warning' : 'primary'">{{ resolveAssetTypeLabel(scope.row.assetType) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="当前版本" width="100" align="center">
+          <template #default="scope">V{{ scope.row.currentVersionNo || 1 }}</template>
+        </el-table-column>
         <el-table-column label="返回类型" width="120"><template #default="scope"><dict-tag :options="returnTypeOptions" :value="scope.row.returnType" /></template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="scope"><dict-tag :options="statusOptions" :value="scope.row.status" /></template></el-table-column>
         <el-table-column label="变量引用" prop="variableRefCount" width="100" align="center" />
         <el-table-column label="规则引用" prop="ruleRefCount" width="100" align="center" />
-        <el-table-column label="操作" width="280" fixed="right" align="center">
+        <el-table-column label="操作" width="340" fixed="right" align="center">
           <template #default="scope">
             <el-button link type="primary" icon="Edit" @click="handleEdit(scope.row)">装载编辑</el-button>
+            <el-button link type="primary" icon="Collection" @click="handleOpenVersions(scope.row)">版本</el-button>
             <el-button link type="primary" icon="View" @click="handleGovernance(scope.row)">治理</el-button>
             <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['cost:formula:remove']">删除</el-button>
           </template>
@@ -296,12 +325,57 @@
         <el-alert class="mt12" :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason || '当前公式未进入任何发布快照，可以停用。'" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon />
       </div>
     </el-drawer>
+
+    <el-drawer v-model="versionOpen" title="公式版本台账" size="760px" append-to-body>
+      <div class="formula-lab__drawer-head">
+        <div>
+          <strong>{{ versionFormulaTitle || '请选择公式查看版本' }}</strong>
+          <p>历史版本用于回看公式演进，也可一键装载到上方工作台继续维护。</p>
+        </div>
+      </div>
+      <el-table :data="versionList" v-loading="versionLoading">
+        <el-table-column label="版本号" width="90" align="center">
+          <template #default="scope">V{{ scope.row.versionNo }}</template>
+        </el-table-column>
+        <el-table-column label="变更类型" width="110" align="center">
+          <template #default="scope">
+            <el-tag :type="scope.row.changeType === 'CREATE' ? 'success' : 'info'">{{ scope.row.changeType === 'CREATE' ? '创建' : '更新' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="资产类型" width="110" align="center">
+          <template #default="scope">
+            <el-tag :type="scope.row.assetType === 'TEMPLATE' ? 'warning' : 'primary'">{{ resolveAssetTypeLabel(scope.row.assetType) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="业务公式" prop="businessFormula" min-width="220" show-overflow-tooltip />
+        <el-table-column label="保存人" prop="createBy" width="120" />
+        <el-table-column label="保存时间" prop="createTime" width="180" />
+        <el-table-column label="操作" width="120" align="center">
+          <template #default="scope">
+            <el-button link type="primary" icon="RefreshRight" @click="handleLoadVersion(scope.row)">装载此版</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-drawer>
   </div>
 </template>
 
 <script setup name="CostFormula">
 import { ElMessageBox } from 'element-plus'
-import { addFormula, delFormula, getFormula, getFormulaGovernance, getFormulaStats, listFormula, optionselectFormula, testFormula, updateFormula } from '@/api/cost/formula'
+import {
+  addFormula,
+  delFormula,
+  getFormula,
+  getFormulaGovernance,
+  getFormulaStats,
+  getFormulaVersion,
+  listFormula,
+  listFormulaTemplates,
+  listFormulaVersions,
+  optionselectFormula,
+  testFormula,
+  updateFormula
+} from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
@@ -315,12 +389,17 @@ const total = ref(0)
 const sceneOptions = ref([])
 const variableOptions = ref([])
 const formulaOptionList = ref([])
+const templateOptionList = ref([])
 const businessDomainOptions = ref([])
 const statusOptions = ref([])
 const returnTypeOptions = ref([])
 const ids = ref([])
 const governanceOpen = ref(false)
 const governanceInfo = ref({})
+const versionOpen = ref(false)
+const versionLoading = ref(false)
+const versionList = ref([])
+const versionFormulaTitle = ref('')
 const formulaList = ref([])
 const testInputJson = ref('')
 const testResult = ref(undefined)
@@ -340,7 +419,8 @@ const queryParams = reactive({
   formulaCode: undefined,
   formulaName: undefined,
   status: undefined,
-  returnType: undefined
+  returnType: undefined,
+  assetType: undefined
 })
 
 const form = reactive({
@@ -351,6 +431,7 @@ const form = reactive({
   formulaDesc: undefined,
   businessFormula: undefined,
   formulaExpr: undefined,
+  assetType: 'FORMULA',
   workbenchMode: 'GUIDED',
   workbenchPattern: 'IF_ELSE',
   templateCode: undefined,
@@ -376,11 +457,17 @@ const workbench = reactive({
   defaultResultValue: ''
 })
 
+const assetTypeOptions = [
+  { label: '公式资产', value: 'FORMULA' },
+  { label: '模板资产', value: 'TEMPLATE' }
+]
+
 const rules = {
   sceneId: [{ required: true, message: '所属场景不能为空', trigger: 'change' }],
   formulaCode: [{ required: true, message: '公式编码不能为空', trigger: 'blur' }],
   formulaName: [{ required: true, message: '公式名称不能为空', trigger: 'blur' }],
   status: [{ required: true, message: '状态不能为空', trigger: 'change' }],
+  assetType: [{ required: true, message: '资产类型不能为空', trigger: 'change' }],
   returnType: [{ required: true, message: '返回类型不能为空', trigger: 'change' }]
 }
 
@@ -506,14 +593,17 @@ async function loadSceneAssets(sceneId) {
   if (!sceneId) {
     variableOptions.value = []
     formulaOptionList.value = []
+    templateOptionList.value = []
     return
   }
-  const [variableResponse, formulaResponse] = await Promise.all([
+  const [variableResponse, formulaResponse, templateResponse] = await Promise.all([
     optionselectVariable({ sceneId, status: '0', pageNum: 1, pageSize: 1000 }),
-    optionselectFormula({ sceneId, status: '0', pageNum: 1, pageSize: 1000 })
+    optionselectFormula({ sceneId, status: '0', pageNum: 1, pageSize: 1000 }),
+    listFormulaTemplates({ sceneId, pageNum: 1, pageSize: 1000 })
   ])
   variableOptions.value = variableResponse?.data || []
   formulaOptionList.value = (formulaResponse?.data || []).filter(item => item.formulaCode !== form.formulaCode)
+  templateOptionList.value = templateResponse?.data || []
 }
 
 function normalizeStats(data = {}) {
@@ -560,6 +650,7 @@ function resetFormModel() {
   form.formulaDesc = undefined
   form.businessFormula = undefined
   form.formulaExpr = undefined
+  form.assetType = 'FORMULA'
   form.workbenchMode = 'GUIDED'
   form.workbenchPattern = 'IF_ELSE'
   form.templateCode = undefined
@@ -667,6 +758,10 @@ function resolveVariablePlaceholder(emptyText = '当前场景暂无变量，请�
   return variableOptions.value.length ? '请选择变量' : emptyText
 }
 
+function resolveAssetTypeLabel(assetType) {
+  return assetTypeOptions.find(item => item.value === assetType)?.label || '公式资产'
+}
+
 function appendExpertToken(token) {
   if (workbench.mode !== 'EXPERT') {
     workbench.mode = 'EXPERT'
@@ -694,6 +789,15 @@ function applyTemplate(template) {
   } else {
     workbench.ranges = (template.ranges || []).map(item => ({ ...item }))
     workbench.defaultResultValue = template.defaultResultValue || ''
+  }
+}
+
+function applyStoredTemplate(template) {
+  form.assetType = 'FORMULA'
+  restoreWorkbench({ ...template, templateCode: template.templateCode || template.formulaCode })
+  if (workbench.mode === 'EXPERT') {
+    form.businessFormula = template.businessFormula
+    form.formulaExpr = template.formulaExpr
   }
 }
 
@@ -783,8 +887,8 @@ async function handleEdit(row) {
   queryParams.sceneId = form.sceneId
   testInputJson.value = form.testCaseJson || ''
   testResult.value = response.data?.sampleResultJson ? safeJsonParse(response.data.sampleResultJson) : undefined
-  restoreWorkbench(response.data)
   await loadSceneAssets(form.sceneId)
+  restoreWorkbench(response.data)
 }
 
 async function handleLoadFormula(row) {
@@ -798,6 +902,30 @@ async function handleGovernance(row) {
   const response = await getFormulaGovernance(row.formulaId)
   governanceInfo.value = response?.data || {}
   governanceOpen.value = true
+}
+
+async function handleOpenVersions(row) {
+  versionLoading.value = true
+  versionFormulaTitle.value = `${row.formulaCode} / ${row.formulaName}`
+  versionOpen.value = true
+  try {
+    const response = await listFormulaVersions(row.formulaId)
+    versionList.value = response?.data || []
+  } finally {
+    versionLoading.value = false
+  }
+}
+
+async function handleLoadVersion(row) {
+  const response = await getFormulaVersion(row.versionId)
+  Object.assign(form, response.data || {})
+  queryParams.sceneId = form.sceneId
+  await loadSceneAssets(form.sceneId)
+  restoreWorkbench(response.data)
+  testInputJson.value = form.testCaseJson || ''
+  testResult.value = undefined
+  versionOpen.value = false
+  proxy.$modal.msgSuccess(`已装载版本 V${row.versionNo}`)
 }
 
 async function handleDelete(row) {
@@ -832,14 +960,14 @@ async function handleGenerateSample() {
 }
 
 async function handleWorkbenchSceneChange(sceneId) {
-  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  const workingSceneId = sceneId || resolveWorkingCostSceneId(sceneOptions.value)
   form.sceneId = workingSceneId
   queryParams.sceneId = workingSceneId
   await loadSceneAssets(workingSceneId)
 }
 
 async function handleQuerySceneChange(sceneId) {
-  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  const workingSceneId = sceneId || resolveWorkingCostSceneId(sceneOptions.value)
   queryParams.sceneId = workingSceneId
   form.sceneId = workingSceneId
   await loadSceneAssets(workingSceneId)
@@ -1054,6 +1182,21 @@ onActivated(async () => {
 }
 
 .formula-lab__panel-head p {
+  margin: 0;
+  color: #697488;
+}
+
+.formula-lab__drawer-head {
+  margin-bottom: 16px;
+}
+
+.formula-lab__drawer-head strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #1d2a44;
+}
+
+.formula-lab__drawer-head p {
   margin: 0;
   color: #697488;
 }

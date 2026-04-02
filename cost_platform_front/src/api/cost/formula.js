@@ -35,10 +35,35 @@ export function optionselectFormula(query) {
   })
 }
 
+// 查询模板库下拉选项
+export function listFormulaTemplates(query) {
+  return request({
+    url: '/cost/formula/templateOptions',
+    method: 'get',
+    params: query
+  })
+}
+
 // 查询公式详情
 export function getFormula(formulaId) {
   return request({
     url: '/cost/formula/' + formulaId,
+    method: 'get'
+  })
+}
+
+// 查询公式版本台账
+export function listFormulaVersions(formulaId) {
+  return request({
+    url: '/cost/formula/versions/' + formulaId,
+    method: 'get'
+  })
+}
+
+// 查询公式版本详情
+export function getFormulaVersion(versionId) {
+  return request({
+    url: '/cost/formula/version/' + versionId,
     method: 'get'
   })
 }
