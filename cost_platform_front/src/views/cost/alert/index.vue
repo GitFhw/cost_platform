@@ -2,11 +2,11 @@
   <div class="app-container alert-page">
     <section class="alert-page__hero">
       <div>
-        <div class="alert-page__eyebrow">线程六 · 步骤 3-4</div>
+        <div class="alert-page__eyebrow">运行告警</div>
         <h2 class="alert-page__title">告警中心</h2>
         <p class="alert-page__subtitle">统一承接任务失败、重试超限和运行缓存治理告警，并提供缓存刷新入口，先把治理增强第一层闭环落稳。</p>
       </div>
-      <el-tag type="danger">当前阶段先做治理级告警，不提前扩展通知中心和多渠道订阅</el-tag>
+      <el-tag type="danger">统一查看任务失败、重试超限和缓存治理异常，并支持人工确认与关闭</el-tag>
     </section>
 
     <section class="alert-page__metrics">

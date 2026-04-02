@@ -2,11 +2,11 @@
   <div class="app-container audit-page">
     <section class="audit-page__hero">
       <div>
-        <div class="audit-page__eyebrow">线程六 · 步骤 2</div>
+        <div class="audit-page__eyebrow">审计追踪</div>
         <h2 class="audit-page__title">审计台账</h2>
         <p class="audit-page__subtitle">统一承接发布、运行链、账期和缓存治理动作，先让关键操作有迹可循，再承接后续审计增强。</p>
       </div>
-      <el-tag type="info">当前阶段聚焦关键治理动作审计，不提前做全量字段级审计中心</el-tag>
+      <el-tag type="info">统一记录发布、运行、账期和缓存治理动作，便于问题追溯与复盘</el-tag>
     </section>
 
     <section class="audit-page__metrics">

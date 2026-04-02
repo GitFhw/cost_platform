@@ -2,13 +2,13 @@
   <div class="app-container rule-center">
     <section class="rule-center__hero">
       <div>
-        <div class="rule-center__eyebrow">线程三 · 步骤 1-4</div>
+        <div class="rule-center__eyebrow">规则配置</div>
         <h2 class="rule-center__title">规则中心</h2>
         <p class="rule-center__subtitle">
-          按“先选费用，再维护规则，再维护条件与阶梯”的主线组织页面，当前阶段重点落规则中心、阶梯依据变量、区间校验和复制并改条件值。
+          按“先选费用，再维护规则，再维护条件与阶梯”的主线组织页面，支持条件配置、阶梯区间校验和复制并改条件值。
         </p>
       </div>
-      <el-tag type="warning">当前线程只做规则与阶梯，不越到发布和运行链</el-tag>
+      <el-tag type="success">规则、条件和阶梯会一起进入发布快照，供试算和正式核算复用</el-tag>
     </section>
 
     <section class="rule-center__metrics">

@@ -2,13 +2,13 @@
   <div class="app-container formula-lab">
     <section class="formula-lab__hero">
       <div>
-        <div class="formula-lab__eyebrow">线程七 · 公式实验室</div>
+        <div class="formula-lab__eyebrow">公式资产工作台</div>
         <h2 class="formula-lab__title">公式实验室</h2>
         <p class="formula-lab__subtitle">
           面向业务人员的公式工作台。先点选变量、条件、函数和模板，再自动生成中文公式与标准表达式，最终以公式编码沉淀为可发布资产。
         </p>
       </div>
-      <el-tag type="warning">当前线程先把公式资产和工作台做对，不越界实现后续强制替换闭环</el-tag>
+      <el-tag type="success">工作台会记住最近一次所选场景，点选变量后可直接生成中文公式和标准表达式</el-tag>
     </section>
 
     <section class="formula-lab__metrics">
@@ -119,7 +119,12 @@
             <el-table :data="workbench.conditions" size="small" border>
               <el-table-column label="变量" min-width="220">
                 <template #default="scope">
-                  <el-select v-model="scope.row.variableCode" filterable placeholder="请选择变量" @change="value => handleConditionVariableChange(scope.row, value)">
+                  <el-select
+                    v-model="scope.row.variableCode"
+                    filterable
+                    :placeholder="resolveVariablePlaceholder()"
+                    @change="value => handleConditionVariableChange(scope.row, value)"
+                  >
                     <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableCode} / ${item.variableName}`" :value="item.variableCode" />
                   </el-select>
                 </template>
@@ -159,7 +164,7 @@
             <div class="formula-lab__result-grid">
               <div>
                 <div class="formula-lab__field-label">区间依据变量</div>
-                <el-select v-model="workbench.rangeVariableCode" filterable placeholder="请选择区间变量">
+                <el-select v-model="workbench.rangeVariableCode" filterable :placeholder="resolveVariablePlaceholder('请选择区间变量')">
                   <el-option v-for="item in numericVariableOptions" :key="item.variableCode" :label="`${item.variableCode} / ${item.variableName}`" :value="item.variableCode" />
                 </el-select>
               </div>
@@ -221,12 +226,13 @@
         </div>
         <div class="formula-lab__tool-section">
           <div class="formula-lab__tool-title">场景变量</div>
-          <div class="formula-lab__list">
+          <div v-if="variableOptions.length" class="formula-lab__list">
             <button v-for="item in variableOptions" :key="item.variableCode" type="button" class="formula-lab__list-item" @click="appendExpertToken(`V.${item.variableCode}`)">
               <strong>{{ item.variableName }}</strong>
               <span>{{ item.variableCode }}</span>
             </button>
           </div>
+          <el-empty v-else :image-size="72" :description="resolveVariablePlaceholder('当前场景暂无变量，请先到变量中心维护')" />
         </div>
         <div class="formula-lab__tool-section">
           <div class="formula-lab__tool-title">函数库</div>
@@ -298,6 +304,7 @@ import { ElMessageBox } from 'element-plus'
 import { addFormula, delFormula, getFormula, getFormulaGovernance, getFormulaStats, listFormula, optionselectFormula, testFormula, updateFormula } from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
+import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
@@ -485,6 +492,17 @@ async function loadBaseOptions() {
   statusOptions.value = dictMap.cost_formula_status || []
   returnTypeOptions.value = dictMap.cost_formula_return_type || []
   sceneOptions.value = sceneResponse?.data || []
+  const preferredSceneId = resolvePreferredCostSceneId(
+    sceneOptions.value,
+    form.sceneId,
+    queryParams.sceneId,
+    getCostSceneContextId()
+  )
+  if (preferredSceneId) {
+    queryParams.sceneId = preferredSceneId
+    form.sceneId = preferredSceneId
+    setCostSceneContextId(preferredSceneId)
+  }
 }
 
 async function loadSceneAssets(sceneId) {
@@ -536,8 +554,9 @@ function resetWorkbench() {
 }
 
 function resetFormModel() {
+  const currentSceneId = form.sceneId || queryParams.sceneId || resolvePreferredCostSceneId(sceneOptions.value, getCostSceneContextId())
   form.formulaId = undefined
-  form.sceneId = queryParams.sceneId
+  form.sceneId = currentSceneId
   form.formulaCode = undefined
   form.formulaName = undefined
   form.formulaDesc = undefined
@@ -639,6 +658,13 @@ function resolveOperatorLabel(operatorCode) {
   return conditionOperators.find(item => item.value === operatorCode)?.label || operatorCode
 }
 
+function resolveVariablePlaceholder(emptyText = '当前场景暂无变量，请先到变量中心维护') {
+  if (!form.sceneId) {
+    return '请先选择场景'
+  }
+  return variableOptions.value.length ? '请选择变量' : emptyText
+}
+
 function appendExpertToken(token) {
   if (workbench.mode !== 'EXPERT') {
     workbench.mode = 'EXPERT'
@@ -735,16 +761,20 @@ async function handleTest() {
   testResult.value = response?.data?.result
 }
 
-function handleCreate() {
+async function handleCreate() {
   resetFormModel()
   if (form.sceneId) {
-    loadSceneAssets(form.sceneId)
+    queryParams.sceneId = form.sceneId
+    setCostSceneContextId(form.sceneId)
+    await loadSceneAssets(form.sceneId)
   }
 }
 
 async function handleEdit(row) {
   const response = await getFormula(row.formulaId)
   Object.assign(form, response.data || {})
+  queryParams.sceneId = form.sceneId
+  setCostSceneContextId(form.sceneId)
   testInputJson.value = form.testCaseJson || ''
   testResult.value = response.data?.sampleResultJson ? safeJsonParse(response.data.sampleResultJson) : undefined
   workbench.mode = 'EXPERT'
@@ -777,6 +807,10 @@ function handleSelectionChange(selection) {
 }
 
 async function handleGenerateSample() {
+  if (!form.sceneId) {
+    proxy.$modal.msgWarning('请先选择场景，再按变量生成示例')
+    return
+  }
   const V = {}
   variableOptions.value.forEach(item => {
     const type = String(item.dataType || '').toUpperCase()
@@ -792,14 +826,17 @@ async function handleGenerateSample() {
 }
 
 async function handleWorkbenchSceneChange(sceneId) {
+  form.sceneId = sceneId
+  queryParams.sceneId = sceneId
+  setCostSceneContextId(sceneId)
   await loadSceneAssets(sceneId)
 }
 
 async function handleQuerySceneChange(sceneId) {
-  if (!form.sceneId) {
-    form.sceneId = sceneId
-    await loadSceneAssets(sceneId)
-  }
+  queryParams.sceneId = sceneId
+  form.sceneId = sceneId
+  setCostSceneContextId(sceneId)
+  await loadSceneAssets(sceneId)
 }
 
 function handleQuery() {

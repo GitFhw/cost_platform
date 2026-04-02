@@ -2,13 +2,13 @@
   <div class="app-container governance-page">
     <section class="governance-page__hero">
       <div>
-        <div class="governance-page__eyebrow">线程六 · 步骤 1-2</div>
+        <div class="governance-page__eyebrow">账期治理</div>
         <h2 class="governance-page__title">账期治理</h2>
         <p class="governance-page__subtitle">
           承接账期台账、封存控制、重算申请/审核/执行，先把历史账期治理闭环做稳，再为后续重算与审计增强预留结构。
         </p>
       </div>
-      <el-tag type="warning">当前阶段先做单机治理闭环，不提前展开分布式调度</el-tag>
+      <el-tag type="warning">支持账期封存、重算申请与执行跟踪，分布式调度能力后续再扩展</el-tag>
     </section>
 
     <section class="governance-page__metrics">

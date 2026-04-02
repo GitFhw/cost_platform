@@ -490,6 +490,33 @@ public class CostRunServiceImpl implements ICostRunService
         }).collect(Collectors.toList());
     }
 
+    @Override
+    public Map<String, Object> buildInputTemplate(Long sceneId, Long versionId, String taskType)
+    {
+        RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false);
+        String normalizedTaskType = StringUtils.isEmpty(taskType) ? TASK_TYPE_FORMAL_SINGLE : taskType;
+
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("sceneId", snapshot.sceneId);
+        result.put("sceneCode", snapshot.sceneCode);
+        result.put("sceneName", snapshot.sceneName);
+        result.put("versionId", snapshot.versionId);
+        result.put("versionNo", snapshot.versionNo);
+        result.put("taskType", normalizedTaskType);
+        result.put("message", "已按发布快照生成输入模板；公式变量不需要手工输入，其余变量优先按 dataPath/变量编码生成命名空间结构。");
+        result.put("fields", buildTemplateFieldItems(snapshot));
+        if (TASK_TYPE_FORMAL_BATCH.equals(normalizedTaskType))
+        {
+            List<Map<String, Object>> samples = new ArrayList<>();
+            samples.add(buildSingleInputTemplate(snapshot, normalizedTaskType, 1));
+            samples.add(buildSingleInputTemplate(snapshot, normalizedTaskType, 2));
+            result.put("inputJson", writeJson(samples));
+            return result;
+        }
+        result.put("inputJson", writeJson(buildSingleInputTemplate(snapshot, normalizedTaskType, 1)));
+        return result;
+    }
+
     /**
      * 任务异步执行主链路。
      *
@@ -1030,6 +1057,27 @@ public class CostRunServiceImpl implements ICostRunService
         return result;
     }
 
+    private List<Map<String, Object>> buildTemplateFieldItems(RuntimeSnapshot snapshot)
+    {
+        List<Map<String, Object>> fields = new ArrayList<>();
+        for (RuntimeVariable variable : snapshot.variables)
+        {
+            LinkedHashMap<String, Object> field = new LinkedHashMap<>();
+            String path = firstNonBlank(variable.dataPath, variable.variableCode);
+            boolean formulaDerived = SOURCE_TYPE_FORMULA.equals(variable.sourceType);
+            field.put("variableCode", variable.variableCode);
+            field.put("variableName", variable.variableName);
+            field.put("sourceType", variable.sourceType);
+            field.put("dataType", variable.dataType);
+            field.put("path", path);
+            field.put("includedInTemplate", !formulaDerived && StringUtils.isNotEmpty(path));
+            field.put("templateRole", formulaDerived ? "FORMULA_DERIVED" : "INPUT_REQUIRED");
+            field.put("exampleValue", buildTemplateValue(variable, 1));
+            fields.add(field);
+        }
+        return fields;
+    }
+
     private RuntimeSnapshot loadRuntimeSnapshot(Long sceneId, Long versionId, boolean requireFormalVersion)
     {
         CostScene scene = sceneMapper.selectById(sceneId);
@@ -1180,6 +1228,90 @@ public class CostRunServiceImpl implements ICostRunService
         {
         }
         return snapshot;
+    }
+
+    private Map<String, Object> buildSingleInputTemplate(RuntimeSnapshot snapshot, String taskType, int index)
+    {
+        LinkedHashMap<String, Object> template = new LinkedHashMap<>();
+        template.put("bizNo", buildTemplateBizNo(taskType, index));
+        template.put("objectCode", "OBJ-" + PARTITION_FORMAT.format(index));
+        template.put("objectName", "示例对象" + index);
+        Set<String> populatedPaths = new LinkedHashSet<>();
+        for (RuntimeVariable variable : snapshot.variables)
+        {
+            if (SOURCE_TYPE_FORMULA.equals(variable.sourceType))
+            {
+                continue;
+            }
+            String path = firstNonBlank(variable.dataPath, variable.variableCode);
+            if (StringUtils.isEmpty(path) || populatedPaths.contains(path))
+            {
+                continue;
+            }
+            populatePathValue(template, path, buildTemplateValue(variable, index));
+            populatedPaths.add(path);
+        }
+        return template;
+    }
+
+    private String buildTemplateBizNo(String taskType, int index)
+    {
+        String prefix;
+        if (TASK_TYPE_FORMAL_BATCH.equals(taskType))
+        {
+            prefix = "BATCH";
+        }
+        else if (TASK_TYPE_FORMAL_SINGLE.equals(taskType))
+        {
+            prefix = "FORMAL";
+        }
+        else
+        {
+            prefix = "SIM";
+        }
+        return prefix + "-" + PARTITION_FORMAT.format(index);
+    }
+
+    private Object buildTemplateValue(RuntimeVariable variable, int index)
+    {
+        String dataType = StringUtils.isEmpty(variable.dataType) ? "" : variable.dataType.toUpperCase(Locale.ROOT);
+        if (DATA_TYPE_NUMBER.equals(dataType))
+        {
+            return BigDecimal.ONE;
+        }
+        if (DATA_TYPE_BOOLEAN.equals(dataType))
+        {
+            return Boolean.TRUE;
+        }
+        if (DATA_TYPE_JSON.equals(dataType))
+        {
+            return new LinkedHashMap<>();
+        }
+        return firstNonBlank(variable.variableName, variable.variableCode) + index;
+    }
+
+    private void populatePathValue(Map<String, Object> root, String path, Object value)
+    {
+        String[] pieces = path.split("\\.");
+        Map<String, Object> current = root;
+        for (int i = 0; i < pieces.length; i++)
+        {
+            String piece = pieces[i];
+            if (i == pieces.length - 1)
+            {
+                current.putIfAbsent(piece, value);
+                return;
+            }
+            Object child = current.get(piece);
+            if (!(child instanceof Map))
+            {
+                LinkedHashMap<String, Object> next = new LinkedHashMap<>();
+                current.put(piece, next);
+                current = next;
+                continue;
+            }
+            current = castMap(child);
+        }
     }
 
     private List<CostCalcTask> selectTaskListInternal(CostCalcTask query)
