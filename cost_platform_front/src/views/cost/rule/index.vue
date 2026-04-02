@@ -1083,7 +1083,7 @@ function buildTierValidationIssues(tiers) {
     }
     if (previous) {
       if (previous.endValue == null) {
-        issues.push(`第${previous.__index}档已是不封顶区间，后续不应继续维护档位`)
+        issues.push(`第${previous.__index}档已是不封顶区间，不可继续新增后续档位`)
       } else if (item.startValue == null || item.startValue === '') {
         issues.push(`第${item.__index}档缺少起始值`)
       } else if (Number(previous.endValue) < Number(item.startValue)) {

@@ -4,7 +4,7 @@
       <div>
         <div class="audit-page__eyebrow">审计追踪</div>
         <h2 class="audit-page__title">审计台账</h2>
-        <p class="audit-page__subtitle">统一承接发布、运行链、账期和缓存治理动作，先让关键操作有迹可循，再承接后续审计增强。</p>
+        <p class="audit-page__subtitle">统一记录发布、运行、账期和缓存相关动作，便于审计留痕、问题追踪和过程复盘。</p>
       </div>
       <el-tag type="info">统一记录发布、运行、账期和缓存治理动作，便于问题追溯与复盘</el-tag>
     </section>
@@ -20,8 +20,8 @@
     <section class="audit-page__panel">
       <div class="audit-page__section-head">
         <div>
-          <h3>回归资料</h3>
-          <p>把现场回归最常用的台账、模板和放行口径集中在一处，方便测试与上线同学直接取用。</p>
+          <h3>运行资料</h3>
+          <p>集中提供运行准备、核验记录和平台规则说明，方便业务、运营和交付团队统一查看。</p>
         </div>
         <el-button type="primary" plain icon="Refresh" @click="loadReadiness">刷新校验</el-button>
       </div>
@@ -46,11 +46,11 @@
     <section class="audit-page__panel">
       <div class="audit-page__section-head">
         <div>
-          <h3>上线校验总览</h3>
-          <p>统一汇总 Flyway、关键库表、菜单补丁和仍待人工执行的上线前检查项。</p>
+          <h3>运行准备总览</h3>
+          <p>统一汇总数据库迁移、关键库表、菜单配置和待补充的人工核验事项。</p>
         </div>
         <el-tag :type="readinessSummary.ready ? 'success' : 'warning'">
-          {{ readinessSummary.ready ? '已满足上线校验' : '仍有阻塞或待人工项' }}
+          {{ readinessSummary.ready ? '已满足运行准备要求' : '仍有待处理事项' }}
         </el-tag>
       </div>
 
@@ -63,12 +63,12 @@
         <div class="audit-page__readiness-card audit-page__readiness-card--danger">
           <span>失败项</span>
           <strong>{{ readinessSummary.failCount }}</strong>
-          <small>会直接阻塞上线的环境或数据问题</small>
+          <small>需要优先处理的环境、数据或配置问题</small>
         </div>
         <div class="audit-page__readiness-card audit-page__readiness-card--warning">
           <span>待人工项</span>
           <strong>{{ readinessSummary.pendingCount }}</strong>
-          <small>需要联调、角色回归或证据沉淀</small>
+          <small>需要补充业务核验、权限确认或记录留存</small>
         </div>
         <div class="audit-page__readiness-card">
           <span>最近迁移</span>
@@ -210,28 +210,28 @@ const resourceItems = [
     label: '总任务台账',
     tag: '总览',
     tagType: 'info',
-    desc: '完整拆细后的上线任务清单，适合排优先级和持续消项。',
+    desc: '完整拆细后的平台任务清单，适合排定优先级并持续推进。',
     path: 'D:/Desktop/cost_platform/docs/go_live_task_ledger_utf8.xlsx'
   },
   {
-    label: '回归执行模板',
+    label: '核验记录模板',
     tag: '执行',
     tagType: 'warning',
-    desc: '用于现场逐条回填执行状态、证据链接、缺陷单号和下一步动作。',
+    desc: '用于逐条记录核验状态、证明材料、问题编号和处理动作。',
     path: 'D:/Desktop/cost_platform/docs/go_live_regression_execution_template.xlsx'
   },
   {
-    label: '最小放行条件',
+    label: '运行准入条件',
     tag: '口径',
     tagType: 'success',
-    desc: '明确什么条件同时满足后，状态才能从接近上线切换到可上线运行。',
+    desc: '明确平台进入稳定运行前需要同时满足的关键条件。',
     path: 'D:/Desktop/cost_platform/docs/正式核算上线最小放行条件.md'
   },
   {
-    label: '最小执行清单',
+    label: '关键核验清单',
     tag: '现场',
     tagType: 'danger',
-    desc: '只保留当前真正阻塞上线的最小执行集合，联调时按这份先跑。',
+    desc: '聚焦当前最关键的核验事项，便于按统一顺序完成重点检查。',
     path: 'D:/Desktop/cost_platform/docs/正式核算上线最小执行清单.md'
   }
 ]

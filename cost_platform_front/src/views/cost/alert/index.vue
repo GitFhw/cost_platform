@@ -4,9 +4,9 @@
       <div>
         <div class="alert-page__eyebrow">运行告警</div>
         <h2 class="alert-page__title">告警中心</h2>
-        <p class="alert-page__subtitle">统一承接任务失败、重试超限和运行缓存治理告警，并提供缓存刷新入口，先把治理增强第一层闭环落稳。</p>
+        <p class="alert-page__subtitle">统一查看任务异常、重试超限和缓存相关告警，帮助运营团队快速定位问题并跟进处理。</p>
       </div>
-      <el-tag type="danger">统一查看任务失败、重试超限和缓存治理异常，并支持人工确认与关闭</el-tag>
+      <el-tag type="danger">支持按类型、等级和任务维度跟踪告警状态，并进行确认处理</el-tag>
     </section>
 
     <section class="alert-page__metrics">

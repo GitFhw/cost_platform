@@ -5,12 +5,11 @@
         <div class="run-page__eyebrow">正式核算</div>
         <h2 class="run-page__title">正式核算与批量任务</h2>
         <p class="run-page__subtitle">
-          按发布快照发起正式核算任务，保留原有 JSON 直传方式，同时支持导入批次作为大批量输入源，
-          并提供历史批次选择、任务详情和分片监控视图。
+          统一发起正式核算任务，支持在线录入和导入批次两种方式，并提供任务明细、批次管理和分段运行视图。
         </p>
       </div>
       <div class="run-page__hero-side">
-        <el-tag type="success">JSON 与导入批次双模式并存，便于向百万级任务持续演进</el-tag>
+        <el-tag type="success">支持在线提交与批量导入，满足不同规模的正式核算需求</el-tag>
         <el-button icon="Tickets" @click="openBatchLedger">导入批次台账</el-button>
       </div>
     </section>

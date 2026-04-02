@@ -5,10 +5,10 @@
         <div class="governance-page__eyebrow">账期治理</div>
         <h2 class="governance-page__title">账期治理</h2>
         <p class="governance-page__subtitle">
-          承接账期台账、封存控制、重算申请/审核/执行，先把历史账期治理闭环做稳，再为后续重算与审计增强预留结构。
+          统一管理账期台账、封存控制和重算流程，保障历史账期可控、可查并满足持续运营需要。
         </p>
       </div>
-      <el-tag type="warning">支持账期封存、重算申请与执行跟踪，分布式调度能力后续再扩展</el-tag>
+      <el-tag type="warning">支持账期封存、重算申请、审批和执行跟踪</el-tag>
     </section>
 
     <section class="governance-page__metrics">

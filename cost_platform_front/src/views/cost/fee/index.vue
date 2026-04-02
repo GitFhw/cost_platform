@@ -5,10 +5,10 @@
         <div class="fee-center__eyebrow">费目治理</div>
         <h2 class="fee-center__title">费用中心</h2>
         <p class="fee-center__subtitle">
-          对齐“基础费目维护”主链，围绕场景沉淀费用主数据，为后续变量与规则维护建立稳定承接层。
+          围绕场景统一维护费用对象、计费口径和业务说明，为规则配置、版本发布和结果查询提供稳定基础。
         </p>
       </div>
-      <el-tag type="info">删除前会自动执行规则/版本/结果引用预检查</el-tag>
+      <el-tag type="info">删除前自动校验关联规则、版本和结果记录，保障费用口径稳定</el-tag>
     </section>
 
     <section class="fee-center__metrics">

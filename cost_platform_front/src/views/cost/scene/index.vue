@@ -5,7 +5,7 @@
         <div class="scene-center__eyebrow">场景主数据</div>
         <h2 class="scene-center__title">场景中心</h2>
         <p class="scene-center__subtitle">
-          先收稳“业务域字典 -> 场景主数据”第一层治理边界，让后续费用、变量、规则、发布和运行链都能围绕场景有序展开。
+          统一维护核算场景、业务域和适用组织，为费用配置、变量治理、版本发布和运行管理建立清晰边界。
         </p>
         <div class="scene-center__hero-actions">
           <el-button
@@ -25,7 +25,7 @@
           >
             打开核算字典
           </el-button>
-          <el-tag type="info">业务域统一来自系统字典 `cost_business_domain`</el-tag>
+          <el-tag type="info">业务域口径统一管理，便于跨场景复用与治理</el-tag>
           <el-tag v-if="currentSceneInfo.sceneId" type="success">
             当前工作场景：{{ currentSceneInfo.sceneCode }} / {{ currentSceneInfo.sceneName }}
           </el-tag>
@@ -43,7 +43,7 @@
         <span class="scene-center__hero-note-label">治理说明</span>
         <strong class="scene-center__hero-note-title">场景是费用、变量、规则、发布的上游边界</strong>
         <span class="scene-center__hero-note-desc">
-          场景可理解为合同、核算主题或业务方案。当前生效版本仅展示真实发布结果，线程一先收稳场景主数据与字典口径。
+          场景可理解为合同、核算主题或业务方案。当前生效版本仅展示已发布的正式结果，便于统一管理场景口径与适用范围。
         </span>
       </div>
     </section>
@@ -57,7 +57,7 @@
     </section>
 
       <el-alert
-      title="核算字典规划统一挂在系统字典中心，线程一先完成业务域字典与场景核心字典收口，再为后续费用、变量、规则预留规划项。"
+      title="核算相关字典统一维护在系统字典中心，便于业务域、场景、费用、变量和规则共享同一套基础口径。"
       type="info"
       show-icon
       :closable="false"

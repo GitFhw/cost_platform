@@ -5,10 +5,10 @@
         <div class="formula-lab__eyebrow">公式资产工作台</div>
         <h2 class="formula-lab__title">公式实验室</h2>
         <p class="formula-lab__subtitle">
-          面向业务人员的公式工作台。先点选变量、条件、函数和模板，再自动生成中文公式与标准表达式，最终以公式编码沉淀为可发布资产。
+          面向业务配置人员的公式工作台，可通过变量、条件、函数和模板快速组织公式表达，统一沉淀标准化公式资产。
         </p>
       </div>
-      <el-tag type="success">工作台会记住最近一次所选场景，点选变量后可直接生成中文公式和标准表达式</el-tag>
+      <el-tag type="success">支持按场景组织公式配置，并自动生成中文说明与标准表达式</el-tag>
     </section>
 
     <section class="formula-lab__metrics">

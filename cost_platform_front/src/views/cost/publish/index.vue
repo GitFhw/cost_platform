@@ -6,10 +6,10 @@
         <div class="publish-center__eyebrow">发布治理</div>
         <h2 class="publish-center__title">发布中心</h2>
         <p class="publish-center__subtitle">
-          统一承接场景级发布、版本台账、生效切换、回滚和费用级差异视图。发布粒度始终是场景版本，费用只作为差异观察维度。
+          统一管理场景版本发布、生效切换、差异对比和历史版本台账，确保运行始终基于明确版本执行。
         </p>
       </div>
-      <el-tag type="success">支持发布前检查、版本台账、生效切换、回滚和版本差异对比</el-tag>
+      <el-tag type="success">支持发布检查、版本台账、生效切换、回退和差异对比</el-tag>
     </section>
 
     <section class="publish-center__metrics">

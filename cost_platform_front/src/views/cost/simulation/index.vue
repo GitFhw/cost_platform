@@ -4,9 +4,9 @@
       <div>
         <div class="run-page__eyebrow">试算验证</div>
         <h2 class="run-page__title">试算中心</h2>
-        <p class="run-page__subtitle">按已发布快照执行单笔或批量试算，输出变量值、命中规则、费用结果和解释时间线，不污染正式核算结果台账。</p>
+        <p class="run-page__subtitle">按已发布版本执行单笔或批量试算，快速核对变量取值、规则命中、费用结果和解释过程。</p>
       </div>
-      <el-tag type="success">输入模板会按当前场景发布快照自动生成，优先复用最近一次所选场景</el-tag>
+      <el-tag type="success">输入示例会按当前场景和版本自动生成，便于快速开始试算</el-tag>
     </section>
 
     <section class="run-page__metrics">
