@@ -3,13 +3,13 @@
   <div class="app-container publish-center">
     <section class="publish-center__hero">
       <div>
-        <div class="publish-center__eyebrow">线程四 · 步骤 1-4</div>
+        <div class="publish-center__eyebrow">发布治理</div>
         <h2 class="publish-center__title">发布中心</h2>
         <p class="publish-center__subtitle">
           统一承接场景级发布、版本台账、生效切换、回滚和费用级差异视图。发布粒度始终是场景版本，费用只作为差异观察维度。
         </p>
       </div>
-      <el-tag type="warning">当前线程只做发布治理，不提前实现运行链</el-tag>
+      <el-tag type="success">支持发布前检查、版本台账、生效切换、回滚和版本差异对比</el-tag>
     </section>
 
     <section class="publish-center__metrics">

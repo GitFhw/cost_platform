@@ -2,7 +2,7 @@
   <div class="app-container fee-center">
     <section class="fee-center__hero">
       <div>
-        <div class="fee-center__eyebrow">线程二 · 第一步</div>
+        <div class="fee-center__eyebrow">费目治理</div>
         <h2 class="fee-center__title">费用中心</h2>
         <p class="fee-center__subtitle">
           对齐“基础费目维护”主链，围绕场景沉淀费用主数据，为后续变量与规则维护建立稳定承接层。

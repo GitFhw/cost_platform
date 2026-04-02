@@ -112,3 +112,11 @@ export function listVersionOptions(sceneId) {
     method: 'get'
   })
 }
+
+export function getRunInputTemplate(query) {
+  return request({
+    url: '/cost/run/input-template',
+    method: 'get',
+    params: query
+  })
+}

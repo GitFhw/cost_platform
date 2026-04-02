@@ -2,7 +2,7 @@
   <div class="app-container result-page">
     <section class="result-page__hero">
       <div>
-        <div class="result-page__eyebrow">线程五 · 步骤 3-4</div>
+        <div class="result-page__eyebrow">结果追溯</div>
         <h2 class="result-page__title">结果台账与追溯解释</h2>
         <p class="result-page__subtitle">按场景、版本、账期、任务号和费用维度查询正式核算结果，查看命中规则、阶梯、变量值和执行时间线。</p>
       </div>

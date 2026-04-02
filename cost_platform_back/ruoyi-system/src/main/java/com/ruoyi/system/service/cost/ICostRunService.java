@@ -45,4 +45,6 @@ public interface ICostRunService
     Map<String, Object> selectTraceDetail(Long traceId);
 
     List<Map<String, Object>> selectVersionOptions(Long sceneId);
+
+    Map<String, Object> buildInputTemplate(Long sceneId, Long versionId, String taskType);
 }

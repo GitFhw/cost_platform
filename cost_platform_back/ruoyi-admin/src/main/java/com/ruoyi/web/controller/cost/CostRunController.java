@@ -199,4 +199,16 @@ public class CostRunController extends BaseController
     {
         return success(runService.selectVersionOptions(sceneId));
     }
+
+    /**
+     * 生成运行输入模板。
+     */
+    @PreAuthorize("@ss.hasPermi('cost:simulation:list') or @ss.hasPermi('cost:task:list')")
+    @GetMapping("/input-template")
+    public AjaxResult inputTemplate(@RequestParam("sceneId") Long sceneId,
+                                    @RequestParam(value = "versionId", required = false) Long versionId,
+                                    @RequestParam(value = "taskType", required = false) String taskType)
+    {
+        return success(runService.buildInputTemplate(sceneId, versionId, taskType));
+    }
 }

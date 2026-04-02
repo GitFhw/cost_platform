@@ -2,11 +2,11 @@
   <div class="app-container run-page">
     <section class="run-page__hero">
       <div>
-        <div class="run-page__eyebrow">线程五 · 步骤 2</div>
+        <div class="run-page__eyebrow">正式核算</div>
         <h2 class="run-page__title">正式核算与批量任务</h2>
         <p class="run-page__subtitle">按发布快照执行单笔或批量正式核算，异步落任务头、任务明细和结果写入进度，保留失败重试入口。</p>
       </div>
-      <el-tag type="warning">当前阶段先落异步任务闭环，不提前做线程六重算与告警</el-tag>
+      <el-tag type="success">输入模板会按当前版本快照自动生成，并跟随最近一次所选场景同步</el-tag>
     </section>
 
     <section class="run-page__metrics">
@@ -89,8 +89,19 @@
 
         <div class="run-page__action-row">
           <el-button type="primary" icon="Promotion" @click="handleSubmit" v-hasPermi="['cost:task:execute']">提交任务</el-button>
-          <el-button icon="RefreshLeft" @click="fillExample">装入示例</el-button>
+          <el-button icon="RefreshLeft" @click="fillExample">按配置生成模板</el-button>
         </div>
+
+        <el-alert v-if="templateMessage" :title="templateMessage" type="info" :closable="false" class="run-page__template-alert" />
+        <el-table v-if="templateFields.length" :data="templateFields" size="small" border class="run-page__template-table">
+          <el-table-column label="输入路径" prop="path" min-width="180" />
+          <el-table-column label="变量" min-width="180">
+            <template #default="scope">{{ scope.row.variableName }} ({{ scope.row.variableCode }})</template>
+          </el-table-column>
+          <el-table-column label="来源" prop="sourceType" width="120" />
+          <el-table-column label="类型" prop="dataType" width="120" />
+          <el-table-column label="模板角色" prop="templateRole" width="140" />
+        </el-table>
       </div>
 
       <div class="run-page__panel">
@@ -176,8 +187,9 @@
 
 <script setup name="CostTask">
 import { ElMessageBox } from 'element-plus'
-import { cancelTask, getTaskDetail, getTaskStats, listTask, listVersionOptions, retryTaskDetail, submitTask } from '@/api/cost/run'
+import { cancelTask, getRunInputTemplate, getTaskDetail, getTaskStats, listTask, listVersionOptions, retryTaskDetail, submitTask } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
+import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -192,6 +204,8 @@ const versionOptions = ref([])
 const formVersionOptions = ref([])
 const taskTypeOptions = ref([])
 const taskStatusOptions = ref([])
+const templateFields = ref([])
+const templateMessage = ref('')
 const detailOpen = ref(false)
 const detailData = ref({})
 const stats = reactive({ taskCount: 0, runningCount: 0, successCount: 0, failedCount: 0 })
@@ -233,6 +247,18 @@ async function loadBaseOptions() {
   taskTypeOptions.value = dictMap.cost_calc_task_type || []
   taskStatusOptions.value = dictMap.cost_calc_task_status || []
   sceneOptions.value = sceneResp?.data || []
+  const preferredSceneId = resolvePreferredCostSceneId(
+    sceneOptions.value,
+    form.sceneId,
+    queryParams.sceneId,
+    route.query.sceneId,
+    getCostSceneContextId()
+  )
+  if (preferredSceneId) {
+    queryParams.sceneId = preferredSceneId
+    form.sceneId = preferredSceneId
+    setCostSceneContextId(preferredSceneId)
+  }
 }
 
 async function loadVersionOptions(sceneId, target) {
@@ -285,31 +311,37 @@ function resetQuery() {
 
 async function handleQuerySceneChange(sceneId) {
   queryParams.versionId = undefined
+  queryParams.sceneId = sceneId
+  form.sceneId = sceneId
+  setCostSceneContextId(sceneId)
   await loadVersionOptions(sceneId, versionOptions)
+  await loadVersionOptions(sceneId, formVersionOptions)
+  await fillExample()
 }
 
 async function handleFormSceneChange(sceneId) {
   form.versionId = undefined
+  queryParams.sceneId = sceneId
+  setCostSceneContextId(sceneId)
   await loadVersionOptions(sceneId, formVersionOptions)
-  fillExample()
+  await loadVersionOptions(sceneId, versionOptions)
+  await fillExample()
 }
 
-function fillExample() {
-  if (form.taskType === 'FORMAL_BATCH') {
-    form.inputJson = JSON.stringify([
-      { bizNo: 'BATCH-001', objectCode: 'EMP-001', objectName: '张三', days: 22, amountBase: 1800, level: 'A' },
-      { bizNo: 'BATCH-002', objectCode: 'EMP-002', objectName: '李四', days: 19, amountBase: 1600, level: 'B' }
-    ], null, 2)
+async function fillExample() {
+  if (!form.sceneId) {
+    templateFields.value = []
+    templateMessage.value = '请先选择运行场景，再按发布快照生成输入模板。'
     return
   }
-  form.inputJson = JSON.stringify({
-    bizNo: 'FORMAL-001',
-    objectCode: 'EMP-001',
-    objectName: '张三',
-    days: 22,
-    amountBase: 1800,
-    level: 'A'
-  }, null, 2)
+  const response = await getRunInputTemplate({
+    sceneId: form.sceneId,
+    versionId: form.versionId,
+    taskType: form.taskType
+  })
+  form.inputJson = response?.data?.inputJson || '{}'
+  templateFields.value = response?.data?.fields?.filter(item => item.includedInTemplate) || []
+  templateMessage.value = response?.data?.message || ''
 }
 
 async function handleSubmit() {
@@ -365,7 +397,10 @@ function resolveCurrentBillMonth() {
 
 watch(() => form.taskType, () => fillExample(), { immediate: true })
 
-getList()
+onMounted(async () => {
+  await getList()
+  await fillExample()
+})
 </script>
 
 <style scoped lang="scss">
@@ -384,6 +419,8 @@ getList()
 .run-page__section-head h3 { margin: 0; font-size: 18px; }
 .run-page__section-head p { margin: 6px 0 0; color: var(--el-text-color-secondary); font-size: 13px; }
 .run-page__action-row { display: flex; gap: 10px; margin-top: 8px; }
+.run-page__template-alert { margin-top: 14px; }
+.run-page__template-table { margin-top: 12px; }
 .run-page__summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
 .run-page__summary-card { display: grid; gap: 6px; padding: 12px 14px; }
 .run-page__summary-card strong { font-size: 24px; color: var(--el-color-warning-dark-2); }

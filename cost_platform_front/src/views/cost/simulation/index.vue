@@ -2,11 +2,11 @@
   <div class="app-container run-page">
     <section class="run-page__hero">
       <div>
-        <div class="run-page__eyebrow">线程五 · 步骤 1</div>
+        <div class="run-page__eyebrow">试算验证</div>
         <h2 class="run-page__title">试算中心</h2>
         <p class="run-page__subtitle">按已发布快照执行单笔试算，输出变量值、命中规则、费用结果和解释时间线，不污染正式核算结果台账。</p>
       </div>
-      <el-tag type="warning">只执行线程五运行链，不提前实现线程六治理增强</el-tag>
+      <el-tag type="success">输入模板会按当前场景发布快照自动生成，优先复用最近一次所选场景</el-tag>
     </section>
 
     <section class="run-page__metrics">
@@ -67,8 +67,19 @@
 
         <div class="run-page__action-row">
           <el-button type="primary" icon="Promotion" @click="handleExecute" v-hasPermi="['cost:simulation:execute']">执行试算</el-button>
-          <el-button icon="RefreshLeft" @click="fillExample">装入示例</el-button>
+          <el-button icon="RefreshLeft" @click="fillExample">按配置生成模板</el-button>
         </div>
+
+        <el-alert v-if="templateMessage" :title="templateMessage" type="info" :closable="false" class="run-page__template-alert" />
+        <el-table v-if="templateFields.length" :data="templateFields" size="small" border class="run-page__template-table">
+          <el-table-column label="输入路径" prop="path" min-width="180" />
+          <el-table-column label="变量" min-width="180">
+            <template #default="scope">{{ scope.row.variableName }} ({{ scope.row.variableCode }})</template>
+          </el-table-column>
+          <el-table-column label="来源" prop="sourceType" width="120" />
+          <el-table-column label="类型" prop="dataType" width="120" />
+          <el-table-column label="模板角色" prop="templateRole" width="140" />
+        </el-table>
       </div>
 
       <div class="run-page__panel">
@@ -133,8 +144,9 @@
 </template>
 
 <script setup name="CostSimulation">
-import { executeSimulation, getSimulationDetail, getSimulationStats, listSimulation, listVersionOptions } from '@/api/cost/run'
+import { executeSimulation, getRunInputTemplate, getSimulationDetail, getSimulationStats, listSimulation, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
+import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -148,6 +160,8 @@ const sceneOptions = ref([])
 const versionOptions = ref([])
 const formVersionOptions = ref([])
 const simulationStatusOptions = ref([])
+const templateFields = ref([])
+const templateMessage = ref('')
 const detailOpen = ref(false)
 const detailData = ref({})
 const stats = reactive({ simulationCount: 0, successCount: 0, failedCount: 0, sceneCount: 0 })
@@ -180,6 +194,18 @@ async function loadBaseOptions() {
   ])
   simulationStatusOptions.value = dictMap.cost_simulation_status || []
   sceneOptions.value = sceneResp?.data || []
+  const preferredSceneId = resolvePreferredCostSceneId(
+    sceneOptions.value,
+    form.sceneId,
+    queryParams.sceneId,
+    route.query.sceneId,
+    getCostSceneContextId()
+  )
+  if (preferredSceneId) {
+    queryParams.sceneId = preferredSceneId
+    form.sceneId = preferredSceneId
+    setCostSceneContextId(preferredSceneId)
+  }
 }
 
 async function loadVersionOptions(sceneId, target) {
@@ -232,24 +258,37 @@ function resetQuery() {
 
 async function handleQuerySceneChange(sceneId) {
   queryParams.versionId = undefined
+  queryParams.sceneId = sceneId
+  form.sceneId = sceneId
+  setCostSceneContextId(sceneId)
   await loadVersionOptions(sceneId, versionOptions)
+  await loadVersionOptions(sceneId, formVersionOptions)
+  await fillExample()
 }
 
 async function handleFormSceneChange(sceneId) {
   form.versionId = undefined
+  queryParams.sceneId = sceneId
+  setCostSceneContextId(sceneId)
   await loadVersionOptions(sceneId, formVersionOptions)
+  await loadVersionOptions(sceneId, versionOptions)
+  await fillExample()
 }
 
-function fillExample() {
-  form.inputJson = JSON.stringify({
-    bizNo: 'SIM-001',
-    objectCode: 'EMP-001',
-    objectName: '张三',
-    days: 22,
-    amountBase: 1800,
-    level: 'A',
-    isRemote: false
-  }, null, 2)
+async function fillExample() {
+  if (!form.sceneId) {
+    templateFields.value = []
+    templateMessage.value = '请先选择试算场景，再按发布快照生成输入模板。'
+    return
+  }
+  const response = await getRunInputTemplate({
+    sceneId: form.sceneId,
+    versionId: form.versionId,
+    taskType: 'SIMULATION'
+  })
+  form.inputJson = response?.data?.inputJson || '{}'
+  templateFields.value = response?.data?.fields?.filter(item => item.includedInTemplate) || []
+  templateMessage.value = response?.data?.message || ''
 }
 
 async function handleExecute() {
@@ -278,8 +317,10 @@ function formatJson(value) {
   return JSON.stringify(value || {}, null, 2)
 }
 
-fillExample()
-getList()
+onMounted(async () => {
+  await getList()
+  await fillExample()
+})
 </script>
 
 <style scoped lang="scss">
@@ -298,6 +339,8 @@ getList()
 .run-page__section-head h3 { margin: 0; font-size: 18px; }
 .run-page__section-head p { margin: 6px 0 0; color: var(--el-text-color-secondary); font-size: 13px; }
 .run-page__action-row { display: flex; gap: 10px; margin-top: 8px; }
+.run-page__template-alert { margin-top: 14px; }
+.run-page__template-table { margin-top: 12px; }
 .run-page__tabs pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
 @media (max-width: 1200px) {
   .run-page__metrics, .run-page__workspace { grid-template-columns: 1fr; }

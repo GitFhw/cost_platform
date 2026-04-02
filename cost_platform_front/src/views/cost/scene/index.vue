@@ -2,10 +2,10 @@
   <div class="app-container scene-center">
     <section class="scene-center__hero">
       <div class="scene-center__hero-main">
-        <div class="scene-center__eyebrow">线程一 · 基础治理</div>
+        <div class="scene-center__eyebrow">场景主数据</div>
         <h2 class="scene-center__title">场景中心</h2>
         <p class="scene-center__subtitle">
-          先收稳“业务域字典 -> 场景主数据”第一层治理边界，让后续费用、变量、规则与发布都能围绕场景有序展开。
+          先收稳“业务域字典 -> 场景主数据”第一层治理边界，让后续费用、变量、规则、发布和运行链都能围绕场景有序展开。
         </p>
         <div class="scene-center__hero-actions">
           <el-button
