@@ -116,4 +116,7 @@ public class CostResultLedger implements Serializable
     /** 版本号 */
     @TableField(exist = false)
     private String versionNo;
+
+    @TableField(exist = false)
+    private String unitCode;
 }

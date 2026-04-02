@@ -26,6 +26,17 @@
             打开核算字典
           </el-button>
           <el-tag type="info">业务域统一来自系统字典 `cost_business_domain`</el-tag>
+          <el-tag v-if="currentSceneInfo.sceneId" type="success">
+            当前工作场景：{{ currentSceneInfo.sceneCode }} / {{ currentSceneInfo.sceneName }}
+          </el-tag>
+          <el-button
+            v-if="currentSceneInfo.sceneId"
+            plain
+            icon="Close"
+            @click="handleClearCurrentScene"
+          >
+            清除工作场景
+          </el-button>
         </div>
       </div>
       <div class="scene-center__hero-note">
@@ -222,6 +233,9 @@
           <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['cost:scene:edit']">
             修改
           </el-button>
+          <el-button link type="primary" icon="Select" @click="handleSetCurrentScene(scope.row)">
+            设为工作场景
+          </el-button>
           <el-button link type="primary" icon="Tickets" @click="handleOpenPublishCenter(scope.row)" v-hasPermi="['cost:publish:list']">
             查看版本
           </el-button>
@@ -383,6 +397,7 @@
 <script setup name="CostScene">
 import { ElMessageBox } from 'element-plus'
 import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listScene, updateScene } from '@/api/cost/scene'
+import { getCostSceneContextId, setCostSceneContextId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
@@ -404,6 +419,7 @@ const governanceOpen = ref(false)
 const governanceLoading = ref(false)
 const initialStatus = ref(undefined)
 const governanceInfo = ref({})
+const currentSceneInfo = ref({})
 const statistics = reactive({
   sceneCount: 0,
   enabledSceneCount: 0,
@@ -502,8 +518,28 @@ async function getList() {
     sceneList.value = listResponse.rows
     total.value = listResponse.total
     Object.assign(statistics, normalizeStats(statsResponse.data))
+    await syncCurrentSceneInfo()
   } finally {
     loading.value = false
+  }
+}
+
+async function syncCurrentSceneInfo() {
+  const currentSceneId = getCostSceneContextId()
+  if (!currentSceneId) {
+    currentSceneInfo.value = {}
+    return
+  }
+  const matched = sceneList.value.find(item => item.sceneId === currentSceneId)
+  if (matched) {
+    currentSceneInfo.value = matched
+    return
+  }
+  try {
+    const response = await getScene(currentSceneId)
+    currentSceneInfo.value = response.data || {}
+  } catch (error) {
+    currentSceneInfo.value = {}
   }
 }
 
@@ -644,6 +680,8 @@ function handleOpenBusinessDomain() {
 }
 
 function handleOpenPublishCenter(row) {
+  setCostSceneContextId(row.sceneId)
+  currentSceneInfo.value = row
   router.push({
     path: '/cost/publish',
     query: {
@@ -652,10 +690,24 @@ function handleOpenPublishCenter(row) {
   })
 }
 
+function handleSetCurrentScene(row) {
+  setCostSceneContextId(row.sceneId)
+  currentSceneInfo.value = row
+  proxy.$modal.msgSuccess(`已将 ${row.sceneName} 设为当前工作场景`)
+}
+
+function handleClearCurrentScene() {
+  setCostSceneContextId(undefined)
+  currentSceneInfo.value = {}
+  proxy.$modal.msgSuccess('已清除当前工作场景')
+}
+
 async function handleGovernance(row) {
   governanceLoading.value = true
   governanceOpen.value = true
   try {
+    setCostSceneContextId(row.sceneId)
+    currentSceneInfo.value = row
     governanceInfo.value = await fetchSceneGovernance(row.sceneId)
   } finally {
     governanceLoading.value = false

@@ -80,6 +80,10 @@
           <div>
             <h3>{{ currentFeeTitle }}</h3>
             <p>{{ currentFeeDesc }}</p>
+            <div v-if="currentFee?.unitCode" class="rule-center__unit-summary">
+              <strong>{{ resolveUnitLabel(currentFee.unitCode) }}</strong>
+              <span>{{ currentFeeUnitSemantic.summary }}</span>
+            </div>
           </div>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
         </div>
@@ -201,6 +205,11 @@
               <el-select v-model="form.quantityVariableCode" clearable filterable style="width: 100%" placeholder="公式/阶梯规则必选">
                 <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableCode} / ${item.variableName}`" :value="item.variableCode" />
               </el-select>
+              <div v-if="currentFee?.unitCode" class="rule-center__field-tip">
+                <strong>计价单位：{{ resolveUnitLabel(currentFee.unitCode) }}</strong>
+                <span>计量变量建议：{{ currentFeeUnitSemantic.quantityHint }}</span>
+                <span>结果解释：{{ currentFeeUnitSemantic.resultHint }}</span>
+              </div>
             </el-form-item>
           </el-col>
 
@@ -479,7 +488,9 @@ import { optionselectFormula } from '@/api/cost/formula'
 import { addRule, copyRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, updateRule } from '@/api/cost/rule'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
+import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
+import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 
 const { proxy } = getCurrentInstance()
 
@@ -587,6 +598,7 @@ const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) 
 }, {}))
 const selectedAmountFormulaMeta = computed(() => formulaOptions.value.find(item => item.formulaCode === form.value.amountFormulaCode) || {})
 const selectedTierVariableMeta = computed(() => variableMetaMap.value[form.value.quantityVariableCode])
+const currentFeeUnitSemantic = computed(() => getCostUnitSemantic(currentFee.value?.unitCode, resolveUnitLabel(currentFee.value?.unitCode)))
 const tierValidationIssues = computed(() => buildTierValidationIssues(form.value.tiers || []))
 const metricItems = computed(() => [
   { label: '规则总数', value: statistics.ruleCount, desc: '当前检索条件下规则数量' },
@@ -636,6 +648,16 @@ async function loadBaseOptions() {
   intervalModeOptions.value = dictMap.cost_rule_interval_mode || []
   unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResponse?.data || []
+  const preferredSceneId = resolvePreferredCostSceneId(
+    sceneOptions.value,
+    form.value.sceneId,
+    queryParams.value.sceneId,
+    getCostSceneContextId()
+  )
+  if (preferredSceneId) {
+    queryParams.value.sceneId = preferredSceneId
+    setCostSceneContextId(preferredSceneId)
+  }
 }
 
 async function loadFees() {
@@ -722,6 +744,7 @@ async function handleSceneChange() {
   selectedFeeId.value = undefined
   queryParams.value.feeId = undefined
   feeKeyword.value = ''
+  setCostSceneContextId(queryParams.value.sceneId)
   await loadFees()
   handleQuery()
 }
@@ -730,12 +753,14 @@ async function handleFeeSelect(item) {
   selectedFeeId.value = item.feeId
   queryParams.value.feeId = item.feeId
   queryParams.value.sceneId = item.sceneId
+  setCostSceneContextId(item.sceneId)
   await loadVariables(item.sceneId)
   handleQuery()
 }
 
 function handleQuery() {
   queryParams.value.pageNum = 1
+  setCostSceneContextId(queryParams.value.sceneId)
   getList()
 }
 
@@ -1295,6 +1320,22 @@ getList()
 
 .rule-center__token {
   cursor: pointer;
+}
+
+.rule-center__unit-summary,
+.rule-center__field-tip {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rule-center__unit-summary strong,
+.rule-center__field-tip strong {
+  color: var(--el-color-primary-dark-2);
+  font-size: 13px;
 }
 
 .mb8 { margin-bottom: 8px; }

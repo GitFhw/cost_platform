@@ -21,7 +21,7 @@
 
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
-        <el-select v-model="queryParams.sceneId" placeholder="请选择场景" clearable filterable style="width: 230px">
+        <el-select v-model="queryParams.sceneId" placeholder="请选择场景" clearable filterable style="width: 230px" @change="handleSceneChange">
           <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
@@ -80,7 +80,10 @@
       <el-table-column label="费用名称" prop="feeName" min-width="160" align="center" :show-overflow-tooltip="true" />
       <el-table-column label="计价单位" prop="unitCode" width="120" align="center">
         <template #default="scope">
-          <span>{{ resolveUnitLabel(scope.row.unitCode) }}</span>
+          <div class="fee-center__unit-cell">
+            <span>{{ resolveUnitLabel(scope.row.unitCode) }}</span>
+            <small>{{ resolveUnitSemantic(scope.row.unitCode).summary }}</small>
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="费用分类" prop="feeCategory" width="140" align="center" />
@@ -143,6 +146,11 @@
               <el-select v-model="form.unitCode" filterable clearable style="width: 100%" placeholder="请选择计价单位">
                 <el-option v-for="item in unitOptionsForForm" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
+              <div v-if="form.unitCode" class="fee-center__field-tip">
+                <strong>{{ currentUnitSemantic.summary }}</strong>
+                <span>计量变量建议：{{ currentUnitSemantic.quantityHint }}</span>
+                <span>结果解释：{{ currentUnitSemantic.resultHint }}</span>
+              </div>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -210,6 +218,8 @@
 import { ElMessageBox } from 'element-plus'
 import { addFee, delFee, getFee, getFeeGovernance, getFeeStats, listFee, updateFee } from '@/api/cost/fee'
 import { optionselectScene } from '@/api/cost/scene'
+import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
@@ -273,6 +283,7 @@ const unitOptionsForForm = computed(() => {
   }
   return options
 })
+const currentUnitSemantic = computed(() => resolveUnitSemantic(form.value?.unitCode))
 
 const currentSceneLabel = computed(() => {
   if (!queryParams.value.sceneId) {
@@ -291,6 +302,19 @@ async function loadBaseOptions() {
   feeStatusOptions.value = dictMap.cost_fee_status || []
   unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResponse?.data || []
+  const preferredSceneId = resolvePreferredCostSceneId(
+    sceneOptions.value,
+    form.value.sceneId,
+    queryParams.value.sceneId,
+    getCostSceneContextId()
+  )
+  if (preferredSceneId) {
+    queryParams.value.sceneId = preferredSceneId
+    if (!form.value.feeId && !form.value.sceneId) {
+      form.value.sceneId = preferredSceneId
+    }
+    setCostSceneContextId(preferredSceneId)
+  }
 }
 
 function normalizeStats(data = {}) {
@@ -349,6 +373,7 @@ function handleSelectionChange(selection) {
 
 function handleQuery() {
   queryParams.value.pageNum = 1
+  setCostSceneContextId(queryParams.value.sceneId)
   getList()
 }
 
@@ -362,6 +387,7 @@ function resetQuery() {
 async function handleAdd() {
   await loadBaseOptions()
   reset()
+  form.value.sceneId = queryParams.value.sceneId || resolvePreferredCostSceneId(sceneOptions.value, getCostSceneContextId())
   open.value = true
   title.value = '新增费用'
 }
@@ -372,9 +398,15 @@ async function handleUpdate(row) {
   const feeId = row?.feeId || ids.value[0]
   const response = await getFee(feeId)
   form.value = { ...response.data }
+  setCostSceneContextId(form.value.sceneId)
   initialStatus.value = response.data?.status
   open.value = true
   title.value = '修改费用'
+}
+
+function handleSceneChange(sceneId) {
+  queryParams.value.sceneId = sceneId
+  setCostSceneContextId(sceneId)
 }
 
 function submitForm() {
@@ -479,6 +511,10 @@ function resolveUnitLabel(value) {
   return resolveDictLabel(unitCodeOptions, value)
 }
 
+function resolveUnitSemantic(value) {
+  return getCostUnitSemantic(value, resolveUnitLabel(value))
+}
+
 async function ensureDisableAllowed() {
   if (!form.value.feeId || form.value.status !== '1' || initialStatus.value === '1') {
     return true
@@ -516,6 +552,10 @@ getList()
 .fee-center__eyebrow { font-size: 12px; color: var(--el-color-primary); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .fee-center__title { margin: 8px 0 0; font-size: 26px; }
 .fee-center__subtitle { margin: 10px 0 0; color: var(--el-text-color-regular); line-height: 1.8; }
+.fee-center__unit-cell { display: grid; gap: 4px; justify-items: center; }
+.fee-center__unit-cell small { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.4; }
+.fee-center__field-tip { margin-top: 8px; display: grid; gap: 4px; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.5; }
+.fee-center__field-tip strong { color: var(--el-color-primary-dark-2); font-size: 13px; }
 
 .fee-center__metrics {
   display: grid;

@@ -4,9 +4,11 @@
       <div>
         <div class="result-page__eyebrow">结果追溯</div>
         <h2 class="result-page__title">结果台账与追溯解释</h2>
-        <p class="result-page__subtitle">按场景、版本、账期、任务号和费用维度查询正式核算结果，查看命中规则、阶梯、变量值和执行时间线。</p>
+        <p class="result-page__subtitle">
+          按场景、版本、账期、任务号和费用维度查询正式核算结果，查看命中规则、阶梯、变量值和执行时间线。
+        </p>
       </div>
-      <el-tag type="success">结果台账与追溯解释分离落库</el-tag>
+      <el-tag type="success">结果台账与追溯解释分离落地</el-tag>
     </section>
 
     <section class="result-page__metrics">
@@ -74,8 +76,15 @@
         <el-table-column label="核算对象" min-width="180">
           <template #default="scope">{{ scope.row.objectName || '-' }} / {{ scope.row.objectCode || '-' }}</template>
         </el-table-column>
-        <el-table-column label="数量" prop="quantityValue" width="110" align="right" />
-        <el-table-column label="单价" prop="unitPrice" width="110" align="right" />
+        <el-table-column label="数量" min-width="140" align="right">
+          <template #default="scope">{{ formatQuantity(scope.row) }}</template>
+        </el-table-column>
+        <el-table-column label="单价" min-width="140" align="right">
+          <template #default="scope">{{ formatUnitPrice(scope.row) }}</template>
+        </el-table-column>
+        <el-table-column label="计价口径" min-width="220" :show-overflow-tooltip="true">
+          <template #default="scope">{{ resolveUnitSemantic(scope.row).summary }}</template>
+        </el-table-column>
         <el-table-column label="金额" prop="amountValue" width="120" align="right" />
         <el-table-column label="状态" width="110" align="center">
           <template #default="scope">
@@ -98,9 +107,12 @@
         <el-descriptions-item label="任务号">{{ detailData.ledger.taskNo }}</el-descriptions-item>
         <el-descriptions-item label="版本">{{ detailData.ledger.versionNo }}</el-descriptions-item>
         <el-descriptions-item label="费用">{{ detailData.ledger.feeName }} ({{ detailData.ledger.feeCode }})</el-descriptions-item>
+        <el-descriptions-item label="计价单位">{{ resolveUnitLabel(detailData.ledger.unitCode) }}</el-descriptions-item>
         <el-descriptions-item label="业务单号">{{ detailData.ledger.bizNo }}</el-descriptions-item>
+        <el-descriptions-item label="计价口径">{{ resolveUnitSemantic(detailData.ledger).summary }}</el-descriptions-item>
         <el-descriptions-item label="账期">{{ detailData.ledger.billMonth }}</el-descriptions-item>
         <el-descriptions-item label="金额">{{ detailData.ledger.amountValue }}</el-descriptions-item>
+        <el-descriptions-item label="结果解释" :span="2">{{ resolveUnitSemantic(detailData.ledger).resultHint }}</el-descriptions-item>
       </el-descriptions>
 
       <el-tabs class="result-page__tabs">
@@ -135,6 +147,8 @@
 <script setup name="CostResult">
 import { getResultDetail, getResultStats, getTraceDetail, listResult, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
+import { getCostSceneContextId, resolvePreferredCostSceneId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -147,6 +161,7 @@ const resultList = ref([])
 const sceneOptions = ref([])
 const versionOptions = ref([])
 const resultStatusOptions = ref([])
+const unitCodeOptions = ref([])
 const detailOpen = ref(false)
 const traceOpen = ref(false)
 const detailData = ref({})
@@ -174,11 +189,22 @@ const metricItems = computed(() => [
 
 async function loadBaseOptions() {
   const [dictMap, sceneResp] = await Promise.all([
-    getRemoteDictOptionMap(['cost_result_status']),
+    getRemoteDictOptionMap(['cost_result_status', 'cost_unit_code']),
     optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
   ])
   resultStatusOptions.value = dictMap.cost_result_status || []
+  unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResp?.data || []
+  const preferredSceneId = resolvePreferredCostSceneId(
+    sceneOptions.value,
+    queryParams.sceneId,
+    route.query.sceneId,
+    getCostSceneContextId()
+  )
+  if (preferredSceneId) {
+    queryParams.sceneId = preferredSceneId
+    setCostSceneContextId(preferredSceneId)
+  }
 }
 
 async function loadVersionOptions(sceneId) {
@@ -209,6 +235,7 @@ async function getList() {
 
 function handleQuery() {
   queryParams.pageNum = 1
+  setCostSceneContextId(queryParams.sceneId)
   getList()
 }
 
@@ -222,6 +249,7 @@ function resetQuery() {
 
 async function handleSceneChange(sceneId) {
   queryParams.versionId = undefined
+  setCostSceneContextId(sceneId)
   await loadVersionOptions(sceneId)
 }
 
@@ -235,6 +263,30 @@ async function handleTrace(row) {
   const resp = await getTraceDetail(row.traceId)
   traceData.value = resp.data || {}
   traceOpen.value = true
+}
+
+function resolveUnitLabel(unitCode) {
+  const match = unitCodeOptions.value.find(item => item.value === unitCode)
+  return match ? match.label : (unitCode || '-')
+}
+
+function resolveUnitSemantic(row) {
+  return getCostUnitSemantic(row?.unitCode, resolveUnitLabel(row?.unitCode))
+}
+
+function formatQuantity(row) {
+  if (row?.quantityValue == null) {
+    return '-'
+  }
+  return `${row.quantityValue} ${resolveUnitLabel(row.unitCode)}`
+}
+
+function formatUnitPrice(row) {
+  if (row?.unitPrice == null) {
+    return '-'
+  }
+  const unitLabel = resolveUnitLabel(row.unitCode)
+  return unitLabel === '-' ? String(row.unitPrice) : `${row.unitPrice} / ${unitLabel}`
 }
 
 function formatJson(value) {
