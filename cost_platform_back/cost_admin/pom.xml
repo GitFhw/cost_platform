@@ -57,7 +57,7 @@
         <!-- 成本核算模块 -->
         <dependency>
             <groupId>com.ruoyi</groupId>
-            <artifactId>cost_engine</artifactId>
+            <artifactId>cost_platform</artifactId>
         </dependency>
 
         <!-- 定时任务-->

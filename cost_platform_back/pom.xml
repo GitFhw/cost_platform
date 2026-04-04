@@ -191,7 +191,7 @@
             <!-- 成本核算模块 -->
             <dependency>
                 <groupId>com.ruoyi</groupId>
-                <artifactId>cost_engine</artifactId>
+                <artifactId>cost_platform</artifactId>
                 <version>${ruoyi.version}</version>
             </dependency>
 
@@ -209,7 +209,7 @@
         <module>cost_admin</module>
         <module>cost_framework</module>
         <module>cost_system</module>
-        <module>cost_engine</module>
+        <module>cost_platform</module>
         <module>cost_quartz</module>
         <module>cost_generator</module>
         <module>cost_common</module>
