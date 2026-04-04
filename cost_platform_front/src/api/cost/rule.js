@@ -61,6 +61,15 @@ export function copyRule(data) {
   })
 }
 
+// 阶梯命中预演
+export function previewRuleTier(data) {
+  return request({
+    url: '/cost/rule/tierPreview',
+    method: 'post',
+    data
+  })
+}
+
 // 删除规则
 export function delRule(ruleId) {
   return request({

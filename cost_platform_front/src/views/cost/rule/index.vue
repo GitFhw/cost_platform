@@ -179,8 +179,20 @@
           <el-col :span="8">
             <el-form-item label="条件逻辑" prop="conditionLogic">
               <el-radio-group v-model="form.conditionLogic">
-                <el-radio v-for="item in conditionLogicOptions" :key="item.value" :value="item.value">{{ item.label }}</el-radio>
+                <el-radio
+                  v-for="item in conditionLogicOptions"
+                  :key="item.value"
+                  :value="item.value"
+                  :disabled="isGroupedPricing && item.value !== 'OR'"
+                >
+                  {{ item.label }}
+                </el-radio>
               </el-radio-group>
+              <div v-if="isGroupedPricing" class="rule-center__field-tip">
+                <strong>组合定价口径</strong>
+                <span>同一组合组内按“且”命中，组合组之间固定为“满足任一组即可”。</span>
+                <span>系统会按命中的组合组自动取价，不再允许切回“所有组合组都需命中”。</span>
+              </div>
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -213,12 +225,26 @@
             </el-form-item>
           </el-col>
 
-          <el-col :span="12" v-if="form.ruleType === 'FIXED_RATE'">
+          <el-col :span="24" v-if="['FIXED_RATE', 'FIXED_AMOUNT'].includes(form.ruleType)">
+            <el-form-item label="定价方式">
+              <el-radio-group v-model="form.pricingMode">
+                <el-radio value="TYPED">统一定价</el-radio>
+                <el-radio value="GROUPED">组合定价</el-radio>
+              </el-radio-group>
+              <div class="rule-center__field-tip">
+                <strong>组合定价</strong>
+                <span>适用于“不同变量组合对应不同单价”的规则，同一规则内直接维护多组价格。</span>
+                <span v-if="form.pricingMode === 'GROUPED'">当前会按命中的条件组合组自动取价，条件逻辑固定为“满足任一组即可”。</span>
+              </div>
+            </el-form-item>
+          </el-col>
+
+          <el-col :span="12" v-if="form.ruleType === 'FIXED_RATE' && form.pricingMode !== 'GROUPED'">
             <el-form-item label="固定费率" prop="pricingConfig.rateValue">
               <el-input-number v-model="form.pricingConfig.rateValue" :precision="6" controls-position="right" style="width: 100%" />
             </el-form-item>
           </el-col>
-          <el-col :span="12" v-if="form.ruleType === 'FIXED_AMOUNT'">
+          <el-col :span="12" v-if="form.ruleType === 'FIXED_AMOUNT' && form.pricingMode !== 'GROUPED'">
             <el-form-item label="固定金额" prop="pricingConfig.amountValue">
               <el-input-number v-model="form.pricingConfig.amountValue" :precision="2" controls-position="right" style="width: 100%" />
             </el-form-item>
@@ -262,49 +288,117 @@
 
         <div class="rule-center__section-title">
           <span>条件编辑区</span>
-          <el-button type="primary" plain icon="Plus" @click="handleAddCondition">新增条件</el-button>
+          <div class="rule-center__section-actions">
+            <el-button type="success" plain icon="Plus" @click="handleAddConditionGroup">新增组合组</el-button>
+            <el-button type="primary" plain icon="Plus" @click="handleAddCondition">新增条件</el-button>
+          </div>
         </div>
-        <el-table :data="form.conditions" size="small" border>
-          <el-table-column label="组号" width="90" align="center">
-            <template #default="scope">
-              <el-input-number v-model="scope.row.groupNo" :min="1" :max="99" style="width: 100%" />
-            </template>
-          </el-table-column>
-          <el-table-column label="变量" min-width="220" align="center">
-            <template #default="scope">
-              <el-select v-model="scope.row.variableCode" filterable style="width: 100%" @change="value => handleConditionVariableChange(scope.row, value)">
-                <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableCode} / ${item.variableName}`" :value="item.variableCode" />
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作符" min-width="150" align="center">
-            <template #default="scope">
-              <el-select v-model="scope.row.operatorCode" style="width: 100%" @change="value => handleConditionOperatorChange(scope.row, value)">
-                <el-option v-for="item in operatorOptions" :key="item.value" :label="item.label" :value="item.value" />
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="条件值" min-width="240" align="center">
-            <template #default="scope">
-              <ConditionValueEditor
-                v-model="scope.row.compareValue"
-                :operator-code="scope.row.operatorCode"
-                :variable-meta="variableMetaMap[scope.row.variableCode] || {}"
-                :dict-options-map="dynamicDictOptionsMap"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column label="显示名称" min-width="160" align="center">
-            <template #default="scope">
-              <el-input v-model="scope.row.displayName" placeholder="默认带出变量名称" />
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="90" align="center" fixed="right">
-            <template #default="scope">
-              <el-button link type="danger" icon="Delete" @click="handleRemoveCondition(scope.$index)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <el-alert
+          title="支持按组合组配置多变量规则"
+          :description="`同一组合组内按“且”命中，组合组之间按当前条件逻辑（${form.conditionLogic === 'OR' ? '满足任一组即可' : '所有组合组都需命中'}）汇总。可用来沉淀同价条件组合，减少规则拆分。`"
+          type="info"
+          :closable="false"
+          show-icon
+          class="mb12"
+        />
+        <div v-if="conditionGroups.length" class="rule-center__condition-groups">
+          <section v-for="group in conditionGroups" :key="group.groupNo" class="rule-center__condition-group">
+            <div class="rule-center__condition-group-header">
+              <div>
+                <strong>组合组 {{ group.groupNo }}</strong>
+                <p>当前组内已配置 {{ group.items.length }} 个变量条件</p>
+              </div>
+              <div class="rule-center__section-actions">
+                <el-button type="primary" link icon="Plus" @click="handleAddCondition(group.groupNo)">新增组内条件</el-button>
+                <el-button type="danger" link icon="Delete" @click="handleRemoveConditionGroup(group.groupNo)">删除组合组</el-button>
+              </div>
+            </div>
+            <el-table :data="group.items" size="small" border>
+              <el-table-column label="变量" min-width="220" align="center">
+                <template #default="scope">
+                  <el-select
+                    v-model="scope.row.condition.variableCode"
+                    filterable
+                    style="width: 100%"
+                    @change="value => handleConditionVariableChange(scope.row.condition, value)"
+                  >
+                    <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableCode} / ${item.variableName}`" :value="item.variableCode" />
+                  </el-select>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作符" min-width="150" align="center">
+                <template #default="scope">
+                  <el-select
+                    v-model="scope.row.condition.operatorCode"
+                    style="width: 100%"
+                    @change="value => handleConditionOperatorChange(scope.row.condition, value)"
+                  >
+                    <el-option v-for="item in operatorOptions" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
+                </template>
+              </el-table-column>
+              <el-table-column label="条件值" min-width="240" align="center">
+                <template #default="scope">
+                  <ConditionValueEditor
+                    v-model="scope.row.condition.compareValue"
+                    :operator-code="scope.row.condition.operatorCode"
+                    :variable-meta="variableMetaMap[scope.row.condition.variableCode] || {}"
+                    :dict-options-map="dynamicDictOptionsMap"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="显示名称" min-width="160" align="center">
+                <template #default="scope">
+                  <el-input v-model="scope.row.condition.displayName" placeholder="默认带出变量名称" />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="90" align="center" fixed="right">
+                <template #default="scope">
+                  <el-button link type="danger" icon="Delete" @click="handleRemoveCondition(group.groupNo, scope.$index)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </section>
+        </div>
+        <el-empty v-else description="当前还没有条件组合，先新增一个组合组开始配置" :image-size="72" />
+        <div v-if="['FIXED_RATE', 'FIXED_AMOUNT'].includes(form.ruleType) && form.pricingMode === 'GROUPED'" class="rule-center__group-pricing">
+          <div class="rule-center__section-title">
+            <span>组合定价区</span>
+            <small>每个组合组分别维护自己的{{ form.ruleType === 'FIXED_RATE' ? '费率/单价' : '固定金额' }}。</small>
+          </div>
+          <el-alert
+            title="命中哪个组合组，就取哪个组合组的价格"
+            description="组合定价下，组合组之间固定按“满足任一组即可”汇总；命中哪个组合组，就读取哪个组合组的价格。"
+            type="success"
+            :closable="false"
+            show-icon
+            class="mb12"
+          />
+          <el-table :data="groupPricingRows" size="small" border>
+            <el-table-column label="组合组" prop="groupNo" width="100" align="center" />
+            <el-table-column label="条件变量数" width="120" align="center">
+              <template #default="scope">
+                {{ scope.row.conditionCount }}
+              </template>
+            </el-table-column>
+            <el-table-column :label="form.ruleType === 'FIXED_RATE' ? '组费率/单价' : '组固定金额'" min-width="180" align="center">
+              <template #default="scope">
+                <el-input-number
+                  :model-value="scope.row.value"
+                  :precision="form.ruleType === 'FIXED_RATE' ? 6 : 2"
+                  controls-position="right"
+                  style="width: 100%"
+                  @update:model-value="value => handleGroupPricingValueChange(scope.row.groupNo, value)"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="命中说明" min-width="260" align="center">
+              <template #default="scope">
+                命中组合组 {{ scope.row.groupNo }} 时，按当前定价值直接计算
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
 
         <template v-if="form.ruleType === 'TIER_RATE'">
           <div class="rule-center__section-title">
@@ -335,6 +429,108 @@
             </template>
           </el-alert>
           <RuleTierEditor v-model="form.tiers" :interval-mode-options="intervalModeOptions" />
+          <div class="rule-center__section-title">
+            <span>阶梯命中预演</span>
+            <small>围绕单个费目输入多变量样本值，直接查看条件命中与阶梯定位结果。</small>
+          </div>
+          <div class="rule-center__preview-workbench">
+            <div class="rule-center__preview-header">
+              <div>
+                <h4>单费目样本输入</h4>
+                <p>当前预演会同时读取条件变量和阶梯依据变量，口径与正式运行保持一致。</p>
+              </div>
+              <div class="rule-center__preview-actions">
+                <el-button @click="resetTierPreview">清空样本</el-button>
+                <el-button type="primary" :loading="tierPreviewLoading" @click="handleTierPreview">执行预演</el-button>
+              </div>
+            </div>
+            <div v-if="tierPreviewVariables.length" class="rule-center__preview-grid">
+              <div v-for="item in tierPreviewVariables" :key="item.variableCode" class="rule-center__preview-field">
+                <div class="rule-center__preview-label">
+                  <strong>{{ item.variableName }}</strong>
+                  <span>{{ item.variableCode }}</span>
+                </div>
+                <el-select
+                  v-if="item.dictType && dynamicDictOptionsMap[item.dictType]?.length"
+                  v-model="tierPreviewInputs[item.variableCode]"
+                  clearable
+                  filterable
+                  placeholder="请选择样本值"
+                >
+                  <el-option
+                    v-for="option in dynamicDictOptionsMap[item.dictType]"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-select>
+                <el-input
+                  v-else
+                  v-model="tierPreviewInputs[item.variableCode]"
+                  :placeholder="item.variableCode === form.quantityVariableCode ? '请输入计量值' : '请输入该变量样本值'"
+                />
+                <small>{{ resolveTagLabel(variableDataTypeOptions, item.dataType) || '文本' }}</small>
+              </div>
+            </div>
+            <el-empty v-else description="请先配置阶梯依据变量或条件变量" :image-size="72" />
+
+            <div v-if="tierPreviewResult" class="rule-center__preview-result">
+              <el-alert
+                :title="tierPreviewResult.tierMatched ? '已命中阶梯' : '未命中阶梯'"
+                :description="tierPreviewResult.summary"
+                :type="tierPreviewResult.tierMatched ? 'success' : (tierPreviewResult.conditionMatched ? 'warning' : 'info')"
+                :closable="false"
+                show-icon
+              />
+              <el-descriptions :column="2" border class="mt12">
+                <el-descriptions-item label="条件命中">{{ tierPreviewResult.conditionMatched ? '通过' : '未通过' }}</el-descriptions-item>
+                <el-descriptions-item label="阶梯命中">{{ tierPreviewResult.tierMatched ? '已命中' : '未命中' }}</el-descriptions-item>
+                <el-descriptions-item label="命中组合组">{{ tierPreviewResult.matchedGroupNo ?? '-' }}</el-descriptions-item>
+                <el-descriptions-item label="计量变量">{{ tierPreviewResult.quantityVariableName || tierPreviewResult.quantityVariableCode || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="计量值">{{ tierPreviewResult.quantityValue ?? '-' }}</el-descriptions-item>
+                <el-descriptions-item label="命中档位">{{ tierPreviewResult.matchedTierNo ?? '-' }}</el-descriptions-item>
+                <el-descriptions-item label="命中区间">{{ tierPreviewResult.matchedTierRange || '-' }}</el-descriptions-item>
+              </el-descriptions>
+              <el-table :data="tierPreviewResult.groupResults || []" size="small" border class="mt12">
+                <el-table-column label="组号" prop="groupNo" width="80" align="center" />
+                <el-table-column label="组内逻辑" prop="logic" min-width="220" align="center" />
+                <el-table-column label="结果" width="100" align="center">
+                  <template #default="scope">
+                    <el-tag :type="scope.row.pass ? 'success' : 'info'">{{ scope.row.pass ? '命中' : '未命中' }}</el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-table :data="tierPreviewResult.conditionResults || []" size="small" border class="mt12">
+                <el-table-column label="组号" prop="groupNo" width="80" align="center" />
+                <el-table-column label="变量" min-width="180" align="center">
+                  <template #default="scope">
+                    <div class="rule-center__readonly-cell">
+                      <strong>{{ scope.row.displayName }}</strong>
+                      <span>{{ scope.row.variableCode }}</span>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="样本值" prop="leftValue" min-width="120" align="center" />
+                <el-table-column label="操作符" prop="operatorCode" width="100" align="center" />
+                <el-table-column label="比较值" prop="compareValue" min-width="140" align="center" />
+                <el-table-column label="命中" width="90" align="center">
+                  <template #default="scope">
+                    <el-tag :type="scope.row.pass ? 'success' : 'info'">{{ scope.row.pass ? '通过' : '未过' }}</el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-table :data="tierPreviewResult.tierResults || []" size="small" border class="mt12">
+                <el-table-column label="档位" prop="tierNo" width="90" align="center" />
+                <el-table-column label="区间" prop="range" min-width="180" align="center" />
+                <el-table-column label="费率/单价" prop="rateValue" min-width="120" align="center" />
+                <el-table-column label="命中" width="90" align="center">
+                  <template #default="scope">
+                    <el-tag :type="scope.row.hit ? 'success' : 'info'">{{ scope.row.hit ? '命中' : '未命中' }}</el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </div>
         </template>
       </el-form>
       <template #footer>
@@ -485,7 +681,7 @@ import ConditionValueEditor from '@/components/cost/ConditionValueEditor.vue'
 import RuleTierEditor from '@/components/cost/RuleTierEditor.vue'
 import { optionselectFee } from '@/api/cost/fee'
 import { optionselectFormula } from '@/api/cost/formula'
-import { addRule, copyRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, updateRule } from '@/api/cost/rule'
+import { addRule, copyRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, previewRuleTier, updateRule } from '@/api/cost/rule'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
@@ -509,6 +705,10 @@ const initialStatus = ref(undefined)
 const expressionOpen = ref(false)
 const copyOpen = ref(false)
 const copySourceRule = ref(undefined)
+const tierPreviewLoading = ref(false)
+const tierPreviewResult = ref(null)
+const hydratingRuleForm = ref(false)
+const tierPreviewInputs = reactive({})
 
 const ruleList = ref([])
 const sceneOptions = ref([])
@@ -599,7 +799,43 @@ const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) 
 const selectedAmountFormulaMeta = computed(() => formulaOptions.value.find(item => item.formulaCode === form.value.amountFormulaCode) || {})
 const selectedTierVariableMeta = computed(() => variableMetaMap.value[form.value.quantityVariableCode])
 const currentFeeUnitSemantic = computed(() => getCostUnitSemantic(currentFee.value?.unitCode, resolveUnitLabel(currentFee.value?.unitCode)))
+const isGroupedPricing = computed(() => ['FIXED_RATE', 'FIXED_AMOUNT'].includes(form.value.ruleType) && form.value.pricingMode === 'GROUPED')
 const tierValidationIssues = computed(() => buildTierValidationIssues(form.value.tiers || []))
+const tierPreviewVariables = computed(() => {
+  const codes = [form.value.quantityVariableCode, ...(form.value.conditions || []).map(item => item.variableCode)].filter(Boolean)
+  return [...new Set(codes)].map(code => variableMetaMap.value[code]).filter(Boolean)
+})
+const conditionGroups = computed(() => {
+  const groups = new Map()
+  ;(form.value.conditions || []).forEach((item, index) => {
+    const groupNo = Number(item.groupNo || 1)
+    if (!groups.has(groupNo)) {
+      groups.set(groupNo, [])
+    }
+    groups.get(groupNo).push({
+      condition: item,
+      conditionIndex: index
+    })
+  })
+  return [...groups.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([groupNo, items]) => ({
+      groupNo,
+      items: items.sort((a, b) => Number(a.condition.sortNo || 0) - Number(b.condition.sortNo || 0))
+    }))
+})
+const groupPricingRows = computed(() => {
+  const groupPrices = Array.isArray(form.value.pricingConfig?.groupPrices) ? form.value.pricingConfig.groupPrices : []
+  const priceMap = new Map(groupPrices.map(item => [Number(item.groupNo), item]))
+  return conditionGroups.value.map(group => {
+    const matched = priceMap.get(Number(group.groupNo)) || {}
+    return {
+      groupNo: Number(group.groupNo),
+      conditionCount: group.items.length,
+      value: form.value.ruleType === 'FIXED_RATE' ? matched.rateValue : matched.amountValue
+    }
+  })
+})
 const metricItems = computed(() => [
   { label: '规则总数', value: statistics.ruleCount, desc: '当前检索条件下规则数量' },
   { label: '启用规则数', value: statistics.enabledRuleCount, desc: '状态为正常的规则数量' },
@@ -615,6 +851,46 @@ watch(() => form.value.amountFormulaCode, value => {
   }
   const meta = formulaOptions.value.find(item => item.formulaCode === value)
   form.value.amountFormula = meta?.formulaExpr || ''
+})
+
+watch(() => form.value.quantityVariableCode, () => {
+  tierPreviewResult.value = null
+})
+
+watch(() => JSON.stringify(form.value.conditions || []), () => {
+  tierPreviewResult.value = null
+  if (hydratingRuleForm.value) {
+    return
+  }
+  syncGroupedPricingConfig()
+})
+
+watch(() => JSON.stringify(form.value.tiers || []), () => {
+  tierPreviewResult.value = null
+})
+
+watch(() => form.value.pricingMode, value => {
+  if (hydratingRuleForm.value) {
+    return
+  }
+  if (value === 'GROUPED') {
+    form.value.conditionLogic = 'OR'
+    syncGroupedPricingConfig()
+  } else if (['FIXED_RATE', 'FIXED_AMOUNT'].includes(form.value.ruleType)) {
+    form.value.pricingConfig = {
+      ...(form.value.pricingConfig || {}),
+      groupPrices: undefined
+    }
+  }
+})
+
+watch(() => form.value.conditionLogic, value => {
+  if (hydratingRuleForm.value) {
+    return
+  }
+  if (isGroupedPricing.value && value !== 'OR') {
+    form.value.conditionLogic = 'OR'
+  }
 })
 
 function resetFormModel() {
@@ -640,7 +916,34 @@ function resetFormModel() {
     tiers: []
   }
   initialStatus.value = undefined
+  resetTierPreview()
   proxy.resetForm('ruleRef')
+}
+
+function resetTierPreview() {
+  Object.keys(tierPreviewInputs).forEach(key => {
+    delete tierPreviewInputs[key]
+  })
+  tierPreviewResult.value = null
+}
+
+function syncGroupedPricingConfig() {
+  if (!['FIXED_RATE', 'FIXED_AMOUNT'].includes(form.value.ruleType) || form.value.pricingMode !== 'GROUPED') {
+    return
+  }
+  const existing = Array.isArray(form.value.pricingConfig?.groupPrices) ? form.value.pricingConfig.groupPrices : []
+  const existingMap = new Map(existing.map(item => [Number(item.groupNo), item]))
+  const valueKey = form.value.ruleType === 'FIXED_RATE' ? 'rateValue' : 'amountValue'
+  form.value.pricingConfig = {
+    ...(form.value.pricingConfig || {}),
+    groupPrices: conditionGroups.value.map(group => {
+      const matched = existingMap.get(Number(group.groupNo)) || {}
+      return {
+        groupNo: Number(group.groupNo),
+        [valueKey]: matched[valueKey]
+      }
+    })
+  }
 }
 
 async function loadBaseOptions() {
@@ -776,7 +1079,9 @@ async function handleAdd() {
   }
   await loadVariables(currentFee.value?.sceneId)
   resetFormModel()
+  hydratingRuleForm.value = true
   form.value.conditions = [createConditionRow()]
+  hydratingRuleForm.value = false
   open.value = true
   title.value = '新增规则'
 }
@@ -786,7 +1091,9 @@ async function handleUpdate(row) {
   const response = await getRule(ruleId)
   await loadVariables(currentFee.value?.sceneId || queryParams.value.sceneId)
   resetFormModel()
+  hydratingRuleForm.value = true
   form.value = normalizeRuleDetail(response.data)
+  hydratingRuleForm.value = false
   initialStatus.value = response.data?.status
   open.value = true
   title.value = '修改规则'
@@ -820,13 +1127,14 @@ function cancel() {
 }
 
 function handleRuleTypeChange(value) {
+  resetTierPreview()
   if (value === 'FIXED_RATE') {
-    form.value.pricingConfig = { rateValue: form.value.pricingConfig?.rateValue }
+    form.value.pricingConfig = { rateValue: form.value.pricingConfig?.rateValue, groupPrices: form.value.pricingConfig?.groupPrices }
     form.value.amountFormulaCode = undefined
     form.value.amountFormula = undefined
     form.value.tiers = []
   } else if (value === 'FIXED_AMOUNT') {
-    form.value.pricingConfig = { amountValue: form.value.pricingConfig?.amountValue }
+    form.value.pricingConfig = { amountValue: form.value.pricingConfig?.amountValue, groupPrices: form.value.pricingConfig?.groupPrices }
     form.value.amountFormulaCode = undefined
     form.value.amountFormula = undefined
     form.value.tiers = []
@@ -843,18 +1151,53 @@ function handleRuleTypeChange(value) {
   }
 }
 
-function handleAddCondition() {
-  form.value.conditions.push(createConditionRow())
+function handleAddCondition(groupNo) {
+  const targetGroupNo = Number(groupNo || getLastConditionGroupNo())
+  form.value.conditions.push(createConditionRow(targetGroupNo))
+  tierPreviewResult.value = null
 }
 
-function handleRemoveCondition(index) {
-  form.value.conditions.splice(index, 1)
+function handleAddConditionGroup() {
+  form.value.conditions.push(createConditionRow(getNextConditionGroupNo()))
+  tierPreviewResult.value = null
+}
+
+function handleRemoveCondition(groupNo, indexInGroup) {
+  const group = conditionGroups.value.find(item => item.groupNo === Number(groupNo))
+  const target = group?.items?.[indexInGroup]
+  if (target?.conditionIndex == null) {
+    return
+  }
+  form.value.conditions.splice(target.conditionIndex, 1)
+  tierPreviewResult.value = null
+}
+
+function handleRemoveConditionGroup(groupNo) {
+  form.value.conditions = (form.value.conditions || []).filter(item => Number(item.groupNo || 1) !== Number(groupNo))
+  tierPreviewResult.value = null
+}
+
+function handleGroupPricingValueChange(groupNo, value) {
+  if (!Array.isArray(form.value.pricingConfig?.groupPrices)) {
+    syncGroupedPricingConfig()
+  }
+  const valueKey = form.value.ruleType === 'FIXED_RATE' ? 'rateValue' : 'amountValue'
+  form.value.pricingConfig.groupPrices = (form.value.pricingConfig.groupPrices || []).map(item => {
+    if (Number(item.groupNo) !== Number(groupNo)) {
+      return item
+    }
+    return {
+      ...item,
+      [valueKey]: value
+    }
+  })
 }
 
 async function handleConditionVariableChange(row, value) {
   const meta = variableMetaMap.value[value]
   row.displayName = row.displayName || meta?.variableName || value
   row.compareValue = ''
+  tierPreviewResult.value = null
   if (meta?.dictType && !dynamicDictOptionsMap.value[meta.dictType]) {
     const dictMap = await getRemoteDictOptionMap([meta.dictType])
     dynamicDictOptionsMap.value = { ...dynamicDictOptionsMap.value, ...dictMap }
@@ -862,24 +1205,43 @@ async function handleConditionVariableChange(row, value) {
 }
 
 function handleConditionOperatorChange(row, value) {
+  tierPreviewResult.value = null
   const normalizedOperator = (value || '').toUpperCase()
   if (!['IN', 'NOT_IN'].includes(normalizedOperator) && typeof row.compareValue === 'string' && row.compareValue.includes(',')) {
     row.compareValue = row.compareValue.split(',').map(item => item.trim()).filter(Boolean)[0] || ''
   }
 }
 
-function createConditionRow() {
+function createConditionRow(groupNo) {
   return {
     conditionId: undefined,
     sceneId: queryParams.value.sceneId,
-    groupNo: 1,
-    sortNo: (form.value.conditions?.length || 0) + 1,
+    groupNo: Number(groupNo || 1),
+    sortNo: getNextConditionSortNo(groupNo || 1),
     variableCode: undefined,
     displayName: undefined,
     operatorCode: 'EQ',
     compareValue: '',
     status: '0'
   }
+}
+
+function getLastConditionGroupNo() {
+  const groupNos = (form.value.conditions || []).map(item => Number(item.groupNo || 1))
+  return groupNos.length ? Math.max(...groupNos) : 1
+}
+
+function getNextConditionGroupNo() {
+  const groupNos = (form.value.conditions || []).map(item => Number(item.groupNo || 1))
+  return groupNos.length ? Math.max(...groupNos) + 1 : 1
+}
+
+function getNextConditionSortNo(groupNo) {
+  const groupItems = (form.value.conditions || []).filter(item => Number(item.groupNo || 1) === Number(groupNo))
+  if (!groupItems.length) {
+    return 1
+  }
+  return Math.max(...groupItems.map(item => Number(item.sortNo || 0))) + 1
 }
 
 function normalizeRuleDetail(data = {}) {
@@ -891,7 +1253,7 @@ function normalizeRuleDetail(data = {}) {
     ruleCode: data.ruleCode,
     ruleName: data.ruleName,
     ruleType: data.ruleType || 'FIXED_RATE',
-    conditionLogic: data.conditionLogic || 'AND',
+    conditionLogic: data.pricingMode === 'GROUPED' ? 'OR' : (data.conditionLogic || 'AND'),
     priority: Number(data.priority ?? 100),
     quantityVariableCode: data.quantityVariableCode,
     pricingMode: data.pricingMode || 'TYPED',
@@ -915,6 +1277,9 @@ function normalizePricingConfig(ruleType, pricingConfig) {
   if (ruleType === 'FIXED_AMOUNT' && config.amountValue == null && config.amount != null) {
     config.amountValue = config.amount
   }
+  if (!Array.isArray(config.groupPrices)) {
+    config.groupPrices = []
+  }
   return config
 }
 
@@ -922,25 +1287,79 @@ function normalizeSubmitData() {
   return buildSubmitPayload(form.value)
 }
 
+function buildTierPreviewPayload() {
+  return {
+    rule: buildSubmitPayload(form.value),
+    inputValues: Object.fromEntries(
+      tierPreviewVariables.value.map(item => [item.variableCode, tierPreviewInputs[item.variableCode] ?? ''])
+    )
+  }
+}
+
 function buildSubmitPayload(source) {
   const payload = JSON.parse(JSON.stringify(source))
   const sceneId = currentFee.value?.sceneId || queryParams.value.sceneId
   payload.sceneId = sceneId
   payload.feeId = selectedFeeId.value
-  payload.conditions = (payload.conditions || []).filter(item => item.variableCode).map((item, index) => ({
-    ...item,
-    sceneId,
-    sortNo: index + 1,
-    displayName: item.displayName || resolveVariableName(item.variableCode),
-    compareValue: normalizeConditionCompareValue(item.compareValue)
-  }))
+  if (payload.pricingMode === 'GROUPED') {
+    payload.conditionLogic = 'OR'
+  }
+  const groupSortCounter = {}
+  payload.conditions = (payload.conditions || []).filter(item => item.variableCode).map(item => {
+    const normalizedGroupNo = Number(item.groupNo || 1)
+    groupSortCounter[normalizedGroupNo] = (groupSortCounter[normalizedGroupNo] || 0) + 1
+    return {
+      ...item,
+      sceneId,
+      groupNo: normalizedGroupNo,
+      sortNo: groupSortCounter[normalizedGroupNo],
+      displayName: item.displayName || resolveVariableName(item.variableCode),
+      compareValue: normalizeConditionCompareValue(item.compareValue)
+    }
+  })
   payload.tiers = (payload.tiers || []).map((item, index) => ({
     ...item,
     sceneId,
     tierNo: index + 1,
     status: item.status || '0'
   }))
+  if (payload.pricingMode === 'GROUPED') {
+    const valueKey = payload.ruleType === 'FIXED_RATE' ? 'rateValue' : 'amountValue'
+    payload.pricingConfig = {
+      ...(payload.pricingConfig || {}),
+      groupPrices: (payload.pricingConfig?.groupPrices || []).map(item => ({
+        groupNo: Number(item.groupNo),
+        [valueKey]: item[valueKey]
+      }))
+    }
+  }
   return payload
+}
+
+async function handleTierPreview() {
+  if (!selectedFeeId.value) {
+    proxy.$modal.msgWarning('请先选择费用后再预演阶梯命中')
+    return
+  }
+  if (form.value.ruleType !== 'TIER_RATE') {
+    proxy.$modal.msgWarning('只有阶梯费率规则支持命中预演')
+    return
+  }
+  if (tierValidationIssues.value.length) {
+    proxy.$modal.msgWarning(tierValidationIssues.value[0])
+    return
+  }
+  if (!form.value.quantityVariableCode) {
+    proxy.$modal.msgWarning('请先选择阶梯依据变量')
+    return
+  }
+  tierPreviewLoading.value = true
+  try {
+    const response = await previewRuleTier(buildTierPreviewPayload())
+    tierPreviewResult.value = response.data || null
+  } finally {
+    tierPreviewLoading.value = false
+  }
 }
 
 function submitForm() {
@@ -1249,6 +1668,43 @@ getList()
   font-weight: 700;
 }
 
+.rule-center__section-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rule-center__condition-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.rule-center__condition-group {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 18%, var(--el-bg-color-overlay));
+}
+
+.rule-center__condition-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rule-center__condition-group-header strong {
+  font-size: 14px;
+}
+
+.rule-center__condition-group-header p {
+  margin: 6px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
 .rule-center__formula-helper {
   display: flex;
   justify-content: space-between;
@@ -1339,6 +1795,71 @@ getList()
   font-size: 13px;
 }
 
+.rule-center__preview-workbench {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--el-color-warning-light-9) 18%, var(--el-bg-color-overlay));
+}
+
+.rule-center__preview-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.rule-center__preview-header h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.rule-center__preview-header p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.7;
+}
+
+.rule-center__preview-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.rule-center__preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rule-center__preview-field {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--el-fill-color-blank);
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.rule-center__preview-label {
+  display: grid;
+  gap: 4px;
+}
+
+.rule-center__preview-label span,
+.rule-center__preview-field small {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.rule-center__preview-result {
+  display: grid;
+  gap: 12px;
+}
+
 .mb8 { margin-bottom: 8px; }
 .mb16 { margin-bottom: 16px; }
 .mt12 { margin-top: 12px; }
@@ -1349,6 +1870,16 @@ getList()
   }
 
   .rule-center__workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .rule-center__preview-header,
+  .rule-center__preview-actions,
+  .rule-center__condition-group-header {
+    flex-direction: column;
+  }
+
+  .rule-center__preview-grid {
     grid-template-columns: 1fr;
   }
 }
