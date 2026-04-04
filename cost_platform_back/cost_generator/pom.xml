@@ -3,30 +3,36 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
-        <artifactId>cost-platform-parent</artifactId>
+        <artifactId>cost_parent</artifactId>
         <groupId>com.ruoyi</groupId>
         <version>3.9.2</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>cost-platform-quartz</artifactId>
+    <artifactId>cost_generator</artifactId>
 
     <description>
-        quartz定时任务
+        generator代码生成
     </description>
 
     <dependencies>
 
-        <!-- 定时任务 -->
+        <!-- velocity代码生成使用模板 -->
         <dependency>
-            <groupId>org.quartz-scheduler</groupId>
-            <artifactId>quartz</artifactId>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity-engine-core</artifactId>
         </dependency>
 
         <!-- 通用工具-->
         <dependency>
             <groupId>com.ruoyi</groupId>
-            <artifactId>cost-platform-common</artifactId>
+            <artifactId>cost_common</artifactId>
+        </dependency>
+
+        <!-- 阿里数据库连接池 -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>druid-spring-boot-3-starter</artifactId>
         </dependency>
 
     </dependencies>
