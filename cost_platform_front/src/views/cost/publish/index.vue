@@ -442,9 +442,8 @@ async function loadBaseOptions() {
   businessDomainOptions.value = dictMap.cost_business_domain || []
   versionStatusOptions.value = dictMap.cost_publish_version_status || []
   sceneOptions.value = sceneResponse?.data || []
-  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value)
-  queryParams.sceneId = preferredSceneId
-  publishForm.sceneId = preferredSceneId
+  queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.sceneId)
+  publishForm.sceneId = resolveWorkingCostSceneId(sceneOptions.value, publishForm.sceneId, queryParams.sceneId)
 }
 
 async function getList() {
@@ -473,15 +472,13 @@ function resetQuery() {
 }
 
 function handleQuerySceneChange(sceneId) {
-  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
-  queryParams.sceneId = workingSceneId
-  publishForm.sceneId = workingSceneId
+  queryParams.sceneId = sceneId
+  publishForm.sceneId = sceneId
 }
 
 function handlePublishSceneChange(sceneId) {
-  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
-  publishForm.sceneId = workingSceneId
-  queryParams.sceneId = workingSceneId
+  publishForm.sceneId = sceneId
+  queryParams.sceneId = sceneId
 }
 
 async function handlePrecheck() {

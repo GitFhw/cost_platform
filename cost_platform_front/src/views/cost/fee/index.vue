@@ -302,10 +302,10 @@ async function loadBaseOptions() {
   feeStatusOptions.value = dictMap.cost_fee_status || []
   unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResponse?.data || []
-  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.value.sceneId)
   queryParams.value.sceneId = preferredSceneId
   if (!form.value.feeId) {
-    form.value.sceneId = preferredSceneId
+    form.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value, form.value.sceneId, preferredSceneId)
   }
 }
 
@@ -395,7 +395,7 @@ async function handleUpdate(row) {
 }
 
 function handleSceneChange(sceneId) {
-  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.value.sceneId = sceneId
 }
 
 function submitForm() {

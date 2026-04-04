@@ -495,9 +495,9 @@ async function loadBaseOptions() {
   fallbackPolicyOptions.value = dictMap.cost_variable_fallback_policy || []
   sceneOptions.value = sceneResponse?.data || []
   templateList.value = templateResponse?.data || []
-  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.value.sceneId)
   queryParams.value.sceneId = preferredSceneId
-  templateForm.value.sceneId = preferredSceneId
+  templateForm.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value, templateForm.value.sceneId, preferredSceneId)
 }
 
 async function loadGroups(sceneId) {
@@ -526,7 +526,7 @@ async function getList() {
 }
 
 async function handleSceneChange(sceneId = queryParams.value.sceneId) {
-  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.value.sceneId = sceneId
   queryParams.value.groupId = undefined
   groupOptions.value = await loadGroups(queryParams.value.sceneId)
 }

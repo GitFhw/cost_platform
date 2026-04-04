@@ -239,7 +239,7 @@ const resourceItems = [
 async function loadScenes() {
   const resp = await optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
   sceneOptions.value = resp?.data || []
-  queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.sceneId)
 }
 
 async function getList() {

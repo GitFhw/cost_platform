@@ -212,7 +212,11 @@ async function loadBaseOptions() {
   resultStatusOptions.value = dictMap.cost_result_status || []
   unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResp?.data || []
-  queryParams.sceneId = route.query.sceneId ? Number(route.query.sceneId) : resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.sceneId = resolveWorkingCostSceneId(
+    sceneOptions.value,
+    queryParams.sceneId,
+    route.query.sceneId ? Number(route.query.sceneId) : undefined
+  )
 }
 
 async function loadVersionOptions(sceneId) {
@@ -258,7 +262,7 @@ function resetQuery() {
 }
 
 async function handleSceneChange(sceneId) {
-  queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.sceneId = sceneId
   queryParams.versionId = undefined
   await loadVersionOptions(queryParams.sceneId)
 }
