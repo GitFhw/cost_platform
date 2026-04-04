@@ -9,7 +9,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>cost_engine</artifactId>
+    <artifactId>cost_platform</artifactId>
 
     <description>
         cost核算独立模块
