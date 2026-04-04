@@ -265,11 +265,15 @@ async function loadBaseOptions() {
   alarmLevelOptions.value = dictMap.cost_alarm_level || []
   alarmStatusOptions.value = dictMap.cost_alarm_status || []
   sceneOptions.value = sceneResp?.data || []
-  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
-  queryParams.sceneId = route.query.sceneId ? Number(route.query.sceneId) : workingSceneId
+  const preferredQuerySceneId = resolveWorkingCostSceneId(
+    sceneOptions.value,
+    queryParams.sceneId,
+    route.query.sceneId ? Number(route.query.sceneId) : undefined
+  )
+  queryParams.sceneId = preferredQuerySceneId
   queryParams.billMonth = route.query.billMonth || queryParams.billMonth
   queryParams.alarmStatus = route.query.alarmStatus || queryParams.alarmStatus
-  cacheForm.sceneId = workingSceneId
+  cacheForm.sceneId = resolveWorkingCostSceneId(sceneOptions.value, cacheForm.sceneId, preferredQuerySceneId)
 }
 
 async function getList() {
@@ -311,7 +315,7 @@ async function loadCacheStats() {
 }
 
 async function handleCacheSceneChange(sceneId) {
-  const targetSceneId = resolveWorkingCostSceneId(sceneOptions.value) ?? sceneId
+  const targetSceneId = sceneId
   cacheForm.sceneId = targetSceneId
   cacheForm.versionId = undefined
   if (!targetSceneId) {

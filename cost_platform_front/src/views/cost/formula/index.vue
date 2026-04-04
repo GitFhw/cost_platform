@@ -584,9 +584,8 @@ async function loadBaseOptions() {
   statusOptions.value = dictMap.cost_formula_status || []
   returnTypeOptions.value = dictMap.cost_formula_return_type || []
   sceneOptions.value = sceneResponse?.data || []
-  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value)
-  queryParams.sceneId = preferredSceneId
-  form.sceneId = preferredSceneId
+  queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.sceneId)
+  form.sceneId = resolveWorkingCostSceneId(sceneOptions.value, form.sceneId, queryParams.sceneId)
 }
 
 async function loadSceneAssets(sceneId) {

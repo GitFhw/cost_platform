@@ -959,7 +959,7 @@ async function loadBaseOptions() {
   intervalModeOptions.value = dictMap.cost_rule_interval_mode || []
   unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResponse?.data || []
-  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
+  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.value.sceneId)
 }
 
 async function loadFees() {
@@ -1042,8 +1042,8 @@ function handleSelectionChange(selection) {
   multiple.value = !selection.length
 }
 
-async function handleSceneChange() {
-  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
+async function handleSceneChange(sceneId = queryParams.value.sceneId) {
+  queryParams.value.sceneId = sceneId
   selectedFeeId.value = undefined
   queryParams.value.feeId = undefined
   feeKeyword.value = ''
@@ -1054,8 +1054,8 @@ async function handleSceneChange() {
 async function handleFeeSelect(item) {
   selectedFeeId.value = item.feeId
   queryParams.value.feeId = item.feeId
-  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value)
-  await loadVariables(queryParams.value.sceneId || item.sceneId)
+  queryParams.value.sceneId = item.sceneId || queryParams.value.sceneId
+  await loadVariables(queryParams.value.sceneId)
   handleQuery()
 }
 

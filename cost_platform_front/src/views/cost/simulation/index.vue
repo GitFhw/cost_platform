@@ -235,9 +235,8 @@ async function loadBaseOptions() {
   ])
   simulationStatusOptions.value = dictMap.cost_simulation_status || []
   sceneOptions.value = sceneResp?.data || []
-  const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value)
-  queryParams.sceneId = preferredSceneId
-  form.sceneId = preferredSceneId
+  queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.sceneId)
+  form.sceneId = resolveWorkingCostSceneId(sceneOptions.value, form.sceneId, queryParams.sceneId)
 }
 
 async function loadVersionOptions(sceneId, target) {
@@ -289,22 +288,20 @@ function resetQuery() {
 }
 
 async function handleQuerySceneChange(sceneId) {
-  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
   queryParams.versionId = undefined
-  queryParams.sceneId = workingSceneId
-  form.sceneId = workingSceneId
-  await loadVersionOptions(workingSceneId, versionOptions)
-  await loadVersionOptions(workingSceneId, formVersionOptions)
+  queryParams.sceneId = sceneId
+  form.sceneId = sceneId
+  await loadVersionOptions(sceneId, versionOptions)
+  await loadVersionOptions(sceneId, formVersionOptions)
   await fillExample()
 }
 
 async function handleFormSceneChange(sceneId) {
-  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
   form.versionId = undefined
-  queryParams.sceneId = workingSceneId
-  form.sceneId = workingSceneId
-  await loadVersionOptions(workingSceneId, formVersionOptions)
-  await loadVersionOptions(workingSceneId, versionOptions)
+  queryParams.sceneId = sceneId
+  form.sceneId = sceneId
+  await loadVersionOptions(sceneId, formVersionOptions)
+  await loadVersionOptions(sceneId, versionOptions)
   await fillExample()
 }
 

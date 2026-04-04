@@ -311,12 +311,9 @@ async function loadBaseOptions() {
   periodStatusOptions.value = dictMap.cost_bill_period_status || []
   recalcStatusOptions.value = dictMap.cost_recalc_status || []
   sceneOptions.value = sceneResp?.data || []
-  const workingSceneId = resolveWorkingCostSceneId(sceneOptions.value)
-  queryParams.sceneId = workingSceneId
-  if (workingSceneId) {
-    periodForm.sceneId = workingSceneId
-    recalcForm.sceneId = workingSceneId
-  }
+  queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.sceneId)
+  periodForm.sceneId = resolveWorkingCostSceneId(sceneOptions.value, periodForm.sceneId, queryParams.sceneId)
+  recalcForm.sceneId = resolveWorkingCostSceneId(sceneOptions.value, recalcForm.sceneId, queryParams.sceneId)
 }
 
 async function loadVersions(sceneId, target) {
@@ -377,14 +374,14 @@ function resetQuery() {
 }
 
 async function handlePeriodSceneChange(sceneId) {
-  const targetSceneId = resolveWorkingCostSceneId(sceneOptions.value) ?? sceneId
+  const targetSceneId = sceneId
   periodForm.sceneId = targetSceneId
   periodForm.activeVersionId = undefined
   await loadVersions(targetSceneId, versionOptions)
 }
 
 async function handleRecalcSceneChange(sceneId) {
-  const targetSceneId = resolveWorkingCostSceneId(sceneOptions.value) ?? sceneId
+  const targetSceneId = sceneId
   recalcForm.sceneId = targetSceneId
   recalcForm.versionId = undefined
   recalcForm.baselineTaskId = undefined
