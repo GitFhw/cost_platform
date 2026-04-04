@@ -3,13 +3,13 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
-        <artifactId>cost-platform-parent</artifactId>
+        <artifactId>cost_parent</artifactId>
         <groupId>com.ruoyi</groupId>
         <version>3.9.2</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
     <packaging>jar</packaging>
-    <artifactId>cost-platform-admin</artifactId>
+    <artifactId>cost_admin</artifactId>
 
     <description>
         web服务入口
@@ -51,25 +51,25 @@
         <!-- 核心模块-->
         <dependency>
             <groupId>com.ruoyi</groupId>
-            <artifactId>cost-platform-framework</artifactId>
+            <artifactId>cost_framework</artifactId>
         </dependency>
 
         <!-- 成本核算模块 -->
         <dependency>
             <groupId>com.ruoyi</groupId>
-            <artifactId>cost-platform-cost</artifactId>
+            <artifactId>cost_engine</artifactId>
         </dependency>
 
         <!-- 定时任务-->
         <dependency>
             <groupId>com.ruoyi</groupId>
-            <artifactId>cost-platform-quartz</artifactId>
+            <artifactId>cost_quartz</artifactId>
         </dependency>
 
         <!-- 代码生成-->
         <dependency>
             <groupId>com.ruoyi</groupId>
-            <artifactId>cost-platform-generator</artifactId>
+            <artifactId>cost_generator</artifactId>
         </dependency>
 
         <dependency>

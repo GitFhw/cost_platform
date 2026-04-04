@@ -3,13 +3,13 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
-        <artifactId>cost-platform-parent</artifactId>
+        <artifactId>cost_parent</artifactId>
         <groupId>com.ruoyi</groupId>
         <version>3.9.2</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>cost-platform-system</artifactId>
+    <artifactId>cost_system</artifactId>
 
     <description>
         system系统模块
@@ -20,7 +20,7 @@
         <!-- 通用工具-->
         <dependency>
             <groupId>com.ruoyi</groupId>
-            <artifactId>cost-platform-common</artifactId>
+            <artifactId>cost_common</artifactId>
         </dependency>
 
         <!-- Lombok -->
