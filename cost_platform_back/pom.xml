@@ -5,10 +5,10 @@
 	<modelVersion>4.0.0</modelVersion>
 	
     <groupId>com.ruoyi</groupId>
-    <artifactId>ruoyi</artifactId>
+    <artifactId>cost-platform-parent</artifactId>
     <version>3.9.2</version>
 
-    <name>ruoyi</name>
+    <name>cost-platform-parent</name>
     <url>http://www.ruoyi.vip</url>
     <description>若依管理系统</description>
     
@@ -163,35 +163,42 @@
             <!-- 定时任务-->
             <dependency>
                 <groupId>com.ruoyi</groupId>
-                <artifactId>ruoyi-quartz</artifactId>
+                <artifactId>cost-platform-quartz</artifactId>
                 <version>${ruoyi.version}</version>
             </dependency>
 
             <!-- 代码生成-->
             <dependency>
                 <groupId>com.ruoyi</groupId>
-                <artifactId>ruoyi-generator</artifactId>
+                <artifactId>cost-platform-generator</artifactId>
                 <version>${ruoyi.version}</version>
             </dependency>
 
             <!-- 核心模块-->
             <dependency>
                 <groupId>com.ruoyi</groupId>
-                <artifactId>ruoyi-framework</artifactId>
+                <artifactId>cost-platform-framework</artifactId>
                 <version>${ruoyi.version}</version>
             </dependency>
 
             <!-- 系统模块-->
             <dependency>
                 <groupId>com.ruoyi</groupId>
-                <artifactId>ruoyi-system</artifactId>
+                <artifactId>cost-platform-system</artifactId>
+                <version>${ruoyi.version}</version>
+            </dependency>
+
+            <!-- 成本核算模块 -->
+            <dependency>
+                <groupId>com.ruoyi</groupId>
+                <artifactId>cost-platform-cost</artifactId>
                 <version>${ruoyi.version}</version>
             </dependency>
 
             <!-- 通用工具-->
             <dependency>
                 <groupId>com.ruoyi</groupId>
-                <artifactId>ruoyi-common</artifactId>
+                <artifactId>cost-platform-common</artifactId>
                 <version>${ruoyi.version}</version>
             </dependency>
 
@@ -199,12 +206,13 @@
     </dependencyManagement>
 
     <modules>
-        <module>ruoyi-admin</module>
-        <module>ruoyi-framework</module>
-        <module>ruoyi-system</module>
-        <module>ruoyi-quartz</module>
-        <module>ruoyi-generator</module>
-        <module>ruoyi-common</module>
+        <module>cost-platform-admin</module>
+        <module>cost-platform-framework</module>
+        <module>cost-platform-system</module>
+        <module>cost-platform-cost</module>
+        <module>cost-platform-quartz</module>
+        <module>cost-platform-generator</module>
+        <module>cost-platform-common</module>
     </modules>
     <packaging>pom</packaging>
 
@@ -225,6 +233,11 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>${spring-boot.version}</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
             </plugin>
         </plugins>
     </build>
