@@ -9,10 +9,12 @@ import com.ruoyi.common.core.redis.RedisCache;
 import com.ruoyi.system.domain.cost.CostFeeItem;
 import com.ruoyi.system.domain.cost.CostRule;
 import com.ruoyi.system.domain.cost.CostScene;
+import com.ruoyi.system.domain.cost.CostSimulationRecord;
 import com.ruoyi.system.domain.cost.CostVariable;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
 import com.ruoyi.system.mapper.cost.CostRuleMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
+import com.ruoyi.system.mapper.cost.CostSimulationRecordMapper;
 import com.ruoyi.system.mapper.cost.CostVariableMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,6 +64,9 @@ class CostPublishControllerManualIT
     @Autowired
     private CostSceneMapper sceneMapper;
 
+    @Autowired
+    private CostSimulationRecordMapper simulationRecordMapper;
+
     @Test
     void shouldBlockPublishPrecheckWhenFormulaReferencesAreNotGoverned() throws Exception
     {
@@ -101,6 +106,64 @@ class CostPublishControllerManualIT
         assertCheckMessageContains(precheck.path("items"), "FORMULA_VARIABLE_ASSET_MISSING", variableMissingAsset.getVariableCode());
         assertCheckMessageContains(precheck.path("items"), "FORMULA_RULE_CODE_MISSING", ruleMissingCode.getRuleCode());
         assertCheckMessageContains(precheck.path("items"), "FORMULA_RULE_ASSET_MISSING", ruleMissingAsset.getRuleCode());
+    }
+
+    @Test
+    void shouldTreatDraftSimulationAsPrecheckEvidenceWhenSceneHasNoActiveVersion() throws Exception
+    {
+        Long sceneId = requireSceneId();
+        CostScene scene = sceneMapper.selectById(sceneId);
+        Long previousActiveVersionId = scene == null ? null : scene.getActiveVersionId();
+        simulationRecordMapper.delete(Wrappers.<CostSimulationRecord>lambdaQuery()
+                .eq(CostSimulationRecord::getSceneId, sceneId));
+        sceneMapper.update(null, Wrappers.<CostScene>lambdaUpdate()
+                .eq(CostScene::getSceneId, sceneId)
+                .set(CostScene::getActiveVersionId, null));
+
+        try
+        {
+            String token = loginAndGetToken();
+            String authorization = "Bearer " + token;
+
+            JsonNode beforePrecheck = readData(mockMvc.perform(get("/cost/publish/precheck/{sceneId}", sceneId)
+                            .header("Authorization", authorization))
+                    .andExpect(status().isOk())
+                    .andReturn());
+            assertThat(findCheckItem(beforePrecheck.path("items"), "FIRST_RELEASE_NO_SIMULATION")).isNotNull();
+
+            JsonNode template = readData(mockMvc.perform(get("/cost/run/input-template")
+                            .header("Authorization", authorization)
+                            .param("sceneId", String.valueOf(sceneId))
+                            .param("taskType", "SIMULATION"))
+                    .andExpect(status().isOk())
+                    .andReturn());
+
+            ObjectNode executeBody = objectMapper.createObjectNode();
+            executeBody.put("sceneId", sceneId);
+            executeBody.put("inputJson", template.path("inputJson").asText("{}"));
+
+            JsonNode simulation = readData(mockMvc.perform(post("/cost/run/simulation/execute")
+                            .header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsBytes(executeBody)))
+                    .andExpect(status().isOk())
+                    .andReturn());
+            assertThat(simulation.path("record").path("status").asText()).isEqualTo("SUCCESS");
+            assertThat(simulation.path("record").path("versionId").isNull()).isTrue();
+
+            JsonNode afterPrecheck = readData(mockMvc.perform(get("/cost/publish/precheck/{sceneId}", sceneId)
+                            .header("Authorization", authorization))
+                    .andExpect(status().isOk())
+                    .andReturn());
+            assertThat(findCheckItem(afterPrecheck.path("items"), "FIRST_RELEASE_SIMULATION_READY")).isNotNull();
+            assertThat(findCheckItem(afterPrecheck.path("items"), "FIRST_RELEASE_NO_SIMULATION")).isNull();
+        }
+        finally
+        {
+            sceneMapper.update(null, Wrappers.<CostScene>lambdaUpdate()
+                    .eq(CostScene::getSceneId, sceneId)
+                    .set(CostScene::getActiveVersionId, previousActiveVersionId));
+        }
     }
 
     private Long requireSceneId()
@@ -161,19 +224,23 @@ class CostPublishControllerManualIT
 
     private void assertCheckMessageContains(JsonNode items, String code, String expectedText)
     {
-        JsonNode matched = null;
+        JsonNode matched = findCheckItem(items, code);
+        assertThat(matched).as("missing publish precheck item %s", code).isNotNull();
+        assertThat(matched.path("message").asText()).contains(expectedText);
+    }
+
+    private JsonNode findCheckItem(JsonNode items, String code)
+    {
         Iterator<JsonNode> iterator = items.iterator();
         while (iterator.hasNext())
         {
             JsonNode item = iterator.next();
             if (code.equals(item.path("code").asText()))
             {
-                matched = item;
-                break;
+                return item;
             }
         }
-        assertThat(matched).as("missing publish precheck item %s", code).isNotNull();
-        assertThat(matched.path("message").asText()).contains(expectedText);
+        return null;
     }
 
     private String loginAndGetToken() throws Exception

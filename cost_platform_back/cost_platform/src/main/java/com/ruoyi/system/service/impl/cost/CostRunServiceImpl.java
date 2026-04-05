@@ -18,13 +18,16 @@ import com.ruoyi.system.domain.cost.CostCalcTask;
 import com.ruoyi.system.domain.cost.CostCalcTaskDetail;
 import com.ruoyi.system.domain.cost.CostCalcTaskPartition;
 import com.ruoyi.system.domain.cost.CostFeeItem;
+import com.ruoyi.system.domain.cost.CostFormula;
 import com.ruoyi.system.domain.cost.CostPublishSnapshot;
 import com.ruoyi.system.domain.cost.CostPublishVersion;
 import com.ruoyi.system.domain.cost.CostRecalcOrder;
 import com.ruoyi.system.domain.cost.CostResultLedger;
 import com.ruoyi.system.domain.cost.CostResultTrace;
+import com.ruoyi.system.domain.cost.CostRule;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.CostSimulationRecord;
+import com.ruoyi.system.domain.cost.CostVariable;
 import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
 import com.ruoyi.system.domain.cost.bo.CostSimulationExecuteBo;
 import com.ruoyi.system.domain.cost.bo.CostCalcInputBatchCreateBo;
@@ -36,12 +39,15 @@ import com.ruoyi.system.mapper.cost.CostCalcTaskDetailMapper;
 import com.ruoyi.system.mapper.cost.CostCalcTaskMapper;
 import com.ruoyi.system.mapper.cost.CostCalcTaskPartitionMapper;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
+import com.ruoyi.system.mapper.cost.CostFormulaMapper;
 import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
 import com.ruoyi.system.mapper.cost.CostRecalcOrderMapper;
 import com.ruoyi.system.mapper.cost.CostResultLedgerMapper;
 import com.ruoyi.system.mapper.cost.CostResultTraceMapper;
+import com.ruoyi.system.mapper.cost.CostRuleMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.mapper.cost.CostSimulationRecordMapper;
+import com.ruoyi.system.mapper.cost.CostVariableMapper;
 import com.ruoyi.system.service.cost.ICostAlarmService;
 import com.ruoyi.system.service.cost.ICostAuditService;
 import com.ruoyi.system.service.cost.ICostExpressionService;
@@ -96,6 +102,7 @@ import java.util.stream.Collectors;
 @Service
 public class CostRunServiceImpl implements ICostRunService
 {
+    private static final String STATUS_ENABLED = "0";
     private static final String SIMULATION_STATUS_SUCCESS = "SUCCESS";
     private static final String SIMULATION_STATUS_FAILED = "FAILED";
     private static final String TASK_TYPE_SIMULATION_BATCH = "SIMULATION_BATCH";
@@ -128,6 +135,8 @@ public class CostRunServiceImpl implements ICostRunService
     private static final String RULE_TYPE_FORMULA = "FORMULA";
     private static final String RULE_TYPE_TIER_RATE = "TIER_RATE";
     private static final String PRICING_MODE_GROUPED = "GROUPED";
+    private static final String SNAPSHOT_SOURCE_PUBLISHED = "PUBLISHED";
+    private static final String SNAPSHOT_SOURCE_DRAFT = "DRAFT";
     private static final String SOURCE_TYPE_FORMULA = "FORMULA";
     private static final String DATA_TYPE_NUMBER = "NUMBER";
     private static final String DATA_TYPE_BOOLEAN = "BOOLEAN";
@@ -153,6 +162,7 @@ public class CostRunServiceImpl implements ICostRunService
             Pattern.compile("F\\[['\"]([A-Za-z0-9_\\-]+)['\"]\\]");
     private static final int DEFAULT_TASK_PARTITION_SIZE = 500;
     private static final int DEFAULT_TASK_PARALLELISM = 8;
+    private static final String DRAFT_VERSION_LABEL = "草稿配置";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -194,6 +204,15 @@ public class CostRunServiceImpl implements ICostRunService
 
     @Autowired
     private CostFeeMapper feeMapper;
+
+    @Autowired
+    private CostVariableMapper variableMapper;
+
+    @Autowired
+    private CostFormulaMapper formulaMapper;
+
+    @Autowired
+    private CostRuleMapper ruleMapper;
 
     @Autowired
     private ThreadPoolTaskExecutor threadPoolTaskExecutor;
@@ -242,7 +261,7 @@ public class CostRunServiceImpl implements ICostRunService
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> executeSimulation(CostSimulationExecuteBo bo)
     {
-        RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false);
+        RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false, true);
         Map<String, Object> input = parseObjectJson(bo.getInputJson(), "试算输入必须是 JSON 对象");
         CostSimulationRecord record = executeAndPersistSimulation(snapshot, input, "");
         return selectSimulationDetail(record.getSimulationId());
@@ -251,7 +270,7 @@ public class CostRunServiceImpl implements ICostRunService
     @Override
     public Map<String, Object> executeSimulationBatch(CostSimulationExecuteBo bo)
     {
-        RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false);
+        RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false, true);
         List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "批量试算输入必须是 JSON 数组");
         if (inputs.isEmpty())
         {
@@ -273,6 +292,7 @@ public class CostRunServiceImpl implements ICostRunService
         result.put("sceneName", snapshot.sceneName);
         result.put("versionId", snapshot.versionId);
         result.put("versionNo", snapshot.versionNo);
+        result.put("snapshotSource", snapshot.snapshotSource);
         result.put("totalCount", records.size());
         result.put("successCount", records.stream().filter(item -> SIMULATION_STATUS_SUCCESS.equals(item.getStatus())).count());
         result.put("failedCount", records.stream().filter(item -> SIMULATION_STATUS_FAILED.equals(item.getStatus())).count());
@@ -287,6 +307,7 @@ public class CostRunServiceImpl implements ICostRunService
         CostSimulationRecord record = new CostSimulationRecord();
         record.setSceneId(snapshot.sceneId);
         record.setVersionId(snapshot.versionId);
+        record.setVersionNo(snapshot.versionNo);
         record.setSimulationNo(buildRunNo("SIM"));
         record.setInputJson(writeJson(input));
         record.setCreateBy(operator);
@@ -776,8 +797,8 @@ public class CostRunServiceImpl implements ICostRunService
     @Override
     public Map<String, Object> buildInputTemplate(Long sceneId, Long versionId, String taskType)
     {
-        RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false);
         String normalizedTaskType = normalizeTemplateTaskType(taskType);
+        RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false, isSimulationTaskType(normalizedTaskType));
 
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("sceneId", snapshot.sceneId);
@@ -785,8 +806,9 @@ public class CostRunServiceImpl implements ICostRunService
         result.put("sceneName", snapshot.sceneName);
         result.put("versionId", snapshot.versionId);
         result.put("versionNo", snapshot.versionNo);
+        result.put("snapshotSource", snapshot.snapshotSource);
         result.put("taskType", normalizedTaskType);
-        result.put("message", "已按发布快照生成输入模板；公式变量不需要手工输入，其余变量优先按 dataPath/变量编码生成命名空间结构。");
+        result.put("message", buildInputTemplateMessage(snapshot));
         result.put("fields", buildTemplateFieldItems(snapshot));
         result.put("inputJson", buildTemplateInputJson(snapshot.variables, normalizedTaskType));
         return result;
@@ -823,6 +845,7 @@ public class CostRunServiceImpl implements ICostRunService
         result.put("sceneName", snapshot.sceneName);
         result.put("versionId", snapshot.versionId);
         result.put("versionNo", snapshot.versionNo);
+        result.put("snapshotSource", snapshot.snapshotSource);
         result.put("taskType", normalizedTaskType);
         result.put("fee", feeView);
         result.put("ruleCount", rules.size());
@@ -834,9 +857,7 @@ public class CostRunServiceImpl implements ICostRunService
                 .collect(Collectors.toList()));
         result.put("fieldCount", templateContext.variables.size());
         result.put("inputFieldCount", inputVariables.size());
-        result.put("message", rules.isEmpty()
-                ? "当前费用在该发布版本下未挂载可用规则，已返回空模板。"
-                : "已按发布快照和费用关联规则生成接入模板，三方系统只需组装 includedInTemplate=true 的字段。");
+        result.put("message", buildFeeTemplateMessage(snapshot, rules.isEmpty()));
         result.put("fields", buildFeeTemplateFieldItems(templateContext));
         result.put("ruleSummary", templateContext.ruleSummaries);
         result.put("inputJson", buildTemplateInputJson(inputVariables, normalizedTaskType));
@@ -903,6 +924,7 @@ public class CostRunServiceImpl implements ICostRunService
         result.put("sceneName", snapshot.sceneName);
         result.put("versionId", snapshot.versionId);
         result.put("versionNo", snapshot.versionNo);
+        result.put("snapshotSource", snapshot.snapshotSource);
         result.put("billMonth", billMonth);
         result.put("fee", feeView);
         result.put("executionFeeCount", executionFees.size());
@@ -1247,6 +1269,7 @@ public class CostRunServiceImpl implements ICostRunService
         resultView.put("taskNo", taskNo);
         resultView.put("sceneCode", snapshot.sceneCode);
         resultView.put("versionNo", snapshot.versionNo);
+        resultView.put("snapshotSource", snapshot.snapshotSource);
         resultView.put("bizNo", resolveBizNo(input, 1));
         resultView.put("feeResults", feeResults.stream().map(FeeExecutionResult::toView).collect(Collectors.toList()));
         resultView.put("amountTotal", feeResults.stream().map(item -> item.amountValue).reduce(BigDecimal.ZERO, BigDecimal::add));
@@ -2071,12 +2094,26 @@ public class CostRunServiceImpl implements ICostRunService
 
     private RuntimeSnapshot loadRuntimeSnapshot(Long sceneId, Long versionId, boolean requireFormalVersion)
     {
+        return loadRuntimeSnapshot(sceneId, versionId, requireFormalVersion, false);
+    }
+
+    private RuntimeSnapshot loadRuntimeSnapshot(Long sceneId, Long versionId, boolean requireFormalVersion,
+                                                boolean preferDraftWhenVersionMissing)
+    {
         CostScene scene = sceneMapper.selectById(sceneId);
         if (scene == null)
         {
             throw new ServiceException("场景不存在，请刷新后重试");
         }
+        if (!requireFormalVersion && preferDraftWhenVersionMissing && versionId == null)
+        {
+            return buildDraftRuntimeSnapshot(scene);
+        }
         Long targetVersionId = versionId == null ? scene.getActiveVersionId() : versionId;
+        if (targetVersionId == null && !requireFormalVersion)
+        {
+            return buildDraftRuntimeSnapshot(scene);
+        }
         if (targetVersionId == null)
         {
             throw new ServiceException("当前场景尚未设置生效版本，无法执行线程五运行链");
@@ -2114,6 +2151,7 @@ public class CostRunServiceImpl implements ICostRunService
         snapshot.sceneCode = scene.getSceneCode();
         snapshot.sceneName = scene.getSceneName();
         snapshot.versionNo = version.getVersionNo();
+        snapshot.snapshotSource = SNAPSHOT_SOURCE_PUBLISHED;
         Map<String, Long> feeIdByCode = feeMapper.selectList(Wrappers.<CostFeeItem>lambdaQuery()
                         .eq(CostFeeItem::getSceneId, sceneId))
                 .stream()
@@ -2291,6 +2329,195 @@ public class CostRunServiceImpl implements ICostRunService
                     buildExecutionVariables(snapshot, snapshot.rulesByFeeCode.getOrDefault(fee.feeCode, Collections.emptyList())));
         }
         return snapshot;
+    }
+
+    private RuntimeSnapshot buildDraftRuntimeSnapshot(CostScene scene)
+    {
+        CostFeeItem feeQuery = new CostFeeItem();
+        feeQuery.setSceneId(scene.getSceneId());
+        feeQuery.setStatus(STATUS_ENABLED);
+        List<CostFeeItem> feeItems = feeMapper.selectFeeOptions(feeQuery);
+        Map<Long, CostFeeItem> feeById = feeItems.stream()
+                .collect(Collectors.toMap(CostFeeItem::getFeeId, item -> item, (left, right) -> left, LinkedHashMap::new));
+
+        CostVariable variableQuery = new CostVariable();
+        variableQuery.setSceneId(scene.getSceneId());
+        variableQuery.setStatus(STATUS_ENABLED);
+        List<CostVariable> variables = variableMapper.selectVariableOptions(variableQuery);
+
+        CostFormula formulaQuery = new CostFormula();
+        formulaQuery.setSceneId(scene.getSceneId());
+        formulaQuery.setStatus(STATUS_ENABLED);
+        List<CostFormula> formulas = formulaMapper.selectFormulaOptions(formulaQuery);
+
+        CostRule ruleQuery = new CostRule();
+        ruleQuery.setSceneId(scene.getSceneId());
+        ruleQuery.setStatus(STATUS_ENABLED);
+        List<CostRule> rules = ruleMapper.selectRuleList(ruleQuery).stream()
+                .filter(item -> feeById.containsKey(item.getFeeId()))
+                .sorted(Comparator.comparing(CostRule::getRuleCode, Comparator.nullsLast(String::compareTo)))
+                .collect(Collectors.toList());
+
+        RuntimeSnapshot snapshot = new RuntimeSnapshot();
+        snapshot.sceneId = scene.getSceneId();
+        snapshot.sceneCode = scene.getSceneCode();
+        snapshot.sceneName = scene.getSceneName();
+        snapshot.versionId = null;
+        snapshot.versionNo = DRAFT_VERSION_LABEL;
+        snapshot.snapshotSource = SNAPSHOT_SOURCE_DRAFT;
+        populateDraftFees(snapshot, feeItems);
+        populateDraftVariables(snapshot, variables);
+        populateDraftFormulas(snapshot, formulas);
+        populateDraftRules(snapshot, rules);
+        populateDraftConditions(snapshot, publishVersionMapper.selectRuleConditionsForPublish(scene.getSceneId()));
+        populateDraftTiers(snapshot, publishVersionMapper.selectRuleTiersForPublish(scene.getSceneId()));
+        return hydrateRuntimeSnapshot(snapshot);
+    }
+
+    private void populateDraftFees(RuntimeSnapshot snapshot, List<CostFeeItem> feeItems)
+    {
+        for (CostFeeItem fee : feeItems)
+        {
+            RuntimeFee runtimeFee = new RuntimeFee();
+            runtimeFee.feeId = fee.getFeeId();
+            runtimeFee.feeCode = fee.getFeeCode();
+            runtimeFee.feeName = fee.getFeeName();
+            runtimeFee.unitCode = fee.getUnitCode();
+            runtimeFee.objectDimension = fee.getObjectDimension();
+            runtimeFee.sortNo = fee.getSortNo();
+            snapshot.fees.add(runtimeFee);
+            snapshot.feesByCode.put(runtimeFee.feeCode, runtimeFee);
+        }
+    }
+
+    private void populateDraftVariables(RuntimeSnapshot snapshot, List<CostVariable> variables)
+    {
+        for (CostVariable variable : variables)
+        {
+            RuntimeVariable runtimeVariable = new RuntimeVariable();
+            runtimeVariable.variableCode = variable.getVariableCode();
+            runtimeVariable.variableName = variable.getVariableName();
+            runtimeVariable.sourceType = variable.getSourceType();
+            runtimeVariable.dataType = variable.getDataType();
+            runtimeVariable.dataPath = variable.getDataPath();
+            runtimeVariable.formulaExpr = variable.getFormulaExpr();
+            runtimeVariable.formulaCode = variable.getFormulaCode();
+            runtimeVariable.defaultValue = variable.getDefaultValue();
+            runtimeVariable.sortNo = variable.getSortNo();
+            snapshot.variables.add(runtimeVariable);
+            snapshot.variablesByCode.put(runtimeVariable.variableCode, runtimeVariable);
+        }
+    }
+
+    private void populateDraftFormulas(RuntimeSnapshot snapshot, List<CostFormula> formulas)
+    {
+        for (CostFormula formula : formulas)
+        {
+            RuntimeFormula runtimeFormula = new RuntimeFormula();
+            runtimeFormula.formulaCode = formula.getFormulaCode();
+            runtimeFormula.formulaName = formula.getFormulaName();
+            runtimeFormula.businessFormula = formula.getBusinessFormula();
+            runtimeFormula.formulaExpr = formula.getFormulaExpr();
+            runtimeFormula.returnType = formula.getReturnType();
+            snapshot.formulasByCode.put(runtimeFormula.formulaCode, runtimeFormula);
+        }
+    }
+
+    private void populateDraftRules(RuntimeSnapshot snapshot, List<CostRule> rules)
+    {
+        for (CostRule rule : rules)
+        {
+            RuntimeRule runtimeRule = new RuntimeRule();
+            runtimeRule.ruleId = rule.getRuleId();
+            runtimeRule.feeCode = rule.getFeeCode();
+            runtimeRule.ruleCode = rule.getRuleCode();
+            runtimeRule.ruleName = rule.getRuleName();
+            runtimeRule.ruleType = rule.getRuleType();
+            runtimeRule.conditionLogic = firstNonBlank(rule.getConditionLogic(), "AND");
+            runtimeRule.priority = rule.getPriority();
+            runtimeRule.quantityVariableCode = rule.getQuantityVariableCode();
+            runtimeRule.pricingMode = firstNonBlank(rule.getPricingMode(), "TYPED");
+            runtimeRule.pricingConfig = parseJsonMap(rule.getPricingJson());
+            runtimeRule.amountFormula = rule.getAmountFormula();
+            runtimeRule.amountFormulaCode = rule.getAmountFormulaCode();
+            runtimeRule.amountBusinessFormula = rule.getAmountBusinessFormula();
+            runtimeRule.sortNo = rule.getSortNo();
+            snapshot.rulesByCode.put(runtimeRule.ruleCode, runtimeRule);
+        }
+    }
+
+    private void populateDraftConditions(RuntimeSnapshot snapshot, List<Map<String, Object>> rows)
+    {
+        for (Map<String, Object> row : rows)
+        {
+            String ruleCode = stringValue(row.get("ruleCode"));
+            if (!snapshot.rulesByCode.containsKey(ruleCode))
+            {
+                continue;
+            }
+            RuntimeCondition condition = new RuntimeCondition();
+            condition.ruleCode = ruleCode;
+            condition.groupNo = intValue(row.get("groupNo"));
+            condition.sortNo = intValue(row.get("sortNo"));
+            condition.variableCode = stringValue(row.get("variableCode"));
+            condition.displayName = firstNonBlank(stringValue(row.get("displayName")), condition.variableCode);
+            condition.operatorCode = stringValue(row.get("operatorCode"));
+            condition.compareValue = stringValue(row.get("compareValue"));
+            snapshot.conditionsByRuleCode.computeIfAbsent(ruleCode, key -> new ArrayList<>()).add(condition);
+        }
+    }
+
+    private void populateDraftTiers(RuntimeSnapshot snapshot, List<Map<String, Object>> rows)
+    {
+        for (Map<String, Object> row : rows)
+        {
+            String ruleCode = stringValue(row.get("ruleCode"));
+            if (!snapshot.rulesByCode.containsKey(ruleCode))
+            {
+                continue;
+            }
+            RuntimeTier tier = new RuntimeTier();
+            tier.tierId = longValue(row.get("tierId"));
+            tier.ruleCode = ruleCode;
+            tier.tierNo = intValue(row.get("tierNo"));
+            tier.startValue = toBigDecimal(row.get("startValue"));
+            tier.endValue = toBigDecimal(row.get("endValue"));
+            tier.rateValue = toBigDecimal(row.get("rateValue"));
+            tier.intervalMode = firstNonBlank(stringValue(row.get("intervalMode")), INTERVAL_LCRO);
+            snapshot.tiersByRuleCode.computeIfAbsent(ruleCode, key -> new ArrayList<>()).add(tier);
+        }
+    }
+
+    private String buildInputTemplateMessage(RuntimeSnapshot snapshot)
+    {
+        if (isDraftSnapshot(snapshot))
+        {
+            return "当前场景尚无生效版本，已按现有配置生成输入模板；公式变量不需要手工输入，其余变量优先按 dataPath/变量编码生成命名空间结构。";
+        }
+        return "已按发布快照生成输入模板；公式变量不需要手工输入，其余变量优先按 dataPath/变量编码生成命名空间结构。";
+    }
+
+    private String buildFeeTemplateMessage(RuntimeSnapshot snapshot, boolean noRule)
+    {
+        if (noRule)
+        {
+            return isDraftSnapshot(snapshot)
+                    ? "当前费用在现有配置下未挂载可用规则，已返回空模板。"
+                    : "当前费用在该发布版本下未挂载可用规则，已返回空模板。";
+        }
+        return isDraftSnapshot(snapshot)
+                ? "已按当前配置和费用关联规则生成接入模板，三方系统只需组装 includedInTemplate=true 的字段。"
+                : "已按发布快照和费用关联规则生成接入模板，三方系统只需组装 includedInTemplate=true 的字段。";
+    }
+
+    private boolean isSimulationTaskType(String taskType)
+    {
+        return "SIMULATION".equals(taskType) || TASK_TYPE_SIMULATION_BATCH.equals(taskType);
+    }
+
+    private boolean isDraftSnapshot(RuntimeSnapshot snapshot)
+    {
+        return snapshot != null && SNAPSHOT_SOURCE_DRAFT.equals(snapshot.snapshotSource);
     }
 
     private List<RuntimeConditionGroup> buildConditionGroups(List<RuntimeCondition> conditions)
@@ -2473,6 +2700,16 @@ public class CostRunServiceImpl implements ICostRunService
                 .collect(Collectors.toList());
     }
 
+    private Map<Long, CostPublishVersion> selectVersionMap(Set<Long> versionIds)
+    {
+        if (versionIds == null || versionIds.isEmpty())
+        {
+            return Collections.emptyMap();
+        }
+        return publishVersionMapper.selectBatchIds(versionIds).stream()
+                .collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
+    }
+
     private void enrichSimulationRecords(List<CostSimulationRecord> records)
     {
         if (records == null || records.isEmpty())
@@ -2481,8 +2718,10 @@ public class CostRunServiceImpl implements ICostRunService
         }
         Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(records.stream().map(CostSimulationRecord::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(CostScene::getSceneId, item -> item));
-        Map<Long, CostPublishVersion> versionMap = publishVersionMapper.selectBatchIds(records.stream().map(CostSimulationRecord::getVersionId).filter(Objects::nonNull).collect(Collectors.toSet()))
-                .stream().collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
+        Map<Long, CostPublishVersion> versionMap = selectVersionMap(records.stream()
+                .map(CostSimulationRecord::getVersionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
         for (CostSimulationRecord record : records)
         {
             CostScene scene = sceneMap.get(record.getSceneId());
@@ -2496,6 +2735,10 @@ public class CostRunServiceImpl implements ICostRunService
             {
                 record.setVersionNo(version.getVersionNo());
             }
+            else if (record.getVersionId() == null)
+            {
+                record.setVersionNo(DRAFT_VERSION_LABEL);
+            }
         }
     }
 
@@ -2507,8 +2750,10 @@ public class CostRunServiceImpl implements ICostRunService
         }
         Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(tasks.stream().map(CostCalcTask::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(CostScene::getSceneId, item -> item));
-        Map<Long, CostPublishVersion> versionMap = publishVersionMapper.selectBatchIds(tasks.stream().map(CostCalcTask::getVersionId).filter(Objects::nonNull).collect(Collectors.toSet()))
-                .stream().collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
+        Map<Long, CostPublishVersion> versionMap = selectVersionMap(tasks.stream()
+                .map(CostCalcTask::getVersionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
         for (CostCalcTask task : tasks)
         {
             CostScene scene = sceneMap.get(task.getSceneId());
@@ -2708,8 +2953,10 @@ public class CostRunServiceImpl implements ICostRunService
         }
         Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(filtered.stream().map(CostCalcInputBatch::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(CostScene::getSceneId, item -> item));
-        Map<Long, CostPublishVersion> versionMap = publishVersionMapper.selectBatchIds(filtered.stream().map(CostCalcInputBatch::getVersionId).filter(Objects::nonNull).collect(Collectors.toSet()))
-                .stream().collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
+        Map<Long, CostPublishVersion> versionMap = selectVersionMap(filtered.stream()
+                .map(CostCalcInputBatch::getVersionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
         for (CostCalcInputBatch batch : filtered)
         {
             CostScene scene = sceneMap.get(batch.getSceneId());
@@ -2734,8 +2981,10 @@ public class CostRunServiceImpl implements ICostRunService
         }
         Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(results.stream().map(CostResultLedger::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(CostScene::getSceneId, item -> item));
-        Map<Long, CostPublishVersion> versionMap = publishVersionMapper.selectBatchIds(results.stream().map(CostResultLedger::getVersionId).filter(Objects::nonNull).collect(Collectors.toSet()))
-                .stream().collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
+        Map<Long, CostPublishVersion> versionMap = selectVersionMap(results.stream()
+                .map(CostResultLedger::getVersionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
         Map<Long, CostFeeItem> feeMap = feeMapper.selectBatchIds(results.stream().map(CostResultLedger::getFeeId).filter(Objects::nonNull).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(CostFeeItem::getFeeId, item -> item));
         Map<Long, CostResultTrace> traceMap = resultTraceMapper.selectBatchIds(results.stream().map(CostResultLedger::getTraceId).filter(Objects::nonNull).collect(Collectors.toSet()))
@@ -3005,7 +3254,7 @@ public class CostRunServiceImpl implements ICostRunService
         explain.put("variables", variableValues);
         explain.put("candidateRules", ruleEvaluations == null ? Collections.emptyList() : ruleEvaluations);
         explain.put("timeline", Collections.singletonList(buildStep("FEE_SKIP", fee.feeCode, fee.feeName,
-                rules == null || rules.isEmpty() ? "当前费用在发布快照下未挂载启用规则" : "当前费用未命中任何启用规则")));
+                rules == null || rules.isEmpty() ? "当前费用在当前运行配置下未挂载启用规则" : "当前费用未命中任何启用规则")));
         return explain;
     }
 
@@ -3463,12 +3712,12 @@ public class CostRunServiceImpl implements ICostRunService
     {
         if (StringUtils.isEmpty(variable.formulaCode))
         {
-            throw new ServiceException("发布快照中的公式变量[" + variable.variableCode + "]未绑定公式编码，请重新发布版本后再执行");
+            throw new ServiceException("当前运行配置中的公式变量[" + variable.variableCode + "]未绑定公式编码，请先补齐配置后再执行");
         }
         RuntimeFormula formula = snapshot.formulasByCode.get(variable.formulaCode);
         if (formula == null || StringUtils.isEmpty(formula.formulaExpr))
         {
-            throw new ServiceException("发布快照中的公式变量[" + variable.variableCode + "]引用的公式编码[" + variable.formulaCode + "]不存在或不可执行，请重新发布版本");
+            throw new ServiceException("当前运行配置中的公式变量[" + variable.variableCode + "]引用的公式编码[" + variable.formulaCode + "]不存在或不可执行，请先补齐配置后再执行");
         }
         return formula.formulaExpr;
     }
@@ -3477,12 +3726,12 @@ public class CostRunServiceImpl implements ICostRunService
     {
         if (StringUtils.isEmpty(rule.amountFormulaCode))
         {
-            throw new ServiceException("发布快照中的公式规则[" + rule.ruleCode + "]未绑定金额公式编码，请重新发布版本后再执行");
+            throw new ServiceException("当前运行配置中的公式规则[" + rule.ruleCode + "]未绑定金额公式编码，请先补齐配置后再执行");
         }
         RuntimeFormula formula = snapshot.formulasByCode.get(rule.amountFormulaCode);
         if (formula == null || StringUtils.isEmpty(formula.formulaExpr))
         {
-            throw new ServiceException("发布快照中的公式规则[" + rule.ruleCode + "]引用的公式编码[" + rule.amountFormulaCode + "]不存在或不可执行，请重新发布版本");
+            throw new ServiceException("当前运行配置中的公式规则[" + rule.ruleCode + "]引用的公式编码[" + rule.amountFormulaCode + "]不存在或不可执行，请先补齐配置后再执行");
         }
         return formula;
     }
@@ -3626,6 +3875,15 @@ public class CostRunServiceImpl implements ICostRunService
             return null;
         }
         return Integer.parseInt(String.valueOf(value));
+    }
+
+    private Long longValue(Object value)
+    {
+        if (value == null || StringUtils.isEmpty(String.valueOf(value)))
+        {
+            return null;
+        }
+        return Long.parseLong(String.valueOf(value));
     }
 
     @SuppressWarnings("unchecked")
@@ -3909,6 +4167,7 @@ public class CostRunServiceImpl implements ICostRunService
         public String sceneCode;
         public String sceneName;
         public String versionNo;
+        public String snapshotSource;
         public List<RuntimeFee> fees = new ArrayList<>();
         public Map<String, RuntimeFee> feesByCode = new LinkedHashMap<>();
         public List<RuntimeVariable> variables = new ArrayList<>();
