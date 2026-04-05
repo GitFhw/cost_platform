@@ -28,7 +28,7 @@ export function resolvePreferredCostSceneId(sceneOptions = [], ...candidates) {
       return normalized
     }
   }
-  return sceneOptions.length === 1 ? toSceneId(sceneOptions[0]?.sceneId) : undefined
+  return undefined
 }
 
 export function resolveWorkingCostSceneId(sceneOptions = [], ...candidates) {

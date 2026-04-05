@@ -335,6 +335,7 @@ public class CostPublishServiceImpl implements ICostPublishService
             items.add(createCheckItem("BLOCK", "RULE_TIER_MISSING", "阶梯结构检查", "以下阶梯规则缺少阶梯明细：" + joined));
         }
 
+        appendFormulaReferenceChecks(draftBundle, items);
         if (activeVersion == null)
         {
             items.add(createCheckItem("WARN", "FIRST_RELEASE", "首发提醒", "当前场景还没有生效版本，本次发布后建议尽快设为生效。"));
@@ -375,6 +376,93 @@ public class CostPublishServiceImpl implements ICostPublishService
         }
         items.add(createCheckItem("WARN", "FIRST_RELEASE_NO_SIMULATION", "试算提醒",
                 "当前场景为首次发布，且尚无成功试算记录，建议先完成至少1次试算核对再发布。"));
+    }
+
+    /**
+     * 公式编码治理检查。
+     *
+     * <p>新配置应以公式编码为唯一入口。发布前再做一次收口，
+     * 避免仅存原始表达式的历史兼容数据继续进入新快照。</p>
+     */
+    private void appendFormulaReferenceChecks(SnapshotBundle draftBundle, List<CostPublishCheckItemVo> items)
+    {
+        List<String> variableMissingCode = new ArrayList<>();
+        List<String> variableMissingAsset = new ArrayList<>();
+        int formulaVariableCount = 0;
+        for (Map<String, Object> variable : draftBundle.variablesByCode.values())
+        {
+            if (!"FORMULA".equalsIgnoreCase(stringValue(variable.get("sourceType"))))
+            {
+                continue;
+            }
+            formulaVariableCount++;
+            String formulaCode = StringUtils.trim(stringValue(variable.get("formulaCode")));
+            if (StringUtils.isEmpty(formulaCode))
+            {
+                variableMissingCode.add(buildAssetLabel(variable, "variableName", "variableCode"));
+                continue;
+            }
+            if (!draftBundle.formulasByCode.containsKey(formulaCode))
+            {
+                variableMissingAsset.add(buildAssetLabel(variable, "variableName", "variableCode") + " -> " + formulaCode);
+            }
+        }
+
+        List<String> ruleMissingCode = new ArrayList<>();
+        List<String> ruleMissingAsset = new ArrayList<>();
+        int formulaRuleCount = 0;
+        for (Map<String, Object> rule : draftBundle.rulesByCode.values())
+        {
+            if (!"FORMULA".equalsIgnoreCase(stringValue(rule.get("ruleType"))))
+            {
+                continue;
+            }
+            formulaRuleCount++;
+            String formulaCode = StringUtils.trim(stringValue(rule.get("amountFormulaCode")));
+            if (StringUtils.isEmpty(formulaCode))
+            {
+                ruleMissingCode.add(buildAssetLabel(rule, "ruleName", "ruleCode"));
+                continue;
+            }
+            if (!draftBundle.formulasByCode.containsKey(formulaCode))
+            {
+                ruleMissingAsset.add(buildAssetLabel(rule, "ruleName", "ruleCode") + " -> " + formulaCode);
+            }
+        }
+
+        if (!variableMissingCode.isEmpty())
+        {
+            items.add(createCheckItem("BLOCK", "FORMULA_VARIABLE_CODE_MISSING", "公式编码治理",
+                    "以下公式变量仍未绑定公式编码，发布前请先在公式实验室沉淀后重新选择：" + String.join("、", variableMissingCode)));
+        }
+        if (!variableMissingAsset.isEmpty())
+        {
+            items.add(createCheckItem("BLOCK", "FORMULA_VARIABLE_ASSET_MISSING", "公式编码治理",
+                    "以下公式变量引用的公式编码当前场景不存在或未启用：" + String.join("、", variableMissingAsset)));
+        }
+        if (!ruleMissingCode.isEmpty())
+        {
+            items.add(createCheckItem("BLOCK", "FORMULA_RULE_CODE_MISSING", "公式编码治理",
+                    "以下公式金额规则仍未绑定金额公式编码，发布前请先在公式实验室选择金额公式：" + String.join("、", ruleMissingCode)));
+        }
+        if (!ruleMissingAsset.isEmpty())
+        {
+            items.add(createCheckItem("BLOCK", "FORMULA_RULE_ASSET_MISSING", "公式编码治理",
+                    "以下公式金额规则引用的金额公式编码当前场景不存在或未启用：" + String.join("、", ruleMissingAsset)));
+        }
+
+        if (variableMissingCode.isEmpty() && variableMissingAsset.isEmpty() && ruleMissingCode.isEmpty() && ruleMissingAsset.isEmpty())
+        {
+            if (formulaVariableCount > 0 || formulaRuleCount > 0)
+            {
+                items.add(createCheckItem("PASS", "FORMULA_REFERENCE_OK", "公式编码治理",
+                        String.format(Locale.ROOT, "当前场景 %1$d 个公式变量、%2$d 条公式金额规则均已绑定有效公式编码。", formulaVariableCount, formulaRuleCount)));
+            }
+            else
+            {
+                items.add(createCheckItem("PASS", "FORMULA_REFERENCE_EMPTY", "公式编码治理", "当前场景暂无公式变量或公式金额规则，无需执行公式编码治理检查。"));
+            }
+        }
     }
 
     private void activateVersionInternal(CostPublishVersion targetVersion, boolean rollback, String operator, Date operateTime)
@@ -1332,6 +1420,11 @@ public class CostPublishServiceImpl implements ICostPublishService
     private String firstNonBlank(String first, String second)
     {
         return StringUtils.isNotEmpty(first) ? first : second;
+    }
+
+    private String buildAssetLabel(Map<String, Object> row, String nameKey, String codeKey)
+    {
+        return String.format("%1$s(%2$s)", stringValue(row.get(nameKey)), stringValue(row.get(codeKey)));
     }
 
     private String stringValue(Object value)

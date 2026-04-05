@@ -149,6 +149,8 @@ public class CostRunServiceImpl implements ICostRunService
     private static final DecimalFormat PARTITION_FORMAT = new DecimalFormat("000");
     private static final Pattern EXPRESSION_REFERENCE_PATTERN =
             Pattern.compile("\\bV\\.([A-Za-z_][A-Za-z0-9_]*)\\b|\\b([A-Za-z_][A-Za-z0-9_]*)\\b");
+    private static final Pattern FEE_REFERENCE_PATTERN =
+            Pattern.compile("F\\[['\"]([A-Za-z0-9_\\-]+)['\"]\\]");
     private static final int DEFAULT_TASK_PARTITION_SIZE = 500;
     private static final int DEFAULT_TASK_PARALLELISM = 8;
 
@@ -795,8 +797,12 @@ public class CostRunServiceImpl implements ICostRunService
     {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false);
         RuntimeFee fee = resolveRuntimeFee(snapshot, feeId, feeCode);
+        List<RuntimeFee> executionFees = resolveFeeExecutionChain(snapshot, fee);
         List<RuntimeRule> rules = snapshot.rulesByFeeCode.getOrDefault(fee.feeCode, Collections.emptyList());
-        FeeTemplateContext templateContext = buildFeeTemplateContext(snapshot, rules);
+        List<RuntimeRule> executionRules = executionFees.stream()
+                .flatMap(item -> snapshot.rulesByFeeCode.getOrDefault(item.feeCode, Collections.emptyList()).stream())
+                .collect(Collectors.toList());
+        FeeTemplateContext templateContext = buildFeeTemplateContext(snapshot, executionRules);
         List<RuntimeVariable> inputVariables = templateContext.variables.values().stream()
                 .filter(item -> item.includedInTemplate)
                 .map(item -> item.variable)
@@ -820,11 +826,17 @@ public class CostRunServiceImpl implements ICostRunService
         result.put("taskType", normalizedTaskType);
         result.put("fee", feeView);
         result.put("ruleCount", rules.size());
+        result.put("executionFeeCount", executionFees.size());
+        result.put("executionFeeCodes", executionFees.stream().map(item -> item.feeCode).collect(Collectors.toList()));
+        result.put("dependentFeeCodes", executionFees.stream()
+                .map(item -> item.feeCode)
+                .filter(code -> !StringUtils.equals(code, fee.feeCode))
+                .collect(Collectors.toList()));
         result.put("fieldCount", templateContext.variables.size());
         result.put("inputFieldCount", inputVariables.size());
         result.put("message", rules.isEmpty()
-                ? "褰撳墠璐圭敤鍦ㄨ鍙戝竷鐗堟湰涓嬫湭鎸傝浇鍙敤瑙勫垯锛屽凡杩斿洖绌烘ā鏉裤€?"
-                : "宸叉寜鍙戝竷蹇収鍜岃垂鐢ㄥ叧鑱旇鍒欑敓鎴愭帴鍏ユā鏉匡紝涓夋柟绯荤粺鍙渶缁勮 includedInTemplate=true 鐨勫瓧娈点€?");
+                ? "当前费用在该发布版本下未挂载可用规则，已返回空模板。"
+                : "已按发布快照和费用关联规则生成接入模板，三方系统只需组装 includedInTemplate=true 的字段。");
         result.put("fields", buildFeeTemplateFieldItems(templateContext));
         result.put("ruleSummary", templateContext.ruleSummaries);
         result.put("inputJson", buildTemplateInputJson(inputVariables, normalizedTaskType));
@@ -836,6 +848,7 @@ public class CostRunServiceImpl implements ICostRunService
     {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false);
         RuntimeFee fee = resolveRuntimeFee(snapshot, bo.getFeeId(), bo.getFeeCode());
+        List<RuntimeFee> executionFees = resolveFeeExecutionChain(snapshot, fee);
         List<Map<String, Object>> inputs = parseInlineCalculationInputs(bo.getInputJson());
         String billMonth = StringUtils.isEmpty(bo.getBillMonth()) ? "" : bo.getBillMonth();
         boolean includeExplain = Boolean.TRUE.equals(bo.getIncludeExplain());
@@ -856,10 +869,10 @@ public class CostRunServiceImpl implements ICostRunService
             try
             {
                 ExecutionResult executionResult = executeSingle(snapshot, "FEE_CALC", billMonth, input,
-                        Collections.singletonList(fee), includeExplain);
+                        executionFees, includeExplain);
                 records.add(buildFeeCalculationRecord(input, fee, executionResult, i + 1, includeExplain,
                         System.currentTimeMillis() - recordStartedAt));
-                FeeExecutionResult feeResult = executionResult.feeResults.isEmpty() ? null : executionResult.feeResults.get(0);
+                FeeExecutionResult feeResult = findFeeExecutionResult(executionResult, fee.feeCode);
                 if (feeResult == null)
                 {
                     noMatchCount++;
@@ -892,6 +905,12 @@ public class CostRunServiceImpl implements ICostRunService
         result.put("versionNo", snapshot.versionNo);
         result.put("billMonth", billMonth);
         result.put("fee", feeView);
+        result.put("executionFeeCount", executionFees.size());
+        result.put("executionFeeCodes", executionFees.stream().map(item -> item.feeCode).collect(Collectors.toList()));
+        result.put("dependentFeeCodes", executionFees.stream()
+                .map(item -> item.feeCode)
+                .filter(code -> !StringUtils.equals(code, fee.feeCode))
+                .collect(Collectors.toList()));
         result.put("includeExplain", includeExplain);
         result.put("recordCount", inputs.size());
         result.put("successCount", successCount);
@@ -1253,20 +1272,65 @@ public class CostRunServiceImpl implements ICostRunService
     {
         LinkedHashMap<String, Object> values = new LinkedHashMap<>();
         List<RuntimeVariable> variablesToCompute = runtimeVariables == null ? snapshot.variables : runtimeVariables;
+        Map<String, RuntimeVariable> variableMap = snapshot == null || snapshot.variablesByCode == null
+                ? Collections.emptyMap()
+                : snapshot.variablesByCode;
+        LinkedHashSet<String> dependencyStack = new LinkedHashSet<>();
         for (RuntimeVariable variable : variablesToCompute)
         {
+            resolveRuntimeVariableValue(snapshot, variable, baseContext, values, variableMap, dependencyStack);
+        }
+        return values;
+    }
+
+    private Object resolveRuntimeVariableValue(RuntimeSnapshot snapshot, RuntimeVariable variable,
+            Map<String, Object> baseContext, LinkedHashMap<String, Object> computedValues,
+            Map<String, RuntimeVariable> variableMap, Set<String> dependencyStack)
+    {
+        if (variable == null || StringUtils.isEmpty(variable.variableCode))
+        {
+            return null;
+        }
+        if (computedValues.containsKey(variable.variableCode))
+        {
+            return computedValues.get(variable.variableCode);
+        }
+        if (!dependencyStack.add(variable.variableCode))
+        {
+            throw new ServiceException("公式变量存在循环依赖：" + String.join(" -> ", dependencyStack) + " -> " + variable.variableCode);
+        }
+        try
+        {
             Object value;
-            if (SOURCE_TYPE_FORMULA.equals(variable.sourceType) && StringUtils.isNotEmpty(variable.formulaExpr))
+            if (SOURCE_TYPE_FORMULA.equals(variable.sourceType))
             {
-                value = evaluateExpression(resolveVariableFormula(snapshot, variable), mergeContext(baseContext, values, Collections.emptyMap()));
+                String formulaExpression = resolveVariableFormula(snapshot, variable);
+                for (String dependencyCode : extractExpressionVariableCodes(formulaExpression, variableMap))
+                {
+                    if (StringUtils.equals(variable.variableCode, dependencyCode))
+                    {
+                        continue;
+                    }
+                    RuntimeVariable dependency = variableMap.get(dependencyCode);
+                    if (dependency != null)
+                    {
+                        resolveRuntimeVariableValue(snapshot, dependency, baseContext, computedValues, variableMap, dependencyStack);
+                    }
+                }
+                value = evaluateExpression(formulaExpression, mergeContext(baseContext, computedValues, Collections.emptyMap()));
             }
             else
             {
                 value = resolveValueFromInput(baseContext, variable.dataPath, variable.variableCode, variable.defaultValue);
             }
-            values.put(variable.variableCode, convertValueByType(value, variable.dataType, variable.defaultValue));
+            Object converted = convertValueByType(value, variable.dataType, variable.defaultValue);
+            computedValues.put(variable.variableCode, converted);
+            return converted;
         }
-        return values;
+        finally
+        {
+            dependencyStack.remove(variable.variableCode);
+        }
     }
 
     private RuleMatchResult matchRule(List<RuntimeRule> rules, Map<String, Object> variableValues,
@@ -1485,17 +1549,17 @@ public class CostRunServiceImpl implements ICostRunService
         }
         else if (RULE_TYPE_FORMULA.equals(rule.ruleType))
         {
-            RuntimeFormula formula = resolveRuleFormula(snapshot, rule);
-            String expression = formula == null ? rule.amountFormula : formula.formulaExpr;
+            RuntimeFormula formula = requireRuleFormula(snapshot, rule);
+            String expression = formula.formulaExpr;
             Object amountValue = evaluateExpression(expression, mergeContext(baseContext, variableValues, feeResultContext));
             BigDecimal computed = defaultZero(toBigDecimal(amountValue)).setScale(2, RoundingMode.HALF_UP);
             result.unitPrice = computed.setScale(6, RoundingMode.HALF_UP);
             result.amountValue = computed;
             result.pricingExplain.put("pricingSource", "FORMULA");
             result.pricingExplain.put("formula", expression);
-            result.pricingExplain.put("formulaCode", formula == null ? rule.amountFormulaCode : formula.formulaCode);
-            result.pricingExplain.put("formulaName", formula == null ? null : formula.formulaName);
-            result.pricingExplain.put("businessFormula", formula == null ? rule.amountBusinessFormula : formula.businessFormula);
+            result.pricingExplain.put("formulaCode", formula.formulaCode);
+            result.pricingExplain.put("formulaName", formula.formulaName);
+            result.pricingExplain.put("businessFormula", formula.businessFormula);
         }
         else if (RULE_TYPE_TIER_RATE.equals(rule.ruleType))
         {
@@ -1810,6 +1874,76 @@ public class CostRunServiceImpl implements ICostRunService
         return item;
     }
 
+    private List<RuntimeFee> resolveFeeExecutionChain(RuntimeSnapshot snapshot, RuntimeFee targetFee)
+    {
+        if (snapshot == null || targetFee == null)
+        {
+            return Collections.emptyList();
+        }
+        LinkedHashMap<String, RuntimeFee> orderedFees = new LinkedHashMap<>();
+        collectFeeExecutionDependency(snapshot, targetFee.feeCode, orderedFees, new LinkedHashSet<>());
+        return new ArrayList<>(orderedFees.values());
+    }
+
+    private void collectFeeExecutionDependency(RuntimeSnapshot snapshot, String feeCode,
+            Map<String, RuntimeFee> orderedFees, Set<String> dependencyStack)
+    {
+        if (StringUtils.isEmpty(feeCode) || snapshot == null || snapshot.feesByCode == null)
+        {
+            return;
+        }
+        if (orderedFees.containsKey(feeCode))
+        {
+            return;
+        }
+        RuntimeFee currentFee = snapshot.feesByCode.get(feeCode);
+        if (currentFee == null)
+        {
+            return;
+        }
+        if (!dependencyStack.add(feeCode))
+        {
+            throw new ServiceException("费用公式存在循环依赖：" + String.join(" -> ", dependencyStack) + " -> " + feeCode);
+        }
+        try
+        {
+            for (RuntimeRule rule : snapshot.rulesByFeeCode.getOrDefault(feeCode, Collections.emptyList()))
+            {
+                for (String dependencyFeeCode : extractExpressionFeeCodes(resolveRuleExpression(snapshot, rule)))
+                {
+                    if (!StringUtils.equals(feeCode, dependencyFeeCode))
+                    {
+                        collectFeeExecutionDependency(snapshot, dependencyFeeCode, orderedFees, dependencyStack);
+                    }
+                }
+            }
+            orderedFees.put(feeCode, currentFee);
+        }
+        finally
+        {
+            dependencyStack.remove(feeCode);
+        }
+    }
+
+    private Set<String> extractExpressionFeeCodes(String expression)
+    {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        if (StringUtils.isEmpty(expression))
+        {
+            return result;
+        }
+        Matcher matcher = FEE_REFERENCE_PATTERN.matcher(expression);
+        while (matcher.find())
+        {
+            String feeCode = matcher.group(1);
+            if (StringUtils.isNotEmpty(feeCode))
+            {
+                result.add(feeCode);
+            }
+        }
+        return result;
+    }
+
     private List<RuntimeVariable> buildExecutionVariables(RuntimeSnapshot snapshot, List<RuntimeRule> rules)
     {
         if (snapshot == null || rules == null || rules.isEmpty())
@@ -1882,15 +2016,14 @@ public class CostRunServiceImpl implements ICostRunService
         {
             return snapshot.feesByCode.get(feeCode);
         }
-        throw new ServiceException("鎸囧畾璐圭敤鍦ㄥ綋鍓嶅彂甯冪増鏈揩鐓т腑涓嶅瓨鍦?");
+        throw new ServiceException("指定费用在当前发布版本快照中不存在");
     }
 
     private String resolveRuleExpression(RuntimeSnapshot snapshot, RuntimeRule rule)
     {
-        RuntimeFormula formula = resolveRuleFormula(snapshot, rule);
-        if (formula != null && StringUtils.isNotEmpty(formula.formulaExpr))
+        if (RULE_TYPE_FORMULA.equals(rule.ruleType))
         {
-            return formula.formulaExpr;
+            return requireRuleFormula(snapshot, rule).formulaExpr;
         }
         return rule.amountFormula;
     }
@@ -2209,7 +2342,7 @@ public class CostRunServiceImpl implements ICostRunService
         LinkedHashMap<String, Object> template = new LinkedHashMap<>();
         template.put("bizNo", buildTemplateBizNo(taskType, index));
         template.put("objectCode", "OBJ-" + PARTITION_FORMAT.format(index));
-        template.put("objectName", "绀轰緥瀵硅薄" + index);
+        template.put("objectName", "示例对象" + index);
         Set<String> populatedPaths = new LinkedHashSet<>();
         for (RuntimeVariable variable : variables)
         {
@@ -2605,6 +2738,8 @@ public class CostRunServiceImpl implements ICostRunService
                 .stream().collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
         Map<Long, CostFeeItem> feeMap = feeMapper.selectBatchIds(results.stream().map(CostResultLedger::getFeeId).filter(Objects::nonNull).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(CostFeeItem::getFeeId, item -> item));
+        Map<Long, CostResultTrace> traceMap = resultTraceMapper.selectBatchIds(results.stream().map(CostResultLedger::getTraceId).filter(Objects::nonNull).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(CostResultTrace::getTraceId, item -> item));
         for (CostResultLedger result : results)
         {
             CostScene scene = sceneMap.get(result.getSceneId());
@@ -2622,6 +2757,14 @@ public class CostRunServiceImpl implements ICostRunService
             if (fee != null)
             {
                 result.setUnitCode(fee.getUnitCode());
+            }
+            CostResultTrace trace = traceMap.get(result.getTraceId());
+            if (trace != null)
+            {
+                Map<String, Object> pricing = parseJsonMap(trace.getPricingJson());
+                result.setMatchedGroupNo(intValue(pricing.get("matchedGroupNo")));
+                result.setPricingMode(stringValue(pricing.get("pricingMode")));
+                result.setPricingSource(stringValue(pricing.get("pricingSource")));
             }
         }
     }
@@ -2757,7 +2900,7 @@ public class CostRunServiceImpl implements ICostRunService
     private Map<String, Object> buildFeeCalculationRecord(Map<String, Object> input, RuntimeFee fee,
             ExecutionResult executionResult, int index, boolean includeExplain, long durationMs)
     {
-        FeeExecutionResult feeResult = executionResult.feeResults.isEmpty() ? null : executionResult.feeResults.get(0);
+        FeeExecutionResult feeResult = findFeeExecutionResult(executionResult, fee.feeCode);
         LinkedHashMap<String, Object> item = new LinkedHashMap<>();
         String bizNo = resolveBizNo(input, index);
         item.put("recordIndex", index);
@@ -2788,6 +2931,18 @@ public class CostRunServiceImpl implements ICostRunService
                     : buildFeeCalculationExplain(feeResult));
         }
         return item;
+    }
+
+    private FeeExecutionResult findFeeExecutionResult(ExecutionResult executionResult, String feeCode)
+    {
+        if (executionResult == null || executionResult.feeResults == null || StringUtils.isEmpty(feeCode))
+        {
+            return null;
+        }
+        return executionResult.feeResults.stream()
+                .filter(item -> StringUtils.equals(item.feeCode, feeCode))
+                .findFirst()
+                .orElse(null);
     }
 
     private Map<String, Object> buildFeeCalculationFailureRecord(Map<String, Object> input, RuntimeFee fee,
@@ -3306,24 +3461,30 @@ public class CostRunServiceImpl implements ICostRunService
 
     private String resolveVariableFormula(RuntimeSnapshot snapshot, RuntimeVariable variable)
     {
-        if (StringUtils.isNotEmpty(variable.formulaCode))
+        if (StringUtils.isEmpty(variable.formulaCode))
         {
-            RuntimeFormula formula = snapshot.formulasByCode.get(variable.formulaCode);
-            if (formula != null && StringUtils.isNotEmpty(formula.formulaExpr))
-            {
-                return formula.formulaExpr;
-            }
+            throw new ServiceException("发布快照中的公式变量[" + variable.variableCode + "]未绑定公式编码，请重新发布版本后再执行");
         }
-        return variable.formulaExpr;
+        RuntimeFormula formula = snapshot.formulasByCode.get(variable.formulaCode);
+        if (formula == null || StringUtils.isEmpty(formula.formulaExpr))
+        {
+            throw new ServiceException("发布快照中的公式变量[" + variable.variableCode + "]引用的公式编码[" + variable.formulaCode + "]不存在或不可执行，请重新发布版本");
+        }
+        return formula.formulaExpr;
     }
 
-    private RuntimeFormula resolveRuleFormula(RuntimeSnapshot snapshot, RuntimeRule rule)
+    private RuntimeFormula requireRuleFormula(RuntimeSnapshot snapshot, RuntimeRule rule)
     {
         if (StringUtils.isEmpty(rule.amountFormulaCode))
         {
-            return null;
+            throw new ServiceException("发布快照中的公式规则[" + rule.ruleCode + "]未绑定金额公式编码，请重新发布版本后再执行");
         }
-        return snapshot.formulasByCode.get(rule.amountFormulaCode);
+        RuntimeFormula formula = snapshot.formulasByCode.get(rule.amountFormulaCode);
+        if (formula == null || StringUtils.isEmpty(formula.formulaExpr))
+        {
+            throw new ServiceException("发布快照中的公式规则[" + rule.ruleCode + "]引用的公式编码[" + rule.amountFormulaCode + "]不存在或不可执行，请重新发布版本");
+        }
+        return formula;
     }
 
     private Object resolveValueFromInput(Map<String, Object> input, String dataPath, String variableCode, Object defaultValue)
@@ -3365,21 +3526,21 @@ public class CostRunServiceImpl implements ICostRunService
 
     private Object convertValueByType(Object value, String dataType, Object defaultValue)
     {
-        if (value == null)
-        {
-            return defaultValue;
-        }
         if (DATA_TYPE_NUMBER.equals(dataType))
         {
-            return toBigDecimal(value);
+            return toBigDecimal(value == null ? defaultValue : value);
         }
         if (DATA_TYPE_BOOLEAN.equals(dataType))
         {
-            return convertBoolean(value);
+            return convertBoolean(value == null ? defaultValue : value);
         }
         if (DATA_TYPE_JSON.equals(dataType) && value instanceof String)
         {
             return parseJsonToObject(String.valueOf(value));
+        }
+        if (value == null)
+        {
+            return defaultValue;
         }
         return value;
     }

@@ -425,23 +425,12 @@ public class CostRuleServiceImpl implements ICostRuleService
      */
     private void bindAmountFormula(CostRuleSaveBo request)
     {
-        if (StringUtils.isNotEmpty(request.getAmountFormulaCode()))
+        if (StringUtils.isEmpty(request.getAmountFormulaCode()))
         {
-            CostFormula formula = requireEnabledAmountFormula(request.getSceneId(), request.getAmountFormulaCode());
-            request.setAmountFormula(formula.getFormulaExpr());
-            return;
+            throw new ServiceException("公式金额规则必须引用金额公式编码；如为历史表达式，请先在公式实验室沉淀后再选择编码");
         }
-        if (StringUtils.isNotEmpty(request.getAmountFormula()))
-        {
-            CostFormula matchedFormula = resolveFormulaByExpression(request.getSceneId(), request.getAmountFormula());
-            if (matchedFormula != null)
-            {
-                request.setAmountFormulaCode(matchedFormula.getFormulaCode());
-                request.setAmountFormula(matchedFormula.getFormulaExpr());
-                return;
-            }
-        }
-        throw new ServiceException("公式金额规则必须引用金额公式编码；如为历史表达式，请先在公式实验室沉淀后再选择编码");
+        CostFormula formula = requireEnabledAmountFormula(request.getSceneId(), request.getAmountFormulaCode());
+        request.setAmountFormula(formula.getFormulaExpr());
     }
 
     /**
@@ -461,23 +450,6 @@ public class CostRuleServiceImpl implements ICostRuleService
             throw new ServiceException("金额公式编码已停用，不能继续引用");
         }
         return formula;
-    }
-
-    /**
-     * 按表达式尝试匹配既有公式资产，帮助旧规则逐步收口到公式编码。
-     */
-    private CostFormula resolveFormulaByExpression(Long sceneId, String formulaExpr)
-    {
-        if (sceneId == null || StringUtils.isEmpty(formulaExpr))
-        {
-            return null;
-        }
-        List<CostFormula> formulas = formulaMapper.selectList(Wrappers.<CostFormula>lambdaQuery()
-                .eq(CostFormula::getSceneId, sceneId)
-                .eq(CostFormula::getFormulaExpr, StringUtils.trim(formulaExpr))
-                .eq(CostFormula::getStatus, STATUS_ENABLED)
-                .last("limit 2"));
-        return formulas.size() == 1 ? formulas.get(0) : null;
     }
 
     /**

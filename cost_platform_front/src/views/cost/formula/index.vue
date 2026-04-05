@@ -110,6 +110,27 @@
               <div class="formula-lab__preview-title">标准表达式预览</div>
               <pre class="formula-lab__code">{{ derivedFormula.formulaExpr || '请先配置公式结构，系统会同步生成标准表达式。' }}</pre>
             </div>
+            <el-alert
+              v-if="formulaValidationMessages.length"
+              title="表达式预校验未通过"
+              type="warning"
+              :closable="false"
+              show-icon
+              class="mt12"
+            >
+              <template #default>
+                <div v-for="message in formulaValidationMessages" :key="message" class="formula-lab__validation-item">{{ message }}</div>
+              </template>
+            </el-alert>
+            <el-alert
+              v-else-if="activeFormulaExpression"
+              title="表达式预校验通过"
+              description="括号、命名空间和场景变量引用已通过前端预校验。"
+              type="success"
+              :closable="false"
+              show-icon
+              class="mt12"
+            />
           </el-col>
         </el-row>
 
@@ -220,10 +241,7 @@
           </div>
         </div>
         <div class="formula-lab__tool-section">
-          <div class="formula-lab__tool-title">运算符</div>
-          <div class="formula-lab__chip-grid">
-            <button v-for="item in operatorButtons" :key="item.value" type="button" class="formula-lab__chip" @click="appendExpertToken(item.value)">{{ item.label }}</button>
-          </div>
+          <ExpressionResourcePanel :sections="expressionResourceSections" @append="handleAppendResourceToken" />
         </div>
         <div class="formula-lab__tool-section">
           <div class="formula-lab__tool-title">平台模板</div>
@@ -243,25 +261,6 @@
             </button>
           </div>
           <el-empty v-else :image-size="72" description="当前场景还没有沉淀模板资产，可先把常用公式保存为模板。" />
-        </div>
-        <div class="formula-lab__tool-section">
-          <div class="formula-lab__tool-title">场景变量</div>
-          <div v-if="variableOptions.length" class="formula-lab__list">
-            <button v-for="item in variableOptions" :key="item.variableCode" type="button" class="formula-lab__list-item" @click="appendExpertToken(`V.${item.variableCode}`)">
-              <strong>{{ item.variableName }}</strong>
-              <span>{{ item.variableCode }}</span>
-            </button>
-          </div>
-          <el-empty v-else :image-size="72" :description="resolveVariablePlaceholder('当前场景暂无变量，请先到变量中心维护')" />
-        </div>
-        <div class="formula-lab__tool-section">
-          <div class="formula-lab__tool-title">函数库</div>
-          <div class="formula-lab__list">
-            <button v-for="item in functionButtons" :key="item.value" type="button" class="formula-lab__list-item" @click="appendExpertToken(item.value)">
-              <strong>{{ item.label }}</strong>
-              <span>{{ item.desc }}</span>
-            </button>
-          </div>
         </div>
         <div class="formula-lab__tool-section">
           <div class="formula-lab__tool-title">已有公式</div>
@@ -362,6 +361,7 @@
 
 <script setup name="CostFormula">
 import { ElMessageBox } from 'element-plus'
+import ExpressionResourcePanel from '@/components/cost/ExpressionResourcePanel.vue'
 import {
   addFormula,
   delFormula,
@@ -377,10 +377,12 @@ import {
   updateFormula
 } from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
+import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { optionselectVariable } from '@/api/cost/variable'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
+const route = useRoute()
 const { proxy } = getCurrentInstance()
 
 const loading = ref(false)
@@ -505,6 +507,14 @@ const functionButtons = [
   { label: 'min(a,b)', value: 'min(, )', desc: '取最小值。' }
 ]
 
+const namespaceTokens = [
+  { label: 'V.变量', value: 'V.', type: 'warning' },
+  { label: 'I.输入', value: 'I.', type: 'warning' },
+  { label: 'C.上下文', value: 'C.', type: 'warning' },
+  { label: 'F.费用结果', value: 'F.', type: 'warning' },
+  { label: 'T.临时值', value: 'T.', type: 'warning' }
+]
+
 const platformTemplates = [
   {
     code: 'CARGO_SHIFT_PRICE',
@@ -550,6 +560,57 @@ const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) 
   acc[item.variableCode] = item
   return acc
 }, {}))
+
+const expressionResourceSections = computed(() => [
+  {
+    key: 'namespace',
+    title: '命名空间',
+    tip: '规则中心与公式实验室共用同一套命名空间口径。',
+    display: 'tag',
+    items: namespaceTokens
+  },
+  {
+    key: 'operator',
+    title: '运算符',
+    display: 'tag',
+    items: operatorButtons.map(item => ({
+      ...item,
+      type: 'info'
+    }))
+  },
+  {
+    key: 'variable',
+    title: '场景变量',
+    display: 'list',
+    emptyText: resolveVariablePlaceholder('当前场景暂无变量，请先到变量中心维护'),
+    items: variableOptions.value.map(item => ({
+      label: item.variableName || item.variableCode,
+      value: `V.${item.variableCode}`,
+      desc: `${item.variableCode}${item.dataType ? ` / ${item.dataType}` : ''}`
+    }))
+  },
+  {
+    key: 'function',
+    title: '函数库',
+    display: 'list',
+    items: functionButtons
+  }
+])
+
+const activeFormulaExpression = computed(() => {
+  return workbench.mode === 'EXPERT'
+    ? String(form.formulaExpr || '').trim()
+    : String(derivedFormula.value.formulaExpr || '').trim()
+})
+
+const formulaValidationResult = computed(() => validateCostExpression({
+  expression: activeFormulaExpression.value,
+  namespaceScope: form.namespaceScope,
+  variableCodes: variableOptions.value.map(item => item.variableCode),
+  validateVariableRefs: Boolean(form.sceneId)
+}))
+
+const formulaValidationMessages = computed(() => formulaValidationResult.value.issues.map(item => item.message))
 
 const numericVariableOptions = computed(() => {
   return variableOptions.value.filter(item => ['NUMBER', 'INTEGER', 'DECIMAL', 'LONG'].includes(String(item.dataType || '').toUpperCase()))
@@ -771,6 +832,10 @@ function appendExpertToken(token) {
   form.formulaExpr = `${form.formulaExpr || ''}${token}`
 }
 
+function handleAppendResourceToken(payload) {
+  appendExpertToken(payload.value)
+}
+
 function applyTemplate(template) {
   workbench.templateCode = template.code
   if (template.pattern === 'EXPERT') {
@@ -847,6 +912,10 @@ async function handleSave() {
     proxy.$modal.msgError('请先通过点选向导或专家模式生成标准表达式')
     return
   }
+  if (!formulaValidationResult.value.valid) {
+    proxy.$modal.msgError(formulaValidationResult.value.issues[0].message)
+    return
+  }
   if (payload.formulaId) {
     await updateFormula(payload)
   } else {
@@ -861,6 +930,10 @@ async function handleTest() {
   const payload = buildPayload()
   if (!payload.formulaExpr) {
     proxy.$modal.msgError('当前没有可测试的公式表达式')
+    return
+  }
+  if (!formulaValidationResult.value.valid) {
+    proxy.$modal.msgError(formulaValidationResult.value.issues[0].message)
     return
   }
   const response = await testFormula({
@@ -984,6 +1057,11 @@ function resetQuery() {
   handleQuery()
 }
 
+function resolveRouteQueryValue(key) {
+  const value = route.query?.[key]
+  return Array.isArray(value) ? value[0] : value
+}
+
 function safeJsonParse(text) {
   if (!text) {
     return undefined
@@ -1060,24 +1138,36 @@ function restoreWorkbench(data = {}) {
   }
 }
 
-onMounted(async () => {
+async function initializePageState() {
   await loadBaseOptions()
   resetFormModel()
+  const routeSceneId = resolveRouteQueryValue('sceneId')
+  const routeFormulaCode = resolveRouteQueryValue('formulaCode')
+  if (routeSceneId) {
+    queryParams.sceneId = routeSceneId
+  }
+  if (routeFormulaCode) {
+    queryParams.formulaCode = routeFormulaCode
+  }
   if (queryParams.sceneId) {
     form.sceneId = queryParams.sceneId
     await loadSceneAssets(queryParams.sceneId)
+    const matchedFormula = routeFormulaCode
+      ? formulaOptionList.value.find(item => item.formulaCode === routeFormulaCode)
+      : undefined
+    if (matchedFormula?.formulaId) {
+      await handleLoadFormula(matchedFormula)
+    }
   }
   await getList()
+}
+
+onMounted(async () => {
+  await initializePageState()
 })
 
 onActivated(async () => {
-  await loadBaseOptions()
-  resetFormModel()
-  if (queryParams.sceneId) {
-    form.sceneId = queryParams.sceneId
-    await loadSceneAssets(queryParams.sceneId)
-  }
-  await getList()
+  await initializePageState()
 })
 </script>
 
@@ -1251,6 +1341,10 @@ onActivated(async () => {
   font-family: 'JetBrains Mono', 'Consolas', monospace;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.formula-lab__validation-item {
+  line-height: 1.7;
 }
 
 .formula-lab__guided,
