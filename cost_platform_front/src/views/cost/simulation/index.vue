@@ -4,9 +4,9 @@
       <div>
         <div class="run-page__eyebrow">试算验证</div>
         <h2 class="run-page__title">试算中心</h2>
-        <p class="run-page__subtitle">按已发布版本执行单笔或批量试算，快速核对变量取值、规则命中、费用结果和解释过程。</p>
+        <p class="run-page__subtitle">按指定版本执行单笔或批量试算；未选择版本时，自动按当前配置执行并返回解释过程。</p>
       </div>
-      <el-tag type="success">输入示例会按当前场景和版本自动生成，便于快速开始试算</el-tag>
+      <el-tag type="success">输入示例会按当前场景和指定版本或当前配置自动生成，便于快速开始试算</el-tag>
     </section>
 
     <section class="run-page__metrics">
@@ -24,7 +24,7 @@
         </el-select>
       </el-form-item>
       <el-form-item label="版本号" prop="versionId">
-        <el-select v-model="queryParams.versionId" clearable filterable style="width: 220px">
+        <el-select v-model="queryParams.versionId" clearable filterable style="width: 220px" placeholder="全部版本">
           <el-option v-for="item in versionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
         </el-select>
       </el-form-item>
@@ -44,7 +44,7 @@
         <div class="run-page__section-head">
           <div>
             <h3>执行试算</h3>
-            <p>试算始终基于所选场景当前生效版本或指定版本执行。</p>
+            <p>试算可基于指定版本执行；未选择版本时，自动按当前配置执行。</p>
           </div>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
         </div>
@@ -62,7 +62,7 @@
             </el-select>
           </el-form-item>
           <el-form-item label="执行版本">
-            <el-select v-model="form.versionId" clearable filterable style="width: 100%">
+            <el-select v-model="form.versionId" clearable filterable style="width: 100%" placeholder="不选则按当前配置">
               <el-option v-for="item in formVersionOptions" :key="item.versionId" :label="`${item.versionNo} / ${item.versionStatus}`" :value="item.versionId" />
             </el-select>
           </el-form-item>
@@ -308,7 +308,7 @@ async function handleFormSceneChange(sceneId) {
 async function fillExample() {
   if (!form.sceneId) {
     templateFields.value = []
-    templateMessage.value = '请先选择试算场景，再按发布快照生成输入模板。'
+    templateMessage.value = '请先选择试算场景，再按当前配置或指定版本生成输入模板。'
     return
   }
   const response = await getRunInputTemplate({

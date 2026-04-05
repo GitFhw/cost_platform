@@ -62,6 +62,59 @@ class CostRunControllerManualIT
     private CostPublishVersionMapper publishVersionMapper;
 
     @Test
+    void shouldUseDraftConfigWhenSimulationVersionIsNotSpecified() throws Exception
+    {
+        Long sceneId = requireSceneId();
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+        Long versionId = publishScene(sceneId, authorization, "draft-simulation-default-" + stamp);
+        CostScene scene = sceneMapper.selectById(sceneId);
+        Long previousActiveVersionId = scene == null ? null : scene.getActiveVersionId();
+        sceneMapper.update(null, Wrappers.<CostScene>lambdaUpdate()
+                .eq(CostScene::getSceneId, sceneId)
+                .set(CostScene::getActiveVersionId, versionId));
+
+        try
+        {
+            JsonNode template = readData(mockMvc.perform(get("/cost/run/input-template")
+                            .header("Authorization", authorization)
+                            .param("sceneId", String.valueOf(sceneId))
+                            .param("taskType", "SIMULATION"))
+                    .andExpect(status().isOk())
+                    .andReturn());
+
+            assertThat(template.path("versionId").isNull()).isTrue();
+            assertThat(template.path("versionNo").asText()).isEqualTo("草稿配置");
+            assertThat(template.path("snapshotSource").asText()).isEqualTo("DRAFT");
+
+            ObjectNode executeBody = objectMapper.createObjectNode();
+            executeBody.put("sceneId", sceneId);
+            executeBody.put("inputJson", objectMapper.writeValueAsString(
+                    createManagementInputItem("SG-DRAFT-BIZ-" + stamp, "SG-DRAFT-" + stamp, "draft-simulation")));
+
+            JsonNode simulation = readData(mockMvc.perform(post("/cost/run/simulation/execute")
+                            .header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsBytes(executeBody)))
+                    .andExpect(status().isOk())
+                    .andReturn());
+
+            assertThat(simulation.path("record").path("status").asText()).isEqualTo("SUCCESS");
+            assertThat(simulation.path("record").path("versionId").isNull()).isTrue();
+            assertThat(simulation.path("record").path("versionNo").asText()).isEqualTo("草稿配置");
+            assertThat(simulation.path("result").path("versionNo").asText()).isEqualTo("草稿配置");
+            assertThat(simulation.path("result").path("snapshotSource").asText()).isEqualTo("DRAFT");
+        }
+        finally
+        {
+            sceneMapper.update(null, Wrappers.<CostScene>lambdaUpdate()
+                    .eq(CostScene::getSceneId, sceneId)
+                    .set(CostScene::getActiveVersionId, previousActiveVersionId));
+        }
+    }
+
+    @Test
     void shouldBuildFeeTemplateAndQueryFeeResultDetail() throws Exception
     {
         Long sceneId = requireSceneId();
