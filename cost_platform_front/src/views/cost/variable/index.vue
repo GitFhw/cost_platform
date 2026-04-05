@@ -131,7 +131,22 @@
           <el-col :span="12"><el-form-item label="默认值" prop="defaultValue"><el-input v-model="form.defaultValue" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="精度" prop="precisionScale"><el-input-number v-model="form.precisionScale" :min="0" :max="8" style="width: 100%" /></el-form-item></el-col>
         </el-row>
-        <el-form-item v-if="form.sourceType === 'DICT'" label="字典类型" prop="dictType"><el-input v-model="form.dictType" placeholder="如 cost_cargo_type" /></el-form-item>
+        <el-form-item v-if="form.sourceType === 'DICT'" label="字典类型" prop="dictType">
+          <el-select v-model="form.dictType" clearable filterable style="width: 100%" placeholder="请选择系统字典或核算字典">
+            <el-option-group v-for="group in dictTypeOptionGroups" :key="group.label" :label="group.label">
+              <el-option
+                v-for="item in group.items"
+                :key="item.dictId || item.dictType"
+                :label="`${item.dictName} (${item.dictType})${item.status === '0' ? '' : ' [已停用]'}`"
+                :value="item.dictType"
+                :disabled="item.status !== '0'"
+              />
+            </el-option-group>
+          </el-select>
+          <div class="variable-center__drawer-tip variable-center__drawer-tip--compact">
+            字典来源变量统一从系统字典与核算字典下拉选择，不再手工录入 `dictType` 编码。
+          </div>
+        </el-form-item>
         <template v-if="form.sourceType === 'REMOTE'">
           <el-row :gutter="14">
             <el-col :span="12"><el-form-item label="来源系统" prop="sourceSystem"><el-input v-model="form.sourceSystem" placeholder="如 WMS / ERP / TMS" /></el-form-item></el-col>
@@ -333,7 +348,7 @@
           <el-descriptions-item label="变量类型">{{ resolveDictLabel(variableTypeOptions, detailInfo.variableType) }}</el-descriptions-item>
           <el-descriptions-item label="来源类型">{{ resolveDictLabel(sourceTypeOptions, detailInfo.sourceType) }}</el-descriptions-item>
           <el-descriptions-item label="来源系统">{{ detailInfo.sourceSystem || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="字典类型">{{ detailInfo.dictType || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="字典类型">{{ resolveDictTypeLabel(detailInfo.dictType) }}</el-descriptions-item>
           <el-descriptions-item label="第三方接口">{{ detailInfo.remoteApi || '-' }}</el-descriptions-item>
           <el-descriptions-item label="鉴权方式">{{ resolveDictLabel(authTypeOptions, detailInfo.authType) }}</el-descriptions-item>
           <el-descriptions-item label="数据路径">{{ detailInfo.dataPath || '-' }}</el-descriptions-item>
@@ -372,6 +387,7 @@ import { ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { optionselectFormula } from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
+import { optionselect as getDictTypeOptionselect } from '@/api/system/dict/type'
 import {
   addVariable,
   applyVariableTemplate,
@@ -420,6 +436,7 @@ const syncModeOptions = ref([])
 const cachePolicyOptions = ref([])
 const fallbackPolicyOptions = ref([])
 const formulaOptions = ref([])
+const dictTypeOptions = ref([])
 
 const governanceOpen = ref(false)
 const governanceLoading = ref(false)
@@ -438,6 +455,31 @@ const copySource = ref({})
 const templateOpen = ref(false)
 const statistics = reactive({ variableCount: 0, enabledVariableCount: 0, remoteVariableCount: 0, formulaVariableCount: 0 })
 const selectedFormulaMeta = computed(() => formulaOptions.value.find(item => item.formulaCode === form.value.formulaCode) || {})
+const dictTypeOptionGroups = computed(() => {
+  const groups = [
+    {
+      label: '核算字典',
+      items: dictTypeOptions.value.filter(item => item.status === '0' && item.dictType?.startsWith('cost_'))
+    },
+    {
+      label: '系统字典',
+      items: dictTypeOptions.value.filter(item => item.status === '0' && !item.dictType?.startsWith('cost_'))
+    },
+    {
+      label: '已停用字典',
+      items: dictTypeOptions.value.filter(item => item.status && item.status !== '0')
+    }
+  ]
+  return groups.filter(group => group.items.length)
+})
+
+const validateDictType = (_rule, value, callback) => {
+  if (data.form.sourceType === 'DICT' && !value) {
+    callback(new Error('字典类型不能为空'))
+    return
+  }
+  callback()
+}
 
 const data = reactive({
   queryParams: { pageNum: 1, pageSize: 10, sceneId: undefined, groupId: undefined, variableCode: undefined, variableName: undefined, sourceType: undefined, sourceSystem: undefined },
@@ -451,6 +493,7 @@ const data = reactive({
     variableName: [{ required: true, message: '变量名称不能为空', trigger: 'blur' }],
     variableType: [{ required: true, message: '变量类型不能为空', trigger: 'change' }],
     sourceType: [{ required: true, message: '来源类型不能为空', trigger: 'change' }],
+    dictType: [{ validator: validateDictType, trigger: 'change' }],
     status: [{ required: true, message: '状态不能为空', trigger: 'change' }]
   },
   copyRules: {
@@ -471,7 +514,10 @@ const metricItems = computed(() => [
 const currentTemplate = computed(() => templateList.value.find(item => item.templateCode === templateForm.value.templateCode))
 
 async function loadBaseOptions() {
-  const [dictMap, sceneResponse, templateResponse] = await Promise.all([
+  const dictTypeResponsePromise = dictTypeOptions.value.length
+    ? Promise.resolve({ data: dictTypeOptions.value })
+    : getDictTypeOptionselect()
+  const [dictMap, sceneResponse, templateResponse, dictTypeResponse] = await Promise.all([
     getRemoteDictOptionMap([
       'cost_variable_type',
       'cost_variable_source_type',
@@ -483,7 +529,8 @@ async function loadBaseOptions() {
       'cost_variable_fallback_policy'
     ]),
     optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 }),
-    listVariableTemplates()
+    listVariableTemplates(),
+    dictTypeResponsePromise
   ])
   variableTypeOptions.value = dictMap.cost_variable_type || []
   sourceTypeOptions.value = dictMap.cost_variable_source_type || []
@@ -495,6 +542,13 @@ async function loadBaseOptions() {
   fallbackPolicyOptions.value = dictMap.cost_variable_fallback_policy || []
   sceneOptions.value = sceneResponse?.data || []
   templateList.value = templateResponse?.data || []
+  dictTypeOptions.value = (dictTypeResponse?.data || []).slice().sort((a, b) => {
+    const score = item => {
+      if (item.status !== '0') return 2
+      return item.dictType?.startsWith('cost_') ? 0 : 1
+    }
+    return score(a) - score(b) || (a.dictName || '').localeCompare(b.dictName || '')
+  })
   const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.value.sceneId)
   queryParams.value.sceneId = preferredSceneId
   templateForm.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value, templateForm.value.sceneId, preferredSceneId)
@@ -862,6 +916,15 @@ function resolveDictLabel(optionsRef, value) {
   return match ? match.label : value || '-'
 }
 
+function resolveDictTypeLabel(dictType) {
+  const match = dictTypeOptions.value.find(item => item.dictType === dictType)
+  if (!match) {
+    return dictType || '-'
+  }
+  const suffix = match.status === '0' ? '' : '（已停用）'
+  return `${match.dictName} / ${match.dictType}${suffix}`
+}
+
 function formatJson(value) {
   if (!value) return '-'
   try {
@@ -889,6 +952,7 @@ getList()
 .variable-center__metric-label, .variable-center__metric-desc { font-size: 12px; color: var(--el-text-color-secondary); }
 .variable-center__metric-value { font-size: 24px; color: var(--el-color-primary); }
 .variable-center__drawer-tip { margin-bottom: 16px; padding: 12px 14px; border-radius: 12px; color: var(--el-text-color-regular); background: color-mix(in srgb, var(--el-color-primary-light-9) 32%, var(--el-bg-color-overlay)); line-height: 1.8; }
+.variable-center__drawer-tip--compact { margin-top: 10px; margin-bottom: 0; padding: 10px 12px; font-size: 12px; }
 .variable-center__formula-preview { width: 100%; padding: 12px 14px; border-radius: 12px; background: var(--el-fill-color-light); line-height: 1.7; color: var(--el-text-color-regular); }
 .variable-detail { display: grid; gap: 14px; }
 .variable-detail__header { padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 12px; }

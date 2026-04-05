@@ -6,13 +6,19 @@ import com.ruoyi.system.service.cost.ICostExpressionService;
 import org.springframework.context.expression.MapAccessor;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
+import org.springframework.expression.Operation;
+import org.springframework.expression.OperatorOverloader;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -27,8 +33,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class CostExpressionServiceImpl implements ICostExpressionService
 {
+    private static final int DIVIDE_SCALE = 16;
+
     private final ExpressionParser parser = new SpelExpressionParser();
     private final Map<String, Expression> expressionCache = new ConcurrentHashMap<>();
+    private final OperatorOverloader numericOperatorOverloader = new NumericOperatorOverloader();
 
     @Override
     public void validateExpression(String expression)
@@ -58,6 +67,7 @@ public class CostExpressionServiceImpl implements ICostExpressionService
         {
             StandardEvaluationContext evaluationContext = new StandardEvaluationContext(buildRootContext(context));
             evaluationContext.addPropertyAccessor(new MapAccessor());
+            evaluationContext.setOperatorOverloader(numericOperatorOverloader);
             evaluationContext.setVariable("if", new CommonFunctions());
             evaluationContext.setVariable("max", new MaxFunctions());
             evaluationContext.setVariable("min", new MinFunctions());
@@ -80,7 +90,10 @@ public class CostExpressionServiceImpl implements ICostExpressionService
         LinkedHashMap<String, Object> root = new LinkedHashMap<>();
         if (input != null)
         {
-            root.putAll(input);
+            for (Map.Entry<String, Object> entry : input.entrySet())
+            {
+                root.put(entry.getKey(), normalizeContextValue(entry.getValue()));
+            }
         }
         root.computeIfAbsent("V", key -> new LinkedHashMap<>());
         root.computeIfAbsent("C", key -> new LinkedHashMap<>());
@@ -88,6 +101,52 @@ public class CostExpressionServiceImpl implements ICostExpressionService
         root.computeIfAbsent("F", key -> new LinkedHashMap<>());
         root.computeIfAbsent("T", key -> new LinkedHashMap<>());
         return root;
+    }
+
+    private Object normalizeContextValue(Object value)
+    {
+        if (value == null || value instanceof String || value instanceof Boolean || value instanceof Character
+                || value instanceof Enum<?>)
+        {
+            return value;
+        }
+        if (value instanceof BigInteger bigInteger)
+        {
+            return bigInteger.doubleValue();
+        }
+        if (value instanceof Number)
+        {
+            return ((Number) value).doubleValue();
+        }
+        if (value instanceof Map<?, ?> map)
+        {
+            LinkedHashMap<Object, Object> normalized = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet())
+            {
+                normalized.put(entry.getKey(), normalizeContextValue(entry.getValue()));
+            }
+            return normalized;
+        }
+        if (value instanceof Collection<?> collection)
+        {
+            List<Object> normalized = new ArrayList<>(collection.size());
+            for (Object item : collection)
+            {
+                normalized.add(normalizeContextValue(item));
+            }
+            return normalized;
+        }
+        if (value.getClass().isArray())
+        {
+            int length = java.lang.reflect.Array.getLength(value);
+            List<Object> normalized = new ArrayList<>(length);
+            for (int i = 0; i < length; i++)
+            {
+                normalized.add(normalizeContextValue(java.lang.reflect.Array.get(value, i)));
+            }
+            return normalized;
+        }
+        return value;
     }
 
     /**
@@ -192,12 +251,12 @@ public class CostExpressionServiceImpl implements ICostExpressionService
      */
     public static class MaxFunctions extends CommonFunctions
     {
-        public BigDecimal pick(Object left, Object right)
+        public Double pick(Object left, Object right)
         {
-            return toBigDecimal(left).max(toBigDecimal(right));
+            return Math.max(toBigDecimal(left).doubleValue(), toBigDecimal(right).doubleValue());
         }
 
-        public BigDecimal pick(Object first, Object second, Object third)
+        public Double pick(Object first, Object second, Object third)
         {
             return pick(pick(first, second), third);
         }
@@ -208,14 +267,69 @@ public class CostExpressionServiceImpl implements ICostExpressionService
      */
     public static class MinFunctions extends CommonFunctions
     {
-        public BigDecimal pick(Object left, Object right)
+        public Double pick(Object left, Object right)
         {
-            return toBigDecimal(left).min(toBigDecimal(right));
+            return Math.min(toBigDecimal(left).doubleValue(), toBigDecimal(right).doubleValue());
         }
 
-        public BigDecimal pick(Object first, Object second, Object third)
+        public Double pick(Object first, Object second, Object third)
         {
             return pick(pick(first, second), third);
+        }
+    }
+
+    private static class NumericOperatorOverloader implements OperatorOverloader
+    {
+        @Override
+        public boolean overridesOperation(Operation operation, Object leftOperand, Object rightOperand)
+        {
+            return switch (operation)
+            {
+                case ADD, SUBTRACT, MULTIPLY, DIVIDE, MODULUS, POWER ->
+                        isNumericOperand(leftOperand) && isNumericOperand(rightOperand);
+                default -> false;
+            };
+        }
+
+        @Override
+        public Object operate(Operation operation, Object leftOperand, Object rightOperand)
+        {
+            BigDecimal left = toBigDecimal(leftOperand);
+            BigDecimal right = toBigDecimal(rightOperand);
+            return switch (operation)
+            {
+                case ADD -> left.add(right);
+                case SUBTRACT -> left.subtract(right);
+                case MULTIPLY -> left.multiply(right);
+                case DIVIDE -> right.compareTo(BigDecimal.ZERO) == 0
+                        ? BigDecimal.ZERO
+                        : left.divide(right, DIVIDE_SCALE, RoundingMode.HALF_UP).stripTrailingZeros();
+                case MODULUS -> right.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO : left.remainder(right);
+                case POWER -> left.pow(right.intValue());
+                default -> throw new IllegalStateException("Unsupported numeric operation: " + operation);
+            };
+        }
+
+        private static boolean isNumericOperand(Object value)
+        {
+            return value instanceof Number || value instanceof BigInteger || value instanceof BigDecimal;
+        }
+
+        private static BigDecimal toBigDecimal(Object value)
+        {
+            if (value instanceof BigDecimal decimal)
+            {
+                return decimal;
+            }
+            if (value instanceof BigInteger bigInteger)
+            {
+                return new BigDecimal(bigInteger);
+            }
+            if (value instanceof Number)
+            {
+                return new BigDecimal(String.valueOf(value));
+            }
+            throw new IllegalArgumentException("Unsupported numeric operand: " + value);
         }
     }
 }

@@ -739,23 +739,12 @@ public class CostVariableServiceImpl implements ICostVariableService
      */
     private void validateFormulaVariableConfig(CostVariable variable)
     {
-        if (StringUtils.isNotEmpty(variable.getFormulaCode()))
+        if (StringUtils.isEmpty(variable.getFormulaCode()))
         {
-            CostFormula formula = requireEnabledFormulaByCode(variable.getSceneId(), variable.getFormulaCode(), "公式变量");
-            variable.setFormulaExpr(formula.getFormulaExpr());
-            return;
+            throw new ServiceException("公式变量必须引用公式编码；如为历史表达式，请先在公式实验室沉淀后再选择编码");
         }
-        if (StringUtils.isNotEmpty(variable.getFormulaExpr()))
-        {
-            CostFormula matchedFormula = resolveFormulaByExpression(variable.getSceneId(), variable.getFormulaExpr());
-            if (matchedFormula != null)
-            {
-                variable.setFormulaCode(matchedFormula.getFormulaCode());
-                variable.setFormulaExpr(matchedFormula.getFormulaExpr());
-                return;
-            }
-        }
-        throw new ServiceException("公式变量必须引用公式编码；如为历史表达式，请先在公式实验室沉淀后再选择编码");
+        CostFormula formula = requireEnabledFormulaByCode(variable.getSceneId(), variable.getFormulaCode(), "公式变量");
+        variable.setFormulaExpr(formula.getFormulaExpr());
     }
 
     /**
@@ -775,23 +764,6 @@ public class CostVariableServiceImpl implements ICostVariableService
             throw new ServiceException(fieldLabel + "引用的公式已停用，不能继续使用");
         }
         return formula;
-    }
-
-    /**
-     * 按表达式尝试回溯历史公式资产，帮助旧数据迁移到公式编码。
-     */
-    private CostFormula resolveFormulaByExpression(Long sceneId, String formulaExpr)
-    {
-        if (sceneId == null || StringUtils.isEmpty(formulaExpr))
-        {
-            return null;
-        }
-        List<CostFormula> formulas = formulaMapper.selectList(Wrappers.<CostFormula>lambdaQuery()
-                .eq(CostFormula::getSceneId, sceneId)
-                .eq(CostFormula::getFormulaExpr, StringUtils.trim(formulaExpr))
-                .eq(CostFormula::getStatus, "0")
-                .last("limit 2"));
-        return formulas.size() == 1 ? formulas.get(0) : null;
     }
 
     /**

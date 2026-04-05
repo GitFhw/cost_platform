@@ -267,6 +267,13 @@
                 <div class="rule-center__formula-preview">{{ selectedAmountFormulaMeta.businessFormula || '请选择公式编码，系统会自动回填金额公式。' }}</div>
               </el-form-item>
             </el-col>
+            <el-col :span="24" v-if="selectedAmountFormulaMeta.formulaCode && selectedFormulaValidationMessages.length">
+              <el-alert title="当前公式资产存在预校验问题" type="warning" :closable="false" show-icon>
+                <template #default>
+                  <div v-for="message in selectedFormulaValidationMessages" :key="message" class="rule-center__validation-item">{{ message }}</div>
+                </template>
+              </el-alert>
+            </el-col>
             <el-col :span="24">
               <div class="rule-center__formula-helper">
                 <span>命名空间提示：`V.` 变量、`I.` 输入、`C.` 上下文、`F.` 费用结果、`T.` 临时值</span>
@@ -631,31 +638,50 @@
  
     <el-dialog v-model="expressionOpen" title="表达式助手" width="760px" append-to-body>
       <div class="rule-center__expression-grid">
-        <section>
-          <h4>命名空间</h4>
-          <div class="rule-center__token-list">
-            <el-tag v-for="item in namespaceTokens" :key="item.value" class="rule-center__token" type="warning" @click="appendFormula(item.value)">
-              {{ item.label }}
-            </el-tag>
-          </div>
-        </section>
-        <section>
-          <h4>变量引用</h4>
-          <div class="rule-center__token-list">
-            <el-tag v-for="item in variableOptions" :key="item.variableCode" class="rule-center__token" @click="appendFormula(`V.${item.variableCode}`)">
-              V.{{ item.variableCode }}
-            </el-tag>
-          </div>
-        </section>
-        <section>
-          <h4>常用函数</h4>
-          <div class="rule-center__token-list">
-            <el-tag v-for="item in formulaFunctions" :key="item.value" class="rule-center__token" type="success" @click="appendFormula(item.value)">
-              {{ item.label }}
-            </el-tag>
-          </div>
-        </section>
+        <el-alert
+          :title="selectedAmountFormulaMeta.formulaCode ? `当前已选公式：${selectedAmountFormulaMeta.formulaCode}` : '当前未绑定公式编码'"
+          :description="expressionHelperDescription"
+          :type="selectedAmountFormulaMeta.formulaCode ? 'success' : 'info'"
+          :closable="false"
+          show-icon
+        />
+        <div class="rule-center__expression-actions">
+          <el-button @click="syncExpressionDraft">按当前公式回填草稿</el-button>
+          <el-button type="primary" plain @click="handleOpenFormulaLab">去公式实验室完善</el-button>
+        </div>
+        <el-input
+          v-model="expressionDraft"
+          type="textarea"
+          :rows="5"
+          placeholder="这里是规则中心的表达式草稿区，不会直接改写规则提交数据。"
+        />
+        <el-alert
+          v-if="expressionDraftValidationMessages.length"
+          title="草稿预校验未通过"
+          type="warning"
+          :closable="false"
+          show-icon
+        >
+          <template #default>
+            <div v-for="message in expressionDraftValidationMessages" :key="message" class="rule-center__validation-item">{{ message }}</div>
+          </template>
+        </el-alert>
+        <el-alert
+          v-else-if="expressionDraft"
+          title="草稿预校验通过"
+          description="括号、命名空间和当前场景变量引用已通过前端预校验。"
+          type="success"
+          :closable="false"
+          show-icon
+        />
+        <ExpressionResourcePanel :sections="expressionHelperSections" @append="handleAppendExpressionToken" />
       </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" @click="handleCopyExpressionDraft">复制草稿</el-button>
+          <el-button @click="expressionOpen = false">关闭</el-button>
+        </div>
+      </template>
     </el-dialog>
 
     <el-drawer v-model="governanceOpen" title="规则治理检查" size="500px" append-to-body>
@@ -678,16 +704,19 @@
 <script setup name="CostRule">
 import { ElMessageBox } from 'element-plus'
 import ConditionValueEditor from '@/components/cost/ConditionValueEditor.vue'
+import ExpressionResourcePanel from '@/components/cost/ExpressionResourcePanel.vue'
 import RuleTierEditor from '@/components/cost/RuleTierEditor.vue'
 import { optionselectFee } from '@/api/cost/fee'
 import { optionselectFormula } from '@/api/cost/formula'
 import { addRule, copyRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, previewRuleTier, updateRule } from '@/api/cost/rule'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
+import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 
+const router = useRouter()
 const { proxy } = getCurrentInstance()
 
 const loading = ref(true)
@@ -703,6 +732,7 @@ const feeKeyword = ref('')
 const selectedFeeId = ref(undefined)
 const initialStatus = ref(undefined)
 const expressionOpen = ref(false)
+const expressionDraft = ref('')
 const copyOpen = ref(false)
 const copySourceRule = ref(undefined)
 const tierPreviewLoading = ref(false)
@@ -764,12 +794,12 @@ const data = reactive({
 const { queryParams, form, copyForm, rules, copyRules } = toRefs(data)
 
 const formulaFunctions = [
-  { label: 'if(cond,a,b)', value: 'if(, , )' },
-  { label: 'max(a,b)', value: 'max(, )' },
-  { label: 'min(a,b)', value: 'min(, )' },
-  { label: 'round(x,2)', value: 'round(, 2)' },
-  { label: 'between(x,a,b)', value: 'between(, , )' },
-  { label: 'coalesce(a,b)', value: 'coalesce(, )' }
+  { label: 'if(cond,a,b)', value: 'if(, , )', desc: '条件分支，适合组合判断后取不同结果。' },
+  { label: 'max(a,b)', value: 'max(, )', desc: '取最大值，可用于保底价。' },
+  { label: 'min(a,b)', value: 'min(, )', desc: '取最小值，可用于封顶价。' },
+  { label: 'round(x,2)', value: 'round(, 2)', desc: '统一结果精度。' },
+  { label: 'between(x,a,b)', value: 'between(, , )', desc: '区间命中判断。' },
+  { label: 'coalesce(a,b)', value: 'coalesce(, )', desc: '空值兜底。' }
 ]
 const namespaceTokens = [
   { label: 'V.变量', value: 'V.' },
@@ -797,6 +827,53 @@ const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) 
   return acc
 }, {}))
 const selectedAmountFormulaMeta = computed(() => formulaOptions.value.find(item => item.formulaCode === form.value.amountFormulaCode) || {})
+const expressionHelperDescription = computed(() => {
+  if (selectedAmountFormulaMeta.value.formulaCode) {
+    const formulaNameSuffix = selectedAmountFormulaMeta.value.formulaName ? ` 公式名称：${selectedAmountFormulaMeta.value.formulaName}` : ''
+    return `规则提交仍以公式编码为准，这里只提供草稿参考与排障辅助。${formulaNameSuffix}`
+  }
+  return '可先在这里草拟表达式，再跳转到公式实验室沉淀为标准公式资产。'
+})
+const expressionHelperSections = computed(() => [
+  {
+    key: 'namespace',
+    title: '命名空间',
+    tip: '规则与公式实验室统一使用 V/I/C/F/T 命名空间，点选后会写入草稿区。',
+    display: 'tag',
+    items: namespaceTokens
+  },
+  {
+    key: 'variable',
+    title: '变量引用',
+    display: 'list',
+    emptyText: '当前场景暂无可用变量，请先维护变量资产。',
+    items: variableOptions.value.map(item => ({
+      label: item.variableName || `V.${item.variableCode}`,
+      value: `V.${item.variableCode}`,
+      desc: `${item.variableCode}${item.dataType ? ` / ${item.dataType}` : ''}`
+    }))
+  },
+  {
+    key: 'function',
+    title: '常用函数',
+    display: 'list',
+    items: formulaFunctions
+  }
+])
+const selectedFormulaValidationResult = computed(() => validateCostExpression({
+  expression: selectedAmountFormulaMeta.value.formulaExpr || form.value.amountFormula,
+  namespaceScope: 'V,C,I,F,T',
+  variableCodes: variableOptions.value.map(item => item.variableCode),
+  validateVariableRefs: Boolean(form.value.sceneId || currentFee.value?.sceneId)
+}))
+const selectedFormulaValidationMessages = computed(() => selectedFormulaValidationResult.value.issues.map(item => item.message))
+const expressionDraftValidationResult = computed(() => validateCostExpression({
+  expression: expressionDraft.value,
+  namespaceScope: 'V,C,I,F,T',
+  variableCodes: variableOptions.value.map(item => item.variableCode),
+  validateVariableRefs: Boolean(form.value.sceneId || currentFee.value?.sceneId)
+}))
+const expressionDraftValidationMessages = computed(() => expressionDraftValidationResult.value.issues.map(item => item.message))
 const selectedTierVariableMeta = computed(() => variableMetaMap.value[form.value.quantityVariableCode])
 const currentFeeUnitSemantic = computed(() => getCostUnitSemantic(currentFee.value?.unitCode, resolveUnitLabel(currentFee.value?.unitCode)))
 const isGroupedPricing = computed(() => ['FIXED_RATE', 'FIXED_AMOUNT'].includes(form.value.ruleType) && form.value.pricingMode === 'GROUPED')
@@ -851,6 +928,12 @@ watch(() => form.value.amountFormulaCode, value => {
   }
   const meta = formulaOptions.value.find(item => item.formulaCode === value)
   form.value.amountFormula = meta?.formulaExpr || ''
+})
+
+watch(expressionOpen, value => {
+  if (value) {
+    syncExpressionDraft()
+  }
 })
 
 watch(() => form.value.quantityVariableCode, () => {
@@ -1375,6 +1458,14 @@ function submitForm() {
       proxy.$modal.msgWarning('请先选择费用后再保存规则')
       return
     }
+    if (form.value.ruleType === 'FORMULA' && !form.value.amountFormulaCode) {
+      proxy.$modal.msgWarning('公式规则必须绑定公式编码后才能保存')
+      return
+    }
+    if (form.value.ruleType === 'FORMULA' && selectedFormulaValidationMessages.value.length) {
+      proxy.$modal.msgWarning(selectedFormulaValidationMessages.value[0])
+      return
+    }
     const allowed = await ensureDisableAllowed()
     if (!allowed) {
       return
@@ -1489,8 +1580,40 @@ function resolveUnitLabel(unitCode) {
   return match ? match.label : (unitCode || '-')
 }
 
-function appendFormula(token) {
-  form.value.amountFormula = `${form.value.amountFormula || ''}${form.value.amountFormula ? ' ' : ''}${token}`
+function appendExpressionDraft(token) {
+  expressionDraft.value = `${expressionDraft.value || ''}${token}`
+}
+
+function syncExpressionDraft() {
+  expressionDraft.value = form.value.amountFormula || ''
+}
+
+function handleAppendExpressionToken(payload) {
+  appendExpressionDraft(payload.value)
+}
+
+async function handleCopyExpressionDraft() {
+  if (!expressionDraft.value?.trim()) {
+    proxy.$modal.msgWarning('当前没有可复制的表达式草稿')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(expressionDraft.value)
+    proxy.$modal.msgSuccess('表达式草稿已复制')
+  } catch (error) {
+    proxy.$modal.msgWarning('浏览器未授予剪贴板权限，请手动复制草稿内容')
+  }
+}
+
+function handleOpenFormulaLab() {
+  const query = {}
+  if (form.value.sceneId) {
+    query.sceneId = String(form.value.sceneId)
+  }
+  if (form.value.amountFormulaCode) {
+    query.formulaCode = form.value.amountFormulaCode
+  }
+  router.push({ path: '/cost/formula', query })
 }
 
 function buildTierValidationIssues(tiers) {
@@ -1767,6 +1890,17 @@ getList()
 .rule-center__expression-grid {
   display: grid;
   gap: 16px;
+}
+
+.rule-center__expression-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rule-center__validation-item {
+  line-height: 1.7;
 }
 
 .rule-center__token-list {

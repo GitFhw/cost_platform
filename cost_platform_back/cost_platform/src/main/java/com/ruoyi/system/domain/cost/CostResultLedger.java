@@ -123,4 +123,16 @@ public class CostResultLedger implements Serializable
 
     @TableField(exist = false)
     private String unitCode;
+
+    /** 命中的组合组号 */
+    @TableField(exist = false)
+    private Integer matchedGroupNo;
+
+    /** 定价模式 */
+    @TableField(exist = false)
+    private String pricingMode;
+
+    /** 定价来源 */
+    @TableField(exist = false)
+    private String pricingSource;
 }
