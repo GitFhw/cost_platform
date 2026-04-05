@@ -975,17 +975,13 @@ public class CostRunServiceImpl implements ICostRunService
                     .orderByAsc(CostCalcTaskDetail::getDetailId));
             if (details.isEmpty())
             {
-                finishTask(taskId, startedTime, 0, 0);
+                finishTask(taskId, startedTime);
                 return;
             }
             List<List<CostCalcTaskDetail>> partitions = splitTaskPartitions(details);
             ExecutorCompletionService<PartitionExecutionResult> completionService =
                     new ExecutorCompletionService<>(threadPoolTaskExecutor.getThreadPoolExecutor());
             Map<Future<PartitionExecutionResult>, List<CostCalcTaskDetail>> futurePartitions = new LinkedHashMap<>();
-            int total = details.size();
-            int processed = 0;
-            int success = 0;
-            int failed = 0;
             int nextPartitionIndex = 0;
             int completedCount = 0;
             int maxParallelism = resolveTaskParallelism(partitions.size());
@@ -1006,20 +1002,14 @@ public class CostRunServiceImpl implements ICostRunService
                 {
                     PartitionExecutionResult partitionResult = future.get();
                     finishPartition(taskId, partition, partitionResult, null);
-                    processed += partitionResult.processedCount;
-                    success += partitionResult.successCount;
-                    failed += partitionResult.failedCount;
                 }
                 catch (ExecutionException e)
                 {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
                     PartitionExecutionResult fallbackResult = markPartitionFailed(taskId, partition, cause);
                     finishPartition(taskId, partition, fallbackResult, cause);
-                    processed += fallbackResult.processedCount;
-                    success += fallbackResult.successCount;
-                    failed += fallbackResult.failedCount;
                 }
-                refreshTaskProgress(taskId, total, processed, success, failed);
+                refreshTaskProgress(taskId);
                 CostCalcTask latestTask = calcTaskMapper.selectById(taskId);
                 if (latestTask == null || TASK_STATUS_CANCELLED.equals(latestTask.getTaskStatus()))
                 {
@@ -1034,7 +1024,7 @@ public class CostRunServiceImpl implements ICostRunService
                     futurePartitions.put(nextFuture, nextPartition);
                 }
             }
-            finishTask(taskId, startedTime, success, failed);
+            finishTask(taskId, startedTime);
         }
         catch (Exception e)
         {
@@ -1148,26 +1138,37 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private void refreshTaskProgress(Long taskId, int total, int processed, int success, int failed)
+    private void refreshTaskProgress(Long taskId)
     {
-        BigDecimal progress = BigDecimal.valueOf(processed * 100.0 / total).setScale(2, RoundingMode.HALF_UP);
+        TaskExecutionSummary summary = summarizeTaskDetails(taskId);
+        BigDecimal progress = summary.totalCount <= 0
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : BigDecimal.valueOf(summary.processedCount * 100.0 / summary.totalCount).setScale(2, RoundingMode.HALF_UP);
         calcTaskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
                 .eq(CostCalcTask::getTaskId, taskId)
-                .set(CostCalcTask::getSuccessCount, success)
-                .set(CostCalcTask::getFailCount, failed)
+                .set(CostCalcTask::getSuccessCount, summary.successCount)
+                .set(CostCalcTask::getFailCount, summary.failedCount)
                 .set(CostCalcTask::getProgressPercent, progress)
                 .set(CostCalcTask::getUpdateTime, DateUtils.getNowDate()));
     }
 
-    private void finishTask(Long taskId, Date startedTime, int success, int failed)
+    private void finishTask(Long taskId, Date startedTime)
     {
-        String status = failed <= 0 ? TASK_STATUS_SUCCESS : (success > 0 ? TASK_STATUS_PART_SUCCESS : TASK_STATUS_FAILED);
+        CostCalcTask latestTask = calcTaskMapper.selectById(taskId);
+        if (latestTask != null && TASK_STATUS_CANCELLED.equals(latestTask.getTaskStatus()))
+        {
+            return;
+        }
+        TaskExecutionSummary summary = summarizeTaskDetails(taskId);
+        String status = summary.failedCount <= 0
+                ? TASK_STATUS_SUCCESS
+                : (summary.successCount > 0 ? TASK_STATUS_PART_SUCCESS : TASK_STATUS_FAILED);
         Date finishedTime = DateUtils.getNowDate();
         calcTaskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
                 .eq(CostCalcTask::getTaskId, taskId)
                 .set(CostCalcTask::getTaskStatus, status)
-                .set(CostCalcTask::getSuccessCount, success)
-                .set(CostCalcTask::getFailCount, failed)
+                .set(CostCalcTask::getSuccessCount, summary.successCount)
+                .set(CostCalcTask::getFailCount, summary.failedCount)
                 .set(CostCalcTask::getProgressPercent, BigDecimal.valueOf(100).setScale(2, RoundingMode.HALF_UP))
                 .set(CostCalcTask::getFinishedTime, finishedTime)
                 .set(CostCalcTask::getDurationMs, finishedTime.getTime() - startedTime.getTime())
@@ -1184,7 +1185,7 @@ public class CostRunServiceImpl implements ICostRunService
                 createTaskAlarm(task, null, "TASK_FINISHED_WITH_ERROR",
                         TASK_STATUS_FAILED.equals(status) ? "ERROR" : "WARN",
                         TASK_STATUS_FAILED.equals(status) ? "正式核算任务失败" : "正式核算任务部分成功",
-                        "任务 " + task.getTaskNo() + " 完成状态为 " + status + "，成功 " + success + " 条，失败 " + failed + " 条。");
+                        "任务 " + task.getTaskNo() + " 完成状态为 " + status + "，成功 " + summary.successCount + " 条，失败 " + summary.failedCount + " 条。");
             }
         }
     }
@@ -2770,6 +2771,50 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
+    private TaskExecutionSummary summarizeTaskDetails(Long taskId)
+    {
+        List<CostCalcTaskDetail> details = calcTaskDetailMapper.selectList(Wrappers.<CostCalcTaskDetail>lambdaQuery()
+                .select(CostCalcTaskDetail::getDetailStatus)
+                .eq(CostCalcTaskDetail::getTaskId, taskId));
+        TaskExecutionSummary summary = new TaskExecutionSummary();
+        summary.totalCount = details.size();
+        for (CostCalcTaskDetail detail : details)
+        {
+            if (DETAIL_STATUS_SUCCESS.equals(detail.getDetailStatus()))
+            {
+                summary.successCount++;
+            }
+            else if (DETAIL_STATUS_FAILED.equals(detail.getDetailStatus()))
+            {
+                summary.failedCount++;
+            }
+        }
+        summary.processedCount = summary.successCount + summary.failedCount;
+        return summary;
+    }
+
+    private PartitionExecutionResult summarizePartitionDetails(Long taskId, Integer partitionNo)
+    {
+        List<CostCalcTaskDetail> details = calcTaskDetailMapper.selectList(Wrappers.<CostCalcTaskDetail>lambdaQuery()
+                .select(CostCalcTaskDetail::getDetailStatus)
+                .eq(CostCalcTaskDetail::getTaskId, taskId)
+                .eq(CostCalcTaskDetail::getPartitionNo, partitionNo));
+        PartitionExecutionResult summary = new PartitionExecutionResult();
+        for (CostCalcTaskDetail detail : details)
+        {
+            if (DETAIL_STATUS_SUCCESS.equals(detail.getDetailStatus()))
+            {
+                summary.successCount++;
+            }
+            else if (DETAIL_STATUS_FAILED.equals(detail.getDetailStatus()))
+            {
+                summary.failedCount++;
+            }
+        }
+        summary.processedCount = summary.successCount + summary.failedCount;
+        return summary;
+    }
+
     /**
      * 按任务集合一次性加载分片台账，避免任务总览按任务逐个查分片。
      */
@@ -3399,7 +3444,9 @@ public class CostRunServiceImpl implements ICostRunService
             return;
         }
         Integer partitionNo = partitionDetails.get(0).getPartitionNo();
-        String status = result.failedCount <= 0 ? TASK_STATUS_SUCCESS : (result.successCount > 0 ? TASK_STATUS_PART_SUCCESS : TASK_STATUS_FAILED);
+        PartitionExecutionResult summary = summarizePartitionDetails(taskId, partitionNo);
+        String status = summary.failedCount <= 0 ? TASK_STATUS_SUCCESS
+                : (summary.successCount > 0 ? TASK_STATUS_PART_SUCCESS : TASK_STATUS_FAILED);
         Date finishedTime = DateUtils.getNowDate();
         CostCalcTaskPartition partition = calcTaskPartitionMapper.selectOne(Wrappers.<CostCalcTaskPartition>lambdaQuery()
                 .eq(CostCalcTaskPartition::getTaskId, taskId)
@@ -3411,9 +3458,9 @@ public class CostRunServiceImpl implements ICostRunService
                 .eq(CostCalcTaskPartition::getTaskId, taskId)
                 .eq(CostCalcTaskPartition::getPartitionNo, partitionNo)
                 .set(CostCalcTaskPartition::getPartitionStatus, status)
-                .set(CostCalcTaskPartition::getProcessedCount, result.processedCount)
-                .set(CostCalcTaskPartition::getSuccessCount, result.successCount)
-                .set(CostCalcTaskPartition::getFailCount, result.failedCount)
+                .set(CostCalcTaskPartition::getProcessedCount, summary.processedCount)
+                .set(CostCalcTaskPartition::getSuccessCount, summary.successCount)
+                .set(CostCalcTaskPartition::getFailCount, summary.failedCount)
                 .set(CostCalcTaskPartition::getFinishedTime, finishedTime)
                 .set(CostCalcTaskPartition::getDurationMs, durationMs)
                 .set(CostCalcTaskPartition::getLastError, throwable == null ? "" : limitLength(throwable.getMessage(), 1000))
@@ -4371,6 +4418,14 @@ public class CostRunServiceImpl implements ICostRunService
             this.detail = detail;
             this.errorMessage = errorMessage;
         }
+    }
+
+    private static class TaskExecutionSummary
+    {
+        private int totalCount;
+        private int processedCount;
+        private int successCount;
+        private int failedCount;
     }
 
     private static class PartitionExecutionResult
