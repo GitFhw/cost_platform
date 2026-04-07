@@ -338,7 +338,7 @@
         </el-table-column>
         <el-table-column label="变更类型" width="110" align="center">
           <template #default="scope">
-            <el-tag :type="scope.row.changeType === 'CREATE' ? 'success' : 'info'">{{ scope.row.changeType === 'CREATE' ? '创建' : '更新' }}</el-tag>
+            <el-tag :type="resolveVersionChangeType(scope.row.changeType).type">{{ resolveVersionChangeType(scope.row.changeType).label }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="资产类型" width="110" align="center">
@@ -349,9 +349,10 @@
         <el-table-column label="业务公式" prop="businessFormula" min-width="220" show-overflow-tooltip />
         <el-table-column label="保存人" prop="createBy" width="120" />
         <el-table-column label="保存时间" prop="createTime" width="180" />
-        <el-table-column label="操作" width="120" align="center">
+        <el-table-column label="操作" width="220" align="center">
           <template #default="scope">
             <el-button link type="primary" icon="RefreshRight" @click="handleLoadVersion(scope.row)">装载此版</el-button>
+            <el-button link type="warning" icon="RefreshLeft" @click="handleRollbackVersion(scope.row)" v-hasPermi="['cost:formula:edit']">回滚为当前版</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -373,6 +374,7 @@ import {
   listFormulaTemplates,
   listFormulaVersions,
   optionselectFormula,
+  rollbackFormulaVersion,
   testFormula,
   updateFormula
 } from '@/api/cost/formula'
@@ -822,6 +824,16 @@ function resolveAssetTypeLabel(assetType) {
   return assetTypeOptions.find(item => item.value === assetType)?.label || '公式资产'
 }
 
+function resolveVersionChangeType(changeType) {
+  if (changeType === 'CREATE') {
+    return { label: '创建', type: 'success' }
+  }
+  if (changeType === 'ROLLBACK') {
+    return { label: '回滚', type: 'warning' }
+  }
+  return { label: '更新', type: 'info' }
+}
+
 function appendExpertToken(token) {
   if (workbench.mode !== 'EXPERT') {
     workbench.mode = 'EXPERT'
@@ -998,6 +1010,24 @@ async function handleLoadVersion(row) {
   testResult.value = undefined
   versionOpen.value = false
   proxy.$modal.msgSuccess(`已装载版本 V${row.versionNo}`)
+}
+
+async function handleRollbackVersion(row) {
+  await ElMessageBox.confirm(`确认将当前公式回滚为版本 V${row.versionNo} 吗？`, '版本回滚确认', { type: 'warning' })
+  await rollbackFormulaVersion(row.versionId)
+  const [formulaResponse, versionResponse] = await Promise.all([
+    getFormula(row.formulaId),
+    listFormulaVersions(row.formulaId),
+    getList()
+  ])
+  Object.assign(form, formulaResponse.data || {})
+  queryParams.sceneId = form.sceneId
+  await loadSceneAssets(form.sceneId)
+  restoreWorkbench(formulaResponse.data)
+  testInputJson.value = form.testCaseJson || ''
+  testResult.value = undefined
+  versionList.value = versionResponse?.data || []
+  proxy.$modal.msgSuccess(`已回滚为版本 V${row.versionNo}`)
 }
 
 async function handleDelete(row) {

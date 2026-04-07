@@ -19,7 +19,7 @@ import java.util.Map;
  */
 public interface ICostRunService
 {
-    Map<String, Object> selectSimulationStats(Long sceneId);
+    Map<String, Object> selectSimulationStats(CostSimulationRecord query);
 
     List<CostSimulationRecord> selectSimulationList(CostSimulationRecord query);
 

@@ -1,6 +1,5 @@
 import request from '@/utils/request'
 
-// 查询公式列表
 export function listFormula(query) {
   return request({
     url: '/cost/formula/list',
@@ -9,7 +8,6 @@ export function listFormula(query) {
   })
 }
 
-// 查询公式统计
 export function getFormulaStats(query) {
   return request({
     url: '/cost/formula/stats',
@@ -18,7 +16,6 @@ export function getFormulaStats(query) {
   })
 }
 
-// 查询公式治理检查
 export function getFormulaGovernance(formulaId) {
   return request({
     url: '/cost/formula/governance/' + formulaId,
@@ -26,7 +23,6 @@ export function getFormulaGovernance(formulaId) {
   })
 }
 
-// 查询公式下拉选项
 export function optionselectFormula(query) {
   return request({
     url: '/cost/formula/optionselect',
@@ -35,7 +31,6 @@ export function optionselectFormula(query) {
   })
 }
 
-// 查询模板库下拉选项
 export function listFormulaTemplates(query) {
   return request({
     url: '/cost/formula/templateOptions',
@@ -44,7 +39,6 @@ export function listFormulaTemplates(query) {
   })
 }
 
-// 查询公式详情
 export function getFormula(formulaId) {
   return request({
     url: '/cost/formula/' + formulaId,
@@ -52,7 +46,6 @@ export function getFormula(formulaId) {
   })
 }
 
-// 查询公式版本台账
 export function listFormulaVersions(formulaId) {
   return request({
     url: '/cost/formula/versions/' + formulaId,
@@ -60,7 +53,6 @@ export function listFormulaVersions(formulaId) {
   })
 }
 
-// 查询公式版本详情
 export function getFormulaVersion(versionId) {
   return request({
     url: '/cost/formula/version/' + versionId,
@@ -68,7 +60,13 @@ export function getFormulaVersion(versionId) {
   })
 }
 
-// 新增公式
+export function rollbackFormulaVersion(versionId) {
+  return request({
+    url: '/cost/formula/version/rollback/' + versionId,
+    method: 'put'
+  })
+}
+
 export function addFormula(data) {
   return request({
     url: '/cost/formula',
@@ -77,7 +75,6 @@ export function addFormula(data) {
   })
 }
 
-// 修改公式
 export function updateFormula(data) {
   return request({
     url: '/cost/formula',
@@ -86,7 +83,6 @@ export function updateFormula(data) {
   })
 }
 
-// 删除公式
 export function delFormula(formulaId) {
   return request({
     url: '/cost/formula/' + formulaId,
@@ -94,7 +90,6 @@ export function delFormula(formulaId) {
   })
 }
 
-// 测试公式
 export function testFormula(data) {
   return request({
     url: '/cost/formula/test',

@@ -48,9 +48,9 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:simulation:list')")
     @GetMapping("/simulation/stats")
-    public AjaxResult simulationStats(@RequestParam(value = "sceneId", required = false) Long sceneId)
+    public AjaxResult simulationStats(CostSimulationRecord query)
     {
-        return success(runService.selectSimulationStats(sceneId));
+        return success(runService.selectSimulationStats(query));
     }
 
     /**

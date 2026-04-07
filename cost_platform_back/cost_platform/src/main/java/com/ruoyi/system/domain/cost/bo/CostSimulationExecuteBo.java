@@ -19,6 +19,9 @@ public class CostSimulationExecuteBo
     /** 发布版本主键 */
     private Long versionId;
 
+    /** 账期，格式 yyyy-MM */
+    private String billMonth;
+
     /** 输入业务数据 JSON */
     @NotBlank(message = "试算输入数据不能为空")
     private String inputJson;

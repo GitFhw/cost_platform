@@ -28,6 +28,9 @@
           <el-option v-for="item in versionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
         </el-select>
       </el-form-item>
+      <el-form-item label="账期" prop="billMonth">
+        <el-input v-model="queryParams.billMonth" clearable placeholder="yyyy-MM" style="width: 160px" />
+      </el-form-item>
       <el-form-item label="状态" prop="status">
         <el-select v-model="queryParams.status" clearable style="width: 180px">
           <el-option v-for="item in simulationStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -65,6 +68,9 @@
             <el-select v-model="form.versionId" clearable filterable style="width: 100%" placeholder="不选则按当前配置">
               <el-option v-for="item in formVersionOptions" :key="item.versionId" :label="`${item.versionNo} / ${item.versionStatus}`" :value="item.versionId" />
             </el-select>
+          </el-form-item>
+          <el-form-item label="账期" required>
+            <el-input v-model="form.billMonth" placeholder="yyyy-MM" />
           </el-form-item>
           <el-form-item label="输入 JSON" required>
             <el-input v-model="form.inputJson" type="textarea" :rows="14" maxlength="10000" show-word-limit />
@@ -109,6 +115,7 @@
             <template #default="scope">{{ scope.row.sceneName }} ({{ scope.row.sceneCode }})</template>
           </el-table-column>
           <el-table-column label="版本" prop="versionNo" width="160" />
+          <el-table-column label="账期" prop="billMonth" width="110" align="center" />
           <el-table-column label="状态" width="110" align="center">
             <template #default="scope">
               <dict-tag :options="simulationStatusOptions" :value="scope.row.status" />
@@ -134,6 +141,7 @@
         <el-descriptions-item label="状态">{{ resolveSimulationStatus(detailData.record.status) }}</el-descriptions-item>
         <el-descriptions-item label="场景">{{ detailData.record.sceneName }}</el-descriptions-item>
         <el-descriptions-item label="版本">{{ detailData.record.versionNo }}</el-descriptions-item>
+        <el-descriptions-item label="账期">{{ detailData.record.billMonth || '-' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ parseTime(detailData.record.createTime) }}</el-descriptions-item>
         <el-descriptions-item label="异常信息">{{ detailData.record.errorMessage || '-' }}</el-descriptions-item>
       </el-descriptions>
@@ -210,6 +218,7 @@ const queryParams = reactive({
   pageNum: 1,
   pageSize: 10,
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
+  billMonth: route.query.billMonth || '',
   versionId: undefined,
   status: undefined
 })
@@ -217,6 +226,7 @@ const queryParams = reactive({
 const form = reactive({
   executeMode: 'SINGLE',
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
+  billMonth: route.query.billMonth || resolveCurrentBillMonth(),
   versionId: undefined,
   inputJson: ''
 })
@@ -264,7 +274,7 @@ async function getList() {
     }
     const [listResp, statsResp] = await Promise.all([
       listSimulation(queryParams),
-      getSimulationStats(queryParams.sceneId)
+      getSimulationStats(queryParams)
     ])
     recordList.value = listResp.rows || []
     total.value = listResp.total || 0
@@ -283,6 +293,7 @@ function resetQuery() {
   proxy.resetForm('queryRef')
   queryParams.pageNum = 1
   queryParams.pageSize = 10
+  queryParams.billMonth = ''
   versionOptions.value = []
   getList()
 }
@@ -322,13 +333,14 @@ async function fillExample() {
 }
 
 async function handleExecute() {
-  if (!form.sceneId || !form.inputJson) {
-    proxy.$modal.msgWarning('请选择试算场景并填写输入 JSON')
+  if (!form.sceneId || !form.billMonth || !form.inputJson) {
+    proxy.$modal.msgWarning('请选择试算场景、账期并填写输入 JSON')
     return
   }
   if (form.executeMode === 'BATCH') {
     const resp = await executeSimulationBatch({
       sceneId: form.sceneId,
+      billMonth: form.billMonth,
       versionId: form.versionId,
       inputJson: form.inputJson
     })
@@ -338,6 +350,7 @@ async function handleExecute() {
   } else {
     const resp = await executeSimulation({
       sceneId: form.sceneId,
+      billMonth: form.billMonth,
       versionId: form.versionId,
       inputJson: form.inputJson
     })
@@ -375,6 +388,12 @@ function formatJson(value) {
 function summarizeBatchJson(value) {
   const text = JSON.stringify(value || {})
   return text.length > 120 ? `${text.slice(0, 120)}...` : text
+}
+
+function resolveCurrentBillMonth() {
+  const current = new Date()
+  const month = String(current.getMonth() + 1).padStart(2, '0')
+  return `${current.getFullYear()}-${month}`
 }
 
 onMounted(async () => {

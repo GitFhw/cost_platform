@@ -33,6 +33,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -117,7 +119,7 @@ class CostRunControllerManualIT
                     .andReturn());
 
             assertThat(template.path("versionId").isNull()).isTrue();
-            assertThat(template.path("versionNo").asText()).isEqualTo("草稿配置");
+            assertThat(template.path("versionNo").asText()).isEqualTo("\u8349\u7a3f\u914d\u7f6e");
             assertThat(template.path("snapshotSource").asText()).isEqualTo("DRAFT");
 
             ObjectNode executeBody = objectMapper.createObjectNode();
@@ -134,8 +136,8 @@ class CostRunControllerManualIT
 
             assertThat(simulation.path("record").path("status").asText()).isEqualTo("SUCCESS");
             assertThat(simulation.path("record").path("versionId").isNull()).isTrue();
-            assertThat(simulation.path("record").path("versionNo").asText()).isEqualTo("草稿配置");
-            assertThat(simulation.path("result").path("versionNo").asText()).isEqualTo("草稿配置");
+            assertThat(simulation.path("record").path("versionNo").asText()).isEqualTo("\u8349\u7a3f\u914d\u7f6e");
+            assertThat(simulation.path("result").path("versionNo").asText()).isEqualTo("\u8349\u7a3f\u914d\u7f6e");
             assertThat(simulation.path("result").path("snapshotSource").asText()).isEqualTo("DRAFT");
         }
         finally
@@ -160,7 +162,7 @@ class CostRunControllerManualIT
                 .eq(CostRule::getRuleCode, "SG_FEMALE_SHIFT_RATE_01"));
         assertThat(femaleRule).isNotNull();
         String previousPricingJson = femaleRule.getPricingJson();
-        femaleRule.setPricingJson("{\"mode\":\"FIXED_RATE\",\"basis\":\"FEMALE_ATTENDANCE_EQUIV\",\"unit\":\"折算量\",\"rateValue\":4000,\"summary\":\"draft regression price\"}");
+        femaleRule.setPricingJson("{\"mode\":\"FIXED_RATE\",\"basis\":\"FEMALE_ATTENDANCE_EQUIV\",\"unit\":\"UNIT\",\"rateValue\":4000,\"summary\":\"draft regression price\"}");
         ruleMapper.updateById(femaleRule);
 
         try
@@ -692,7 +694,7 @@ class CostRunControllerManualIT
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
         String stamp = LocalTime.now().format(STAMP_FORMATTER);
-        Long versionId = publishScene(sceneId, authorization, "首钢真实费用-女工联调-" + stamp);
+        Long versionId = publishScene(sceneId, authorization, "婵犵妲呴崑鎾跺緤妤ｅ啯鍋嬮柣妯款嚙缁犵増淇婇妶鍛櫤闁稿孩鍨块弻锝夊籍閸偅顥栭梺鍝勵槷缁瑩骞冭ぐ鎺戠疀妞ゆ帊娴囩涵鈧梻?婵犵數濞€濞佳囧磹閹间礁鐤柟绋块椤曢亶鏌熼幍顔碱暭闁搞倕鍊块弻锟犲礃閵婏箑绐涘┑?" + stamp);
         String billMonth = YearMonth.now().plusMonths(2).toString();
 
         JsonNode simulationTemplate = readData(mockMvc.perform(get("/cost/run/input-template")
@@ -703,7 +705,7 @@ class CostRunControllerManualIT
                 .andExpect(status().isOk())
                 .andReturn());
         JsonNode simulationTemplateInput = objectMapper.readTree(simulationTemplate.path("inputJson").asText("{}"));
-        assertThat(simulationTemplateInput.path("objectName").asText()).isEqualTo("示例对象1");
+        assertThat(simulationTemplateInput.path("objectName").asText()).isEqualTo("\u793a\u4f8b\u5bf9\u8c611");
 
         JsonNode feeTemplate = readData(mockMvc.perform(get("/cost/run/input-template/fee")
                         .header("Authorization", authorization)
@@ -725,8 +727,8 @@ class CostRunControllerManualIT
         String requestNo = "SG-FEMALE-" + stamp;
         String objectCode = "SG-FEMALE-" + stamp + "-A";
         ArrayNode inputItems = objectMapper.createArrayNode();
-        inputItems.add(createFemaleInputItem("SG-BIZ-" + stamp + "-001", objectCode, "首钢女工A", 2, 6, 6));
-        inputItems.add(createFemaleInputItem("SG-BIZ-" + stamp + "-002", "SG-FEMALE-" + stamp + "-B", "首钢女工B", 1, 0, 1));
+        inputItems.add(createFemaleInputItem("SG-BIZ-" + stamp + "-001", objectCode, "female-sample-a", 2, 6, 6));
+        inputItems.add(createFemaleInputItem("SG-BIZ-" + stamp + "-002", "SG-FEMALE-" + stamp + "-B", "female-sample-b", 1, 0, 1));
 
         ObjectNode feeCalculateBody = objectMapper.createObjectNode();
         feeCalculateBody.put("sceneId", sceneId);
@@ -809,7 +811,7 @@ class CostRunControllerManualIT
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
         String stamp = LocalTime.now().format(STAMP_FORMATTER);
-        Long versionId = publishScene(sceneId, authorization, "首钢真实费用-组合定价联调-" + stamp);
+        Long versionId = publishScene(sceneId, authorization, "婵犵妲呴崑鎾跺緤妤ｅ啯鍋嬮柣妯款嚙缁犵増淇婇妶鍛櫤闁稿孩鍨块弻锝夊籍閸偅顥栭梺鍝勵槷缁瑩骞冭ぐ鎺戠疀妞ゆ帊娴囩涵鈧梻?缂傚倸鍊搁崐椋庣矆娴ｈ　鍋撳鐓庡⒋妤犵偛鍟幆鏃堟晲閸屾矮澹曢柣鐔哥懃鐎氼噣鎮￠鐐寸厽婵犲﹤楠搁悘锕傛煙閾忣偅绀嬬€殿噮鍣ｅ畷鍫曞煛閸屻倕鏅?" + stamp);
         String billMonth = YearMonth.now().plusMonths(2).toString();
 
         JsonNode publishDetail = readData(mockMvc.perform(get("/cost/publish/{versionId}", versionId)
@@ -842,8 +844,8 @@ class CostRunControllerManualIT
         String objectCodeA = "SG-COVER-" + stamp + "-A";
         String objectCodeB = "SG-COVER-" + stamp + "-B";
         ArrayNode inputItems = objectMapper.createArrayNode();
-        inputItems.add(createCoverInputItem("SG-COVER-BIZ-" + stamp + "-001", objectCodeA, "首钢苫盖焦煤", "COVER", "COAL", 1000));
-        inputItems.add(createCoverInputItem("SG-COVER-BIZ-" + stamp + "-002", objectCodeB, "首钢揭盖矿石", "UNCOVER", "ORE", 1000));
+        inputItems.add(createCoverInputItem("SG-COVER-BIZ-" + stamp + "-001", objectCodeA, "cover-group-hit-a", "COVER", "COAL", 1000));
+        inputItems.add(createCoverInputItem("SG-COVER-BIZ-" + stamp + "-002", objectCodeB, "cover-group-hit-b", "UNCOVER", "ORE", 1000));
 
         ObjectNode feeCalculateBody = objectMapper.createObjectNode();
         feeCalculateBody.put("sceneId", sceneId);
@@ -922,7 +924,7 @@ class CostRunControllerManualIT
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
         String stamp = LocalTime.now().format(STAMP_FORMATTER);
-        Long versionId = publishScene(sceneId, authorization, "首钢真实费用-管理费上游联调-" + stamp);
+        Long versionId = publishScene(sceneId, authorization, "shougang-management-upstream-" + stamp);
         String billMonth = "2026-12";
 
         JsonNode feeTemplate = readData(mockMvc.perform(get("/cost/run/input-template/fee")
@@ -952,7 +954,7 @@ class CostRunControllerManualIT
 
         ArrayNode inputItems = objectMapper.createArrayNode();
         inputItems.add(createManagementInputItem("SG-MGMT-BIZ-" + stamp + "-001",
-                "SG-MGMT-" + stamp + "-A", "首钢管理费联动样例"));
+                "SG-MGMT-" + stamp + "-A", "management-formula-sample"));
 
         ObjectNode feeCalculateBody = objectMapper.createObjectNode();
         feeCalculateBody.put("sceneId", sceneId);
@@ -985,6 +987,264 @@ class CostRunControllerManualIT
                 .isEqualTo("SG_RULE_MANAGEMENT_FEE_AMOUNT");
         assertThat(record.path("explain").path("pricing").path("amountValue").decimalValue())
                 .isEqualByComparingTo(expectedManagementFeeAmount());
+    }
+
+    @Test
+    void shouldKeepShougangRealFeeSampleConsistentAcrossSimulationAndFormalRun() throws Exception
+    {
+        Long sceneId = requireSceneId();
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+        Long versionId = publishScene(sceneId, authorization, "shougang-full-sample-" + stamp);
+        String billMonth = "2026-12";
+        String objectCode = "SG-FULL-" + stamp + "-A";
+        String requestNo = "SG-FULL-REQ-" + stamp;
+
+        ObjectNode input = createShougangFullInputItem("SG-FULL-BIZ-" + stamp + "-001", objectCode, "shougang-full-fee-sample");
+        Map<String, String> expectedAmounts = expectedShougangFullFeeAmounts();
+
+        ObjectNode simulationBody = objectMapper.createObjectNode();
+        simulationBody.put("sceneId", sceneId);
+        simulationBody.put("versionId", versionId);
+        simulationBody.put("billMonth", billMonth);
+        simulationBody.put("inputJson", objectMapper.writeValueAsString(input));
+
+        JsonNode simulation = readData(mockMvc.perform(post("/cost/run/simulation/execute")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(simulationBody)))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        assertThat(simulation.path("record").path("status").asText()).isEqualTo("SUCCESS");
+        assertThat(simulation.path("record").path("versionId").asLong()).isEqualTo(versionId);
+        assertThat(simulation.path("record").path("billMonth").asText()).isEqualTo(billMonth);
+        assertThat(simulation.path("result").path("snapshotSource").asText()).isEqualTo("PUBLISHED");
+        assertThat(simulation.path("result").path("feeResults").size()).isEqualTo(expectedAmounts.size());
+        assertThat(simulation.path("result").path("amountTotal").decimalValue())
+                .isEqualByComparingTo(expectedShougangFullAmountTotal());
+        assertFeeAmountMatches(simulation.path("result").path("feeResults"), expectedAmounts);
+
+        ObjectNode taskBody = objectMapper.createObjectNode();
+        taskBody.put("sceneId", sceneId);
+        taskBody.put("versionId", versionId);
+        taskBody.put("taskType", "FORMAL_BATCH");
+        taskBody.put("billMonth", billMonth);
+        taskBody.put("requestNo", requestNo);
+        taskBody.put("inputJson", objectMapper.writeValueAsString(objectMapper.createArrayNode().add(input)));
+
+        JsonNode taskSubmit = readData(mockMvc.perform(post("/cost/run/task/submit")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(taskBody)))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        long taskId = taskSubmit.path("task").path("taskId").asLong();
+        assertThat(waitTaskFinished(taskId, authorization)).isIn("SUCCESS", "PART_SUCCESS");
+
+        JsonNode resultList = readBody(mockMvc.perform(get("/cost/run/result/list")
+                        .header("Authorization", authorization)
+                        .param("requestNo", requestNo)
+                        .param("objectCode", objectCode)
+                        .param("pageNum", "1")
+                        .param("pageSize", "50"))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        assertThat(resultList.path("total").asInt()).isEqualTo(expectedAmounts.size());
+        assertFeeAmountMatches(resultList.path("rows"), expectedAmounts);
+
+        JsonNode managementLedger = findNodeByField(resultList.path("rows"), "feeCode", MANAGEMENT_FEE_CODE);
+        assertThat(managementLedger).isNotNull();
+        JsonNode managementDetail = readData(mockMvc.perform(get("/cost/run/result/{resultId}", managementLedger.path("resultId").asLong())
+                        .header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(managementDetail.path("trace").path("pricing").path("formulaCode").asText())
+                .isEqualTo("SG_RULE_MANAGEMENT_FEE_AMOUNT");
+        assertThat(managementDetail.path("trace").path("pricing").path("amountValue").decimalValue())
+                .isEqualByComparingTo(expectedAmounts.get(MANAGEMENT_FEE_CODE));
+    }
+
+    @Test
+    void shouldFilterSimulationListByBillMonthAndExposePersistedBillMonth() throws Exception
+    {
+        Long sceneId = requireSceneId();
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+        Long versionId = publishScene(sceneId, authorization, "simulation-bill-month-filter-" + stamp);
+        String billMonth = "2026-12";
+
+        ObjectNode input = createShougangFullInputItem("SG-SIM-BIZ-" + stamp, "SG-SIM-" + stamp, "simulation-bill-month-sample");
+        ObjectNode simulationBody = objectMapper.createObjectNode();
+        simulationBody.put("sceneId", sceneId);
+        simulationBody.put("versionId", versionId);
+        simulationBody.put("billMonth", billMonth);
+        simulationBody.put("inputJson", objectMapper.writeValueAsString(input));
+
+        JsonNode simulation = readData(mockMvc.perform(post("/cost/run/simulation/execute")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(simulationBody)))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        long simulationId = simulation.path("record").path("simulationId").asLong();
+        String simulationNo = simulation.path("record").path("simulationNo").asText();
+        assertThat(simulation.path("record").path("billMonth").asText()).isEqualTo(billMonth);
+
+        JsonNode filteredList = readBody(mockMvc.perform(get("/cost/run/simulation/list")
+                        .header("Authorization", authorization)
+                        .param("sceneId", String.valueOf(sceneId))
+                        .param("versionId", String.valueOf(versionId))
+                        .param("billMonth", billMonth)
+                        .param("pageNum", "1")
+                        .param("pageSize", "50"))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        JsonNode matchedRow = findNodeByField(filteredList.path("rows"), "simulationNo", simulationNo);
+        assertThat(matchedRow).isNotNull();
+        assertThat(matchedRow.path("billMonth").asText()).isEqualTo(billMonth);
+
+        JsonNode filteredStats = readData(mockMvc.perform(get("/cost/run/simulation/stats")
+                        .header("Authorization", authorization)
+                        .param("sceneId", String.valueOf(sceneId))
+                        .param("versionId", String.valueOf(versionId))
+                        .param("billMonth", billMonth))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(filteredStats.path("simulationCount").asInt()).isEqualTo(1);
+        assertThat(filteredStats.path("successCount").asInt()).isEqualTo(1);
+        assertThat(filteredStats.path("failedCount").asInt()).isEqualTo(0);
+
+        JsonNode otherMonthList = readBody(mockMvc.perform(get("/cost/run/simulation/list")
+                        .header("Authorization", authorization)
+                        .param("sceneId", String.valueOf(sceneId))
+                        .param("versionId", String.valueOf(versionId))
+                        .param("billMonth", "2026-11")
+                        .param("pageNum", "1")
+                        .param("pageSize", "50"))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(findNodeByField(otherMonthList.path("rows"), "simulationNo", simulationNo)).isNull();
+
+        JsonNode otherMonthStats = readData(mockMvc.perform(get("/cost/run/simulation/stats")
+                        .header("Authorization", authorization)
+                        .param("sceneId", String.valueOf(sceneId))
+                        .param("versionId", String.valueOf(versionId))
+                        .param("billMonth", "2026-11"))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(otherMonthStats.path("simulationCount").asInt()).isEqualTo(0);
+
+        JsonNode detail = readData(mockMvc.perform(get("/cost/run/simulation/{simulationId}", simulationId)
+                        .header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(detail.path("record").path("simulationNo").asText()).isEqualTo(simulationNo);
+        assertThat(detail.path("record").path("billMonth").asText()).isEqualTo(billMonth);
+    }
+
+    @Test
+    void shouldKeepShougangRealFeeSampleConsistentAcrossAllSingleFeeApis() throws Exception
+    {
+        Long sceneId = requireSceneId();
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+        Long versionId = publishScene(sceneId, authorization, "shougang-all-fee-api-" + stamp);
+        String billMonth = "2026-12";
+        String objectCode = "SG-FEE-API-" + stamp + "-A";
+
+        ArrayNode inputItems = objectMapper.createArrayNode();
+        inputItems.add(createShougangFullInputItem("SG-FEE-BIZ-" + stamp + "-001",
+                objectCode, "shougang-single-fee-sample"));
+
+        Map<String, String> expectedAmounts = expectedShougangFullFeeAmounts();
+        Map<String, Set<String>> expectedFields = expectedShougangSingleFeeTemplateFields();
+        Map<String, Integer> expectedInputFieldCounts = expectedShougangSingleFeeTemplateInputFieldCounts();
+
+        for (Map.Entry<String, String> entry : expectedAmounts.entrySet())
+        {
+            String feeCode = entry.getKey();
+
+            JsonNode feeTemplate = readData(mockMvc.perform(get("/cost/run/input-template/fee")
+                            .header("Authorization", authorization)
+                            .param("sceneId", String.valueOf(sceneId))
+                            .param("versionId", String.valueOf(versionId))
+                            .param("feeCode", feeCode)
+                            .param("taskType", "FORMAL_BATCH"))
+                    .andExpect(status().isOk())
+                    .andReturn());
+
+            assertThat(feeTemplate.path("fee").path("feeCode").asText()).isEqualTo(feeCode);
+            assertThat(feeTemplate.path("inputFieldCount").asInt()).isGreaterThan(0);
+            if (expectedInputFieldCounts.containsKey(feeCode))
+            {
+                assertThat(feeTemplate.path("inputFieldCount").asInt()).isEqualTo(expectedInputFieldCounts.get(feeCode));
+            }
+            Map<String, Boolean> includedFlags = readIncludedFlags(feeTemplate.path("fields"));
+            for (String fieldCode : expectedFields.getOrDefault(feeCode, linkedSet()))
+            {
+                assertThat(includedFlags).containsEntry(fieldCode, true);
+            }
+            if (MANAGEMENT_FEE_CODE.equals(feeCode))
+            {
+                assertThat(feeTemplate.path("executionFeeCount").asInt()).isEqualTo(11);
+                assertThat(readTextSet(feeTemplate.path("dependentFeeCodes")))
+                        .contains("SG_THRPT_PIECE_FEE", "SG_DUTY_SHIFT_LABOR", "SG_SEASONAL_ALLOWANCE");
+            }
+
+            ObjectNode feeCalculateBody = objectMapper.createObjectNode();
+            feeCalculateBody.put("sceneId", sceneId);
+            feeCalculateBody.put("versionId", versionId);
+            feeCalculateBody.put("feeCode", feeCode);
+            feeCalculateBody.put("billMonth", billMonth);
+            feeCalculateBody.put("includeExplain", true);
+            feeCalculateBody.put("inputJson", objectMapper.writeValueAsString(inputItems));
+
+            JsonNode feeCalculate = readData(mockMvc.perform(post("/cost/run/fee/calculate")
+                            .header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsBytes(feeCalculateBody)))
+                    .andExpect(status().isOk())
+                    .andReturn());
+
+            assertThat(feeCalculate.path("fee").path("feeCode").asText()).isEqualTo(feeCode);
+            assertThat(feeCalculate.path("recordCount").asInt()).isEqualTo(1);
+            assertThat(feeCalculate.path("successCount").asInt()).isEqualTo(1);
+            assertThat(feeCalculate.path("noMatchCount").asInt()).isEqualTo(0);
+            assertThat(feeCalculate.path("failedCount").asInt()).isEqualTo(0);
+
+            JsonNode record = feeCalculate.path("records").path(0);
+            assertThat(record.path("status").asText()).isEqualTo("SUCCESS");
+            assertThat(record.path("amountValue").decimalValue()).isEqualByComparingTo(entry.getValue());
+            assertThat(record.path("explain").path("pricing").path("amountValue").decimalValue())
+                    .isEqualByComparingTo(entry.getValue());
+
+            if (COVER_FEE_CODE.equals(feeCode))
+            {
+                assertGroupedPricingRecord(record, "1", entry.getValue());
+            }
+            else if ("SG_MOORING_FEE".equals(feeCode))
+            {
+                assertGroupedPricingRecord(record, "1", entry.getValue());
+            }
+            else if (MANAGEMENT_FEE_CODE.equals(feeCode))
+            {
+                assertThat(record.path("pricingSource").asText()).isEqualTo("FORMULA");
+                assertThat(record.path("explain").path("pricing").path("formulaCode").asText())
+                        .isEqualTo("SG_RULE_MANAGEMENT_FEE_AMOUNT");
+            }
+            else
+            {
+                assertThat(record.path("pricingSource").asText()).isNotBlank();
+            }
+        }
     }
 
     private Long requireSceneId()
@@ -1091,6 +1351,53 @@ class CostRunControllerManualIT
         return item;
     }
 
+    private ObjectNode createShougangFullInputItem(String bizNo, String objectCode, String objectName)
+    {
+        ObjectNode item = createManagementInputItem(bizNo, objectCode, objectName);
+        item.put("UNIT_BEARING_AMOUNT", 3500);
+        item.put("INSURANCE_TAXABLE_AMOUNT", 12000);
+        item.put("EMPLOYER_LIABILITY_AMOUNT", 1800);
+        return item;
+    }
+
+    private Map<String, Set<String>> expectedShougangSingleFeeTemplateFields()
+    {
+        Map<String, Set<String>> expected = new LinkedHashMap<>();
+        expected.put("SG_THRPT_PIECE_FEE", linkedSet("ALLOCATED_THROUGHPUT_TON"));
+        expected.put(FEMALE_FEE_CODE, linkedSet("FEMALE_TEAM_HEADCOUNT", "FEMALE_ACTUAL_ATTENDANCE", "FEMALE_REQUIRED_ATTENDANCE"));
+        expected.put("SG_SPECIAL_SHIFT_LABOR", linkedSet("SPECIAL_TEAM_HEADCOUNT", "SPECIAL_ACTUAL_ATTENDANCE", "SPECIAL_REQUIRED_ATTENDANCE"));
+        expected.put("SG_HOLD_CLEANING_LABOR", linkedSet("HOLD_COUNT"));
+        expected.put(COVER_FEE_CODE, linkedSet("COVER_ACTION", "COVER_CARGO_TYPE", "COVER_WORKLOAD_TON"));
+        expected.put("SG_MOORING_FEE", linkedSet("MOORING_ACTION", "MOORING_HEADCOUNT"));
+        expected.put("SG_ODD_JOB_FEE", linkedSet("ODD_JOB_HOURS"));
+        expected.put("SG_DUTY_SHIFT_LABOR", linkedSet("ALLOCATED_THROUGHPUT_TON", "ALL_TEAMS_REQUIRED_ATTENDANCE"));
+        expected.put("SG_SEASONAL_ALLOWANCE", linkedSet("SEASONAL_SUBSIDY_EQUIV"));
+        expected.put("SG_OVERTIME_FEE", linkedSet("OVERTIME_DAYS"));
+        expected.put("SG_UNIT_BEARING_FEE", linkedSet("UNIT_BEARING_AMOUNT"));
+        expected.put("SG_INSURANCE_TAXABLE_FEE", linkedSet("INSURANCE_TAXABLE_AMOUNT"));
+        expected.put("SG_EMPLOYER_LIABILITY_FEE", linkedSet("EMPLOYER_LIABILITY_AMOUNT"));
+        expected.put(MANAGEMENT_FEE_CODE, linkedSet("ALLOCATED_THROUGHPUT_TON", "COVER_ACTION", "OVERTIME_DAYS"));
+        return expected;
+    }
+
+    private Map<String, Integer> expectedShougangSingleFeeTemplateInputFieldCounts()
+    {
+        Map<String, Integer> expected = new LinkedHashMap<>();
+        expected.put("SG_THRPT_PIECE_FEE", 1);
+        expected.put(FEMALE_FEE_CODE, 3);
+        expected.put("SG_SPECIAL_SHIFT_LABOR", 3);
+        expected.put("SG_HOLD_CLEANING_LABOR", 1);
+        expected.put(COVER_FEE_CODE, 3);
+        expected.put("SG_MOORING_FEE", 2);
+        expected.put("SG_ODD_JOB_FEE", 1);
+        expected.put("SG_SEASONAL_ALLOWANCE", 1);
+        expected.put("SG_OVERTIME_FEE", 1);
+        expected.put("SG_UNIT_BEARING_FEE", 1);
+        expected.put("SG_INSURANCE_TAXABLE_FEE", 1);
+        expected.put("SG_EMPLOYER_LIABILITY_FEE", 1);
+        return expected;
+    }
+
     private BigDecimal expectedManagementFeeAmount()
     {
         BigDecimal throughputFee = money(bd("100000").multiply(bd("0.261")));
@@ -1122,6 +1429,34 @@ class CostRunControllerManualIT
                 .multiply(bd("0.1677")));
     }
 
+    private Map<String, String> expectedShougangFullFeeAmounts()
+    {
+        Map<String, String> expected = new LinkedHashMap<>();
+        expected.put("SG_THRPT_PIECE_FEE", "26100.00");
+        expected.put(FEMALE_FEE_CODE, "7233.33");
+        expected.put("SG_SPECIAL_SHIFT_LABOR", "8433.33");
+        expected.put("SG_HOLD_CLEANING_LABOR", "500.00");
+        expected.put(COVER_FEE_CODE, "16.00");
+        expected.put("SG_MOORING_FEE", "32.00");
+        expected.put("SG_ODD_JOB_FEE", "50.00");
+        expected.put("SG_DUTY_SHIFT_LABOR", "4917.67");
+        expected.put("SG_SEASONAL_ALLOWANCE", "1000.00");
+        expected.put("SG_OVERTIME_FEE", "720.00");
+        expected.put("SG_UNIT_BEARING_FEE", "3500.00");
+        expected.put("SG_INSURANCE_TAXABLE_FEE", "12000.00");
+        expected.put("SG_EMPLOYER_LIABILITY_FEE", "1800.00");
+        expected.put(MANAGEMENT_FEE_CODE, expectedManagementFeeAmount().toPlainString());
+        return expected;
+    }
+
+    private BigDecimal expectedShougangFullAmountTotal()
+    {
+        return expectedShougangFullFeeAmounts().values().stream()
+                .map(BigDecimal::new)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
     private BigDecimal bd(String value)
     {
         return new BigDecimal(value);
@@ -1130,6 +1465,11 @@ class CostRunControllerManualIT
     private BigDecimal money(BigDecimal value)
     {
         return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private Set<String> linkedSet(String... values)
+    {
+        return new LinkedHashSet<>(Arrays.asList(values));
     }
 
     private Long latestVersionId(Long sceneId)
@@ -1172,6 +1512,15 @@ class CostRunControllerManualIT
         assertThat(ledger.path("pricingMode").asText()).isEqualTo("GROUPED");
         assertThat(ledger.path("pricingSource").asText()).isEqualTo("FIXED_RATE");
         assertThat(ledger.path("amountValue").decimalValue()).isEqualByComparingTo(amountValue);
+    }
+
+    private void assertFeeAmountMatches(JsonNode items, Map<String, String> expectedAmounts)
+    {
+        expectedAmounts.forEach((feeCode, amountValue) -> {
+            JsonNode item = findNodeByField(items, "feeCode", feeCode);
+            assertThat(item).as("missing fee %s", feeCode).isNotNull();
+            assertThat(item.path("amountValue").decimalValue()).isEqualByComparingTo(amountValue);
+        });
     }
 
     private JsonNode findNodeByField(JsonNode items, String fieldName, String expectedValue)

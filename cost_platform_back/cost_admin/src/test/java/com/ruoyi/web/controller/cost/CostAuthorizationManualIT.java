@@ -64,6 +64,12 @@ class CostAuthorizationManualIT
                 .andExpect(status().isOk())
                 .andReturn());
         assertThat(refreshCache.path("code").asInt()).isEqualTo(403);
+
+        JsonNode rollbackFormula = readBody(mockMvc.perform(put("/cost/formula/version/rollback/{versionId}", 1L)
+                        .header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(rollbackFormula.path("code").asInt()).isEqualTo(403);
     }
 
     private String loginAndGetToken(String username, String password) throws Exception

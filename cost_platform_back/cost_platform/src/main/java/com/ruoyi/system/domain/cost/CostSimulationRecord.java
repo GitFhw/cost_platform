@@ -37,6 +37,10 @@ public class CostSimulationRecord implements Serializable
     @TableField("version_id")
     private Long versionId;
 
+    /** 账期 */
+    @TableField("bill_month")
+    private String billMonth;
+
     /** 试算编号 */
     @TableField("simulation_no")
     private String simulationNo;
