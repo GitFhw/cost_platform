@@ -47,7 +47,7 @@
 
 ## Flyway 迁移
 
-- Flyway 迁移目录：`cost_platform_back/ruoyi-admin/src/main/resources/db/migration`
+- Flyway 迁移目录：`cost_platform_back/cost_admin/src/main/resources/db/migration`
 - `B20260330_000__platform_baseline.sql`：整合若依基础库和核算平台业务表基线，面向空库初始化
 - `V20260330_001__thread1_governance.sql`：线程一基础治理增量，包含核算菜单前置、若依官网默认隐藏
 - `V20260330_002__demo_configuration_examples.sql`：面向业务熟悉场景配置的示例数据，包含示例场景、费用、变量、规则和阶梯

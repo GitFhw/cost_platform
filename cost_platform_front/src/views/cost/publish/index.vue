@@ -187,10 +187,10 @@
     <el-drawer v-model="diffOpen" title="版本差异" size="1320px" append-to-body>
       <div v-if="diffForm.toVersionId">
         <div class="publish-center__filter-row">
-          <el-select v-model="diffForm.fromVersionId" placeholder="基准版本" style="width: 220px" @change="loadDiff">
+          <el-select v-model="diffForm.fromVersionId" placeholder="请选择基准版本" style="width: 220px" @change="loadDiff">
             <el-option v-for="item in diffVersionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
           </el-select>
-          <el-select v-model="diffFeeCode" clearable placeholder="按费用筛选差异" style="width: 260px" @change="loadDiff">
+          <el-select v-model="diffFeeCode" clearable placeholder="按费用筛选差异" style="width: 260px" :disabled="!diffForm.fromVersionId" @change="loadDiff">
             <el-option v-for="item in diffData.feeDiffs || []" :key="item.feeCode" :label="`${item.feeCode} / ${item.feeName}`" :value="item.feeCode" />
           </el-select>
         </div>
@@ -198,8 +198,8 @@
         <div class="publish-center__compare-head">
           <div class="publish-center__compare-card">
             <span class="publish-center__compare-label">基准版本</span>
-            <strong>{{ diffData.fromVersion?.versionNo || '-' }}</strong>
-            <small>{{ diffData.fromVersion?.publishDesc || '默认带出上一个版本，可手动更换' }}</small>
+            <strong>{{ diffData.fromVersion?.versionNo || '待选择' }}</strong>
+            <small>{{ diffData.fromVersion?.publishDesc || '左侧基准版本由用户自行选择后开始对比' }}</small>
           </div>
           <div class="publish-center__compare-arrow">VS</div>
           <div class="publish-center__compare-card publish-center__compare-card--target">
@@ -209,6 +209,22 @@
           </div>
         </div>
 
+        <el-alert
+          v-if="!diffForm.fromVersionId"
+          title="右侧已锁定当前选中版本，请先在左侧选择一个基准版本，再查看差异结果。"
+          type="info"
+          :closable="false"
+          class="publish-center__diff-tip"
+        />
+
+        <template v-else>
+        <el-alert
+          v-if="!hasAnyDiff"
+          title="当前两个版本的配置快照一致，没有场景、费用或规则差异；费用级筛选为空是正常结果。"
+          type="success"
+          :closable="false"
+          class="publish-center__diff-tip"
+        />
         <el-descriptions :column="4" border>
           <el-descriptions-item label="场景级变化">{{ diffData.summary?.sceneChangeCount || 0 }}</el-descriptions-item>
           <el-descriptions-item label="费用变化">{{ diffData.summary?.feeChangeCount || 0 }}</el-descriptions-item>
@@ -336,6 +352,7 @@
             </div>
           </el-tab-pane>
         </el-tabs>
+        </template>
       </div>
     </el-drawer>
   </div>
@@ -396,6 +413,12 @@ const metricItems = computed(() => [
   { label: '生效版本数', value: stats.activeVersionCount, desc: '当前处于 ACTIVE 的版本数' },
   { label: '已回滚版本', value: stats.rolledBackVersionCount, desc: '历史上被回滚替换的版本数' }
 ])
+const hasAnyDiff = computed(() => {
+  const summary = diffData.value.summary || {}
+  return Number(summary.sceneChangeCount || 0) > 0
+    || Number(summary.feeChangeCount || 0) > 0
+    || Number(summary.ruleChangeCount || 0) > 0
+})
 const selectedFeeDiff = computed(() => {
   return (diffData.value.feeDiffs || []).find(item => item.feeCode === selectedFeeDiffCode.value)
 })
@@ -523,22 +546,39 @@ async function reloadDetail() {
 }
 
 async function handleDiff(row) {
-  diffData.value = {}
+  diffData.value = {
+    toVersion: row,
+    fromVersion: undefined,
+    summary: {},
+    sceneDiffs: [],
+    feeDiffs: [],
+    ruleDiffs: []
+  }
   diffFeeCode.value = undefined
   selectedFeeDiffCode.value = undefined
   selectedRuleDiffCode.value = undefined
   diffForm.toVersionId = row.versionId
   const response = await listPublish({ sceneId: row.sceneId, pageNum: 1, pageSize: 1000 })
   diffVersionOptions.value = (response.rows || []).filter(item => item.versionId !== row.versionId)
-  diffForm.fromVersionId = row.previousVersionId || diffVersionOptions.value[0]?.versionId
+  diffForm.fromVersionId = undefined
   diffOpen.value = true
-  if (diffForm.fromVersionId) {
-    await loadDiff()
-  }
 }
 
 async function loadDiff() {
-  if (!diffForm.fromVersionId || !diffForm.toVersionId) return
+  if (!diffForm.toVersionId) return
+  if (!diffForm.fromVersionId) {
+    diffData.value = {
+      toVersion: diffData.value.toVersion,
+      fromVersion: undefined,
+      summary: {},
+      sceneDiffs: [],
+      feeDiffs: [],
+      ruleDiffs: []
+    }
+    selectedFeeDiffCode.value = undefined
+    selectedRuleDiffCode.value = undefined
+    return
+  }
   const response = await getPublishDiff({ ...diffForm, feeCode: diffFeeCode.value })
   diffData.value = response.data || {}
   selectedFeeDiffCode.value = diffData.value.feeDiffs?.[0]?.feeCode

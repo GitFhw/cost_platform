@@ -76,6 +76,11 @@ public interface ICostFormulaService
     CostFormula selectFormulaVersionDetail(Long versionId);
 
     /**
+     * 按历史版本回滚公式。
+     */
+    int rollbackFormulaVersion(Long versionId, String operator);
+
+    /**
      * 测试公式。
      */
     Map<String, Object> testFormula(CostFormulaTestBo bo, String operator);

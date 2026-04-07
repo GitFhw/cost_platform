@@ -134,6 +134,17 @@ public class CostFormulaController extends BaseController
     }
 
     /**
+     * 按历史版本回滚公式。
+     */
+    @PreAuthorize("@ss.hasPermi('cost:formula:edit')")
+    @Log(title = "公式实验室", businessType = BusinessType.UPDATE)
+    @PutMapping("/version/rollback/{versionId}")
+    public AjaxResult rollbackVersion(@PathVariable Long versionId)
+    {
+        return toAjax(formulaService.rollbackFormulaVersion(versionId, getUsername()));
+    }
+
+    /**
      * 新增公式。
      */
     @PreAuthorize("@ss.hasPermi('cost:formula:add')")

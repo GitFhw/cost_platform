@@ -1,10 +1,10 @@
 import request from '@/utils/request'
 
-export function getSimulationStats(sceneId) {
+export function getSimulationStats(query) {
   return request({
     url: '/cost/run/simulation/stats',
     method: 'get',
-    params: { sceneId }
+    params: query
   })
 }
 

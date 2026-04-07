@@ -233,10 +233,13 @@ public class CostRunServiceImpl implements ICostRunService
     private TransactionTemplate transactionTemplate;
 
     @Override
-    public Map<String, Object> selectSimulationStats(Long sceneId)
+    public Map<String, Object> selectSimulationStats(CostSimulationRecord query)
     {
         List<CostSimulationRecord> records = simulationRecordMapper.selectList(Wrappers.<CostSimulationRecord>lambdaQuery()
-                .eq(sceneId != null, CostSimulationRecord::getSceneId, sceneId));
+                .eq(query.getSceneId() != null, CostSimulationRecord::getSceneId, query.getSceneId())
+                .eq(query.getVersionId() != null, CostSimulationRecord::getVersionId, query.getVersionId())
+                .eq(StringUtils.isNotEmpty(query.getBillMonth()), CostSimulationRecord::getBillMonth, query.getBillMonth())
+                .eq(StringUtils.isNotEmpty(query.getStatus()), CostSimulationRecord::getStatus, query.getStatus()));
         LinkedHashMap<String, Object> stats = new LinkedHashMap<>();
         stats.put("simulationCount", records.size());
         stats.put("successCount", records.stream().filter(item -> SIMULATION_STATUS_SUCCESS.equals(item.getStatus())).count());
@@ -251,6 +254,7 @@ public class CostRunServiceImpl implements ICostRunService
         List<CostSimulationRecord> records = simulationRecordMapper.selectList(Wrappers.<CostSimulationRecord>lambdaQuery()
                 .eq(query.getSceneId() != null, CostSimulationRecord::getSceneId, query.getSceneId())
                 .eq(query.getVersionId() != null, CostSimulationRecord::getVersionId, query.getVersionId())
+                .eq(StringUtils.isNotEmpty(query.getBillMonth()), CostSimulationRecord::getBillMonth, query.getBillMonth())
                 .eq(StringUtils.isNotEmpty(query.getStatus()), CostSimulationRecord::getStatus, query.getStatus())
                 .orderByDesc(CostSimulationRecord::getSimulationId));
         enrichSimulationRecords(records);
@@ -262,8 +266,13 @@ public class CostRunServiceImpl implements ICostRunService
     public Map<String, Object> executeSimulation(CostSimulationExecuteBo bo)
     {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false, true);
+        String billMonth = StringUtils.isEmpty(bo.getBillMonth()) ? "" : bo.getBillMonth();
+        if (StringUtils.isNotEmpty(billMonth))
+        {
+            validateBillMonth(billMonth);
+        }
         Map<String, Object> input = parseObjectJson(bo.getInputJson(), "试算输入必须是 JSON 对象");
-        CostSimulationRecord record = executeAndPersistSimulation(snapshot, input, "");
+        CostSimulationRecord record = executeAndPersistSimulation(snapshot, input, "", billMonth);
         return selectSimulationDetail(record.getSimulationId());
     }
 
@@ -271,6 +280,11 @@ public class CostRunServiceImpl implements ICostRunService
     public Map<String, Object> executeSimulationBatch(CostSimulationExecuteBo bo)
     {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false, true);
+        String billMonth = StringUtils.isEmpty(bo.getBillMonth()) ? "" : bo.getBillMonth();
+        if (StringUtils.isNotEmpty(billMonth))
+        {
+            validateBillMonth(billMonth);
+        }
         List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "批量试算输入必须是 JSON 数组");
         if (inputs.isEmpty())
         {
@@ -282,7 +296,7 @@ public class CostRunServiceImpl implements ICostRunService
         {
             Map<String, Object> input = inputs.get(i);
             String bizNo = resolveBizNo(input, i + 1);
-            records.add(executeAndPersistSimulation(snapshot, input, bizNo));
+            records.add(executeAndPersistSimulation(snapshot, input, bizNo, billMonth));
         }
 
         enrichSimulationRecords(records);
@@ -293,6 +307,7 @@ public class CostRunServiceImpl implements ICostRunService
         result.put("versionId", snapshot.versionId);
         result.put("versionNo", snapshot.versionNo);
         result.put("snapshotSource", snapshot.snapshotSource);
+        result.put("billMonth", billMonth);
         result.put("totalCount", records.size());
         result.put("successCount", records.stream().filter(item -> SIMULATION_STATUS_SUCCESS.equals(item.getStatus())).count());
         result.put("failedCount", records.stream().filter(item -> SIMULATION_STATUS_FAILED.equals(item.getStatus())).count());
@@ -300,7 +315,8 @@ public class CostRunServiceImpl implements ICostRunService
         return result;
     }
 
-    private CostSimulationRecord executeAndPersistSimulation(RuntimeSnapshot snapshot, Map<String, Object> input, String bizNo)
+    private CostSimulationRecord executeAndPersistSimulation(RuntimeSnapshot snapshot, Map<String, Object> input,
+            String bizNo, String billMonth)
     {
         Date now = DateUtils.getNowDate();
         String operator = resolveOperator();
@@ -308,13 +324,14 @@ public class CostRunServiceImpl implements ICostRunService
         record.setSceneId(snapshot.sceneId);
         record.setVersionId(snapshot.versionId);
         record.setVersionNo(snapshot.versionNo);
+        record.setBillMonth(billMonth);
         record.setSimulationNo(buildRunNo("SIM"));
         record.setInputJson(writeJson(input));
         record.setCreateBy(operator);
         record.setCreateTime(now);
         try
         {
-            ExecutionResult executionResult = executeSingle(snapshot, "SIMULATION", "", input);
+            ExecutionResult executionResult = executeSingle(snapshot, "SIMULATION", billMonth, input);
             record.setVariableJson(writeJson(executionResult.variableView));
             record.setExplainJson(writeJson(executionResult.explainView));
             record.setResultJson(writeJson(executionResult.resultView));
@@ -344,6 +361,7 @@ public class CostRunServiceImpl implements ICostRunService
         LinkedHashMap<String, Object> item = new LinkedHashMap<>();
         item.put("simulationId", record.getSimulationId());
         item.put("simulationNo", record.getSimulationNo());
+        item.put("billMonth", firstNonBlank(record.getBillMonth(), ""));
         item.put("status", record.getStatus());
         item.put("bizNo", resolveString(parseObjectJson(record.getInputJson(), "试算输入必须是 JSON 对象"), "bizNo", "biz_no"));
         item.put("errorMessage", record.getErrorMessage());

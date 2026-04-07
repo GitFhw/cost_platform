@@ -22,6 +22,7 @@ import com.ruoyi.system.service.cost.ICostFormulaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.LinkedHashMap;
@@ -149,12 +150,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     @Override
     public int updateFormula(CostFormula formula)
     {
-        validateDisableBeforeUpdate(formula);
-        validateFormula(formula);
-        fillDefaultFields(formula);
-        int rows = formulaMapper.updateById(formula);
-        saveFormulaVersion(formulaMapper.selectById(formula.getFormulaId()), "UPDATE");
-        return rows;
+        return updateFormulaInternal(formula, "UPDATE");
     }
 
     @Override
@@ -202,6 +198,29 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     }
 
     @Override
+    public int rollbackFormulaVersion(Long versionId, String operator)
+    {
+        CostFormulaVersion version = formulaVersionMapper.selectById(versionId);
+        if (version == null)
+        {
+            throw new ServiceException("当前版本不存在，请刷新后重试");
+        }
+        CostFormula current = formulaMapper.selectById(version.getFormulaId());
+        if (current == null)
+        {
+            throw new ServiceException("当前公式不存在，无法执行版本回滚");
+        }
+        CostFormula rollbackFormula = parseFormulaSnapshot(version.getSnapshotJson());
+        rollbackFormula.setFormulaId(current.getFormulaId());
+        rollbackFormula.setSceneId(current.getSceneId());
+        rollbackFormula.setCreateBy(current.getCreateBy());
+        rollbackFormula.setCreateTime(current.getCreateTime());
+        rollbackFormula.setUpdateBy(operator);
+        rollbackFormula.setUpdateTime(DateUtils.getNowDate());
+        return updateFormulaInternal(rollbackFormula, "ROLLBACK");
+    }
+
+    @Override
     public Map<String, Object> testFormula(CostFormulaTestBo bo, String operator)
     {
         if (bo == null)
@@ -228,6 +247,24 @@ public class CostFormulaServiceImpl implements ICostFormulaService
             formulaMapper.updateById(formula);
         }
         return response;
+    }
+
+    private Map<String, Object> buildWorkbenchConfigPayload(CostFormula formula, Map<String, Object> config)
+    {
+        LinkedHashMap<String, Object> normalized = new LinkedHashMap<>();
+        normalized.put("mode", formula.getWorkbenchMode());
+        normalized.put("pattern", formula.getWorkbenchPattern());
+        normalized.put("templateCode", formula.getTemplateCode());
+        normalized.put("conditionLogic", StringUtils.defaultIfEmpty(stringValue(valueOf(config, "conditionLogic")), "AND"));
+        normalized.put("conditions", listValue(valueOf(config, "conditions")));
+        normalized.put("trueResultValue", stringValue(valueOf(config, "trueResultValue")));
+        normalized.put("falseResultValue", stringValue(valueOf(config, "falseResultValue")));
+        normalized.put("rangeVariableCode", stringValue(valueOf(config, "rangeVariableCode")));
+        normalized.put("ranges", listValue(valueOf(config, "ranges")));
+        normalized.put("defaultResultValue", stringValue(valueOf(config, "defaultResultValue")));
+        normalized.put("businessFormula", StringUtils.defaultIfEmpty(stringValue(valueOf(config, "businessFormula")), formula.getBusinessFormula()));
+        normalized.put("formulaExpr", StringUtils.defaultIfEmpty(stringValue(valueOf(config, "formulaExpr")), formula.getFormulaExpr()));
+        return normalized;
     }
 
     /**
@@ -317,26 +354,13 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         String configJson = StringUtils.trimToEmpty(formula.getWorkbenchConfigJson());
         if (StringUtils.isEmpty(configJson))
         {
-            formula.setWorkbenchConfigJson("");
+            formula.setWorkbenchConfigJson(writeJson(buildWorkbenchConfigPayload(formula, null)));
             return;
         }
         try
         {
             Map<String, Object> config = objectMapper.readValue(configJson, new TypeReference<Map<String, Object>>() {});
-            LinkedHashMap<String, Object> normalized = new LinkedHashMap<>();
-            normalized.put("mode", mode);
-            normalized.put("pattern", pattern);
-            normalized.put("templateCode", formula.getTemplateCode());
-            normalized.put("conditionLogic", StringUtils.defaultIfEmpty(stringValue(config.get("conditionLogic")), "AND"));
-            normalized.put("conditions", config.get("conditions"));
-            normalized.put("trueResultValue", stringValue(config.get("trueResultValue")));
-            normalized.put("falseResultValue", stringValue(config.get("falseResultValue")));
-            normalized.put("rangeVariableCode", stringValue(config.get("rangeVariableCode")));
-            normalized.put("ranges", config.get("ranges"));
-            normalized.put("defaultResultValue", stringValue(config.get("defaultResultValue")));
-            normalized.put("businessFormula", stringValue(config.get("businessFormula")));
-            normalized.put("formulaExpr", stringValue(config.get("formulaExpr")));
-            formula.setWorkbenchConfigJson(writeJson(normalized));
+            formula.setWorkbenchConfigJson(writeJson(buildWorkbenchConfigPayload(formula, config)));
         }
         catch (Exception ex)
         {
@@ -527,6 +551,66 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     private String stringValue(Object value)
     {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private Object valueOf(Map<String, Object> config, String key)
+    {
+        return config == null ? null : config.get(key);
+    }
+
+    private List<?> listValue(Object value)
+    {
+        return value instanceof List<?> list ? list : new ArrayList<>();
+    }
+
+    private int updateFormulaInternal(CostFormula formula, String changeType)
+    {
+        validateDisableBeforeUpdate(formula);
+        validateFormula(formula);
+        fillDefaultFields(formula);
+        ensureBaselineVersionExists(formula.getFormulaId());
+        int rows = formulaMapper.updateById(formula);
+        saveFormulaVersion(formulaMapper.selectById(formula.getFormulaId()), changeType);
+        return rows;
+    }
+
+    private void ensureBaselineVersionExists(Long formulaId)
+    {
+        if (formulaId == null)
+        {
+            return;
+        }
+        Long versionCount = formulaVersionMapper.selectCount(Wrappers.<CostFormulaVersion>lambdaQuery()
+                .eq(CostFormulaVersion::getFormulaId, formulaId));
+        if (versionCount != null && versionCount > 0)
+        {
+            return;
+        }
+        CostFormula current = formulaMapper.selectById(formulaId);
+        if (current == null)
+        {
+            return;
+        }
+        CostFormulaVersion version = new CostFormulaVersion();
+        version.setFormulaId(current.getFormulaId());
+        version.setSceneId(current.getSceneId());
+        version.setFormulaCode(current.getFormulaCode());
+        version.setFormulaName(current.getFormulaName());
+        version.setAssetType(current.getAssetType());
+        version.setVersionNo(1);
+        version.setChangeType("CREATE");
+        version.setBusinessFormula(current.getBusinessFormula());
+        version.setFormulaExpr(current.getFormulaExpr());
+        version.setWorkbenchMode(current.getWorkbenchMode());
+        version.setWorkbenchPattern(current.getWorkbenchPattern());
+        version.setTemplateCode(current.getTemplateCode());
+        version.setWorkbenchConfigJson(current.getWorkbenchConfigJson());
+        version.setSnapshotJson(writeJson(buildFormulaSnapshot(current)));
+        version.setCreateBy(StringUtils.defaultIfEmpty(current.getUpdateBy(), current.getCreateBy()));
+        version.setCreateTime(current.getUpdateTime() != null
+                ? current.getUpdateTime()
+                : (current.getCreateTime() != null ? current.getCreateTime() : DateUtils.getNowDate()));
+        formulaVersionMapper.insert(version);
     }
 
     /**
