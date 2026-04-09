@@ -61,14 +61,25 @@
                @keyup.enter="handleQuery"
             />
          </el-form-item>
-         <el-form-item label="字典类型" prop="dictType">
+      <el-form-item label="字典类型" prop="dictType">
             <el-input
+               v-if="!isCostScope"
                v-model="queryParams.dictType"
                placeholder="请输入字典类型"
                clearable
                style="width: 240px"
                @keyup.enter="handleQuery"
             />
+            <el-input
+               v-else
+               v-model="costQuerySuffix"
+               placeholder="请输入 cost_ 后缀"
+               clearable
+               style="width: 240px"
+               @keyup.enter="handleQuery"
+            >
+               <template #prepend>cost_</template>
+            </el-input>
          </el-form-item>
          <el-form-item label="状态" prop="status">
             <el-select
@@ -196,7 +207,18 @@
                <el-input v-model="form.dictName" placeholder="请输入字典名称" />
             </el-form-item>
             <el-form-item prop="dictType">
-               <el-input v-model="form.dictType" placeholder="请输入字典类型" />
+               <el-input
+                  v-if="!isCostScope"
+                  v-model="form.dictType"
+                  placeholder="请输入字典类型"
+               />
+               <el-input
+                  v-else
+                  v-model="costFormSuffix"
+                  placeholder="请输入 cost_ 后缀"
+               >
+                  <template #prepend>cost_</template>
+               </el-input>
                <template #label>
                  <span>
                    <el-tooltip content='数据存储中的Key值，如：sys_user_sex' placement="top">
@@ -254,6 +276,7 @@ const title = ref("")
 const dateRange = ref([])
 const drawerVisible = ref(false)
 const drawerRow = ref({})
+const COST_DICT_PREFIX = "cost_"
 const isCostScope = computed(() => route.query.scope === "cost")
 const planningDictTypes = [
   { dictType: "cost_cargo_type", label: "货种" },
@@ -278,11 +301,27 @@ const data = reactive({
   },
   rules: {
     dictName: [{ required: true, message: "字典名称不能为空", trigger: "blur" }],
-    dictType: [{ required: true, message: "字典类型不能为空", trigger: "blur" }]
+    dictType: [{ validator: validateDictType, trigger: "blur" }]
   },
 })
 
 const { queryParams, form, rules } = toRefs(data)
+const costQuerySuffix = computed({
+  get() {
+    return stripCostDictPrefix(queryParams.value.dictType)
+  },
+  set(value) {
+    queryParams.value.dictType = normalizeDictTypeValue(value, { forceCostPrefix: true })
+  }
+})
+const costFormSuffix = computed({
+  get() {
+    return stripCostDictPrefix(form.value.dictType)
+  },
+  set(value) {
+    form.value.dictType = normalizeDictTypeValue(value, { forceCostPrefix: true })
+  }
+})
 const enabledCostCatalogCount = computed(() => costCatalog.value.filter(item => item.status === "0").length)
 const planningReadyCount = computed(() =>
   planningDictTypes.filter(item => costCatalog.value.some(dict => dict.dictType === item.dictType)).length
@@ -321,10 +360,53 @@ function resolveScopedValue(value) {
   return typeof value === "string" && value !== "" ? value : undefined
 }
 
+function normalizeDictTypeValue(value, options = {}) {
+  const { forceCostPrefix = false } = options
+  const compact = String(value ?? "").replace(/[\s\u3000]+/g, "")
+  if (!compact) {
+    return forceCostPrefix ? COST_DICT_PREFIX : ""
+  }
+  if (!forceCostPrefix) {
+    return compact
+  }
+  if (compact.startsWith(COST_DICT_PREFIX)) {
+    return compact
+  }
+  return `${COST_DICT_PREFIX}${compact}`
+}
+
+function stripCostDictPrefix(value) {
+  const normalized = normalizeDictTypeValue(value)
+  return normalized.startsWith(COST_DICT_PREFIX)
+    ? normalized.slice(COST_DICT_PREFIX.length)
+    : normalized
+}
+
+function validateDictType(rule, value, callback) {
+  const normalized = normalizeDictTypeValue(value, { forceCostPrefix: isCostScope.value })
+  if (!normalized) {
+    callback(new Error("字典类型不能为空"))
+    return
+  }
+  if (isCostScope.value && normalized === COST_DICT_PREFIX) {
+    callback(new Error("请补充 cost_ 后缀，例如 business_domain"))
+    return
+  }
+  callback()
+}
+
+function normalizeQueryDictType() {
+  queryParams.value.dictType = normalizeDictTypeValue(queryParams.value.dictType, { forceCostPrefix: isCostScope.value })
+}
+
+function normalizeFormDictType() {
+  form.value.dictType = normalizeDictTypeValue(form.value.dictType, { forceCostPrefix: isCostScope.value })
+}
+
 function getScopedQueryDefaults() {
   return {
     dictName: resolveScopedValue(route.query.dictName),
-    dictType: resolveScopedValue(route.query.dictType),
+    dictType: normalizeDictTypeValue(resolveScopedValue(route.query.dictType), { forceCostPrefix: isCostScope.value }),
     status: resolveScopedValue(route.query.status)
   }
 }
@@ -376,7 +458,9 @@ function reset() {
   form.value = {
     dictId: undefined,
     dictName: undefined,
-    dictType: isCostScope.value ? (resolveScopedValue(route.query.dictType) || "cost_") : undefined,
+    dictType: isCostScope.value
+      ? normalizeDictTypeValue(resolveScopedValue(route.query.dictType), { forceCostPrefix: true })
+      : undefined,
     status: "0",
     remark: undefined
   }
@@ -385,6 +469,7 @@ function reset() {
 
 /** 搜索按钮操作 */
 function handleQuery() {
+  normalizeQueryDictType()
   queryParams.value.pageNum = 1
   getList()
 }
@@ -447,7 +532,10 @@ function handleUpdate(row) {
   reset()
   const dictId = row.dictId || ids.value
   getType(dictId).then(response => {
-    form.value = response.data
+    form.value = {
+      ...response.data,
+      dictType: normalizeDictTypeValue(response.data?.dictType, { forceCostPrefix: isCostScope.value })
+    }
     open.value = true
     title.value = "修改字典类型"
   })
@@ -455,6 +543,7 @@ function handleUpdate(row) {
 
 /** 提交按钮 */
 function submitForm() {
+  normalizeFormDictType()
   proxy.$refs["dictRef"].validate(valid => {
     if (valid) {
       if (form.value.dictId != undefined) {

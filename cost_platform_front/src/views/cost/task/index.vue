@@ -104,12 +104,58 @@
           </div>
         </div>
       </div>
+
+      <div class="run-page__panel">
+        <div class="run-page__section-head">
+          <div>
+            <h3>认领节点概览</h3>
+            <p>聚焦分片 owner 的认领覆盖、僵尸风险和节点负载，便于发现跨节点调度异常。</p>
+          </div>
+        </div>
+        <div class="run-page__summary run-page__summary--compact">
+          <div v-for="item in ownerSummaryItems" :key="item.label" class="run-page__summary-card">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+          </div>
+        </div>
+        <el-table :data="overview.partitionOwnerDistribution" size="small" border>
+          <el-table-column label="认领节点" prop="executeNode" min-width="160" />
+          <el-table-column label="认领分片" prop="partitionCount" width="110" align="center" />
+          <el-table-column label="运行中" prop="runningCount" width="100" align="center" />
+          <el-table-column label="异常分片" prop="problematicCount" width="100" align="center" />
+          <el-table-column label="最近认领时间" prop="latestClaimTime" min-width="180" align="center" />
+        </el-table>
+        <el-empty v-if="!overview.partitionOwnerDistribution.length" description="暂无节点认领数据" :image-size="60" />
+      </div>
+
+      <div class="run-page__panel">
+        <div class="run-page__section-head">
+          <div>
+            <h3>Owner 风险任务</h3>
+            <p>按任务聚合 owner 异常，优先定位存在僵尸 owner 或无 owner 运行中的任务。</p>
+          </div>
+        </div>
+        <el-table :data="overview.topOwnerRiskTasks" size="small" border>
+          <el-table-column label="任务ID" prop="taskId" width="90" align="center" />
+          <el-table-column label="场景" prop="sceneName" min-width="140" />
+          <el-table-column label="账期" prop="billMonth" width="100" align="center" />
+          <el-table-column label="僵尸风险分片" prop="staleRunningOwnerCount" width="120" align="center" />
+          <el-table-column label="无 owner 运行中" prop="runningWithoutOwnerCount" width="130" align="center" />
+          <el-table-column label="活跃节点数" prop="activeOwnerCount" width="110" align="center" />
+          <el-table-column label="操作" width="130" align="center">
+            <template #default="scope">
+              <el-button link type="primary" icon="Histogram" @click="openTaskCenterById(scope.row.taskId, scope.row.billMonth, 'partition')">查看分片</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!overview.topOwnerRiskTasks.length" description="暂无 owner 风险任务" :image-size="60" />
+      </div>
     </section>
 
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable style="width: 220px" @change="handleQuerySceneChange">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="版本号" prop="versionId">
@@ -149,7 +195,7 @@
         <el-form :model="form" label-width="92px">
           <el-form-item label="运行场景" required>
             <el-select v-model="form.sceneId" filterable style="width: 100%" @change="handleFormSceneChange">
-              <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+              <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
             </el-select>
           </el-form-item>
           <el-form-item label="执行版本">
@@ -174,6 +220,13 @@
               <el-radio-button label="INPUT_BATCH">导入批次</el-radio-button>
             </el-radio-group>
           </el-form-item>
+          <el-alert
+            class="run-page__strategy-alert"
+            :title="submissionStrategy.title"
+            :description="submissionStrategy.description"
+            :type="submissionStrategy.type"
+            :closable="false"
+          />
           <el-form-item label="备注">
             <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" show-word-limit />
           </el-form-item>
@@ -182,6 +235,14 @@
             <el-form-item label="输入 JSON" required>
               <el-input v-model="form.inputJson" type="textarea" :rows="14" maxlength="20000" show-word-limit />
             </el-form-item>
+            <el-alert
+              v-if="inlineInputInsight"
+              class="run-page__template-alert"
+              :title="inlineInputInsight.title"
+              :description="inlineInputInsight.description"
+              :type="inlineInputInsight.type"
+              :closable="false"
+            />
           </template>
 
           <template v-else>
@@ -204,6 +265,37 @@
               <span>版本：{{ selectedBatch.versionNo || '-' }}</span>
               <span>账期：{{ selectedBatch.billMonth || '-' }}</span>
               <span>有效/错误：{{ selectedBatch.validCount || 0 }}/{{ selectedBatch.errorCount || 0 }}</span>
+            </div>
+            <el-alert
+              v-if="batchPreview.loadingGuide?.title"
+              class="run-page__template-alert"
+              :title="batchPreview.loadingGuide.title"
+              :description="batchPreview.loadingGuide.description"
+              :type="batchPreview.loadingGuide.type || 'info'"
+              :closable="false"
+            />
+            <div v-if="batchPreview.items?.length" class="run-page__batch-preview">
+              <div class="run-page__section-head">
+                <div>
+                  <h3>批次样例预览</h3>
+                  <p>{{ buildSampleRangeText(batchPreviewQuery.pageNum, batchPreviewQuery.pageSize, batchPreview.itemTotal || 0, batchPreview.items?.length || 0) }}</p>
+                </div>
+              </div>
+              <el-table :data="batchPreview.items || []" size="small" border>
+                <el-table-column label="序号" prop="itemNo" width="80" align="center" />
+                <el-table-column label="业务单号" prop="bizNo" min-width="180" />
+                <el-table-column label="状态" prop="itemStatus" width="120" align="center" />
+                <el-table-column label="输入摘要" min-width="340">
+                  <template #default="scope">{{ summarizeJson(scope.row.inputJson) }}</template>
+                </el-table-column>
+              </el-table>
+              <pagination
+                v-show="(batchPreview.itemTotal || 0) > 0"
+                :total="batchPreview.itemTotal || 0"
+                v-model:page="batchPreviewQuery.pageNum"
+                v-model:limit="batchPreviewQuery.pageSize"
+                @pagination="handleBatchPreviewPageChange"
+              />
             </div>
           </template>
         </el-form>
@@ -294,6 +386,9 @@
         <div class="run-page__summary-card"><span>成功数量</span><strong>{{ detailData.summary?.successCount || 0 }}</strong></div>
         <div class="run-page__summary-card"><span>失败数量</span><strong>{{ detailData.summary?.failCount || 0 }}</strong></div>
         <div class="run-page__summary-card"><span>分片数量</span><strong>{{ detailData.summary?.partitionCount || 0 }}</strong></div>
+        <div class="run-page__summary-card"><span>已认领分片</span><strong>{{ detailData.summary?.claimedPartitionCount || 0 }}</strong></div>
+        <div class="run-page__summary-card"><span>僵尸风险分片</span><strong>{{ detailData.summary?.staleRunningOwnerCount || 0 }}</strong></div>
+        <div class="run-page__summary-card"><span>无 owner 运行中</span><strong>{{ detailData.summary?.runningWithoutOwnerCount || 0 }}</strong></div>
       </div>
 
       <div class="run-page__action-row">
@@ -327,6 +422,17 @@
           <span>版本：{{ detailData.inputBatch.batch.versionNo || '-' }}</span>
           <span>总量：{{ detailData.inputBatch.batch.totalCount || 0 }}</span>
         </div>
+        <el-alert
+          v-if="detailData.inputBatch.loadingGuide?.title"
+          class="run-page__template-alert"
+          :title="detailData.inputBatch.loadingGuide.title"
+          :description="detailData.inputBatch.loadingGuide.description"
+          :type="detailData.inputBatch.loadingGuide.type || 'info'"
+          :closable="false"
+        />
+        <p class="run-page__batch-range-tip">
+          {{ buildSampleRangeText(detailBatchQuery.pageNum, detailBatchQuery.pageSize, detailData.inputBatch.itemTotal || 0, detailData.inputBatch.items?.length || 0) }}
+        </p>
         <el-table :data="detailData.inputBatch.items || []" size="small" border>
           <el-table-column label="序号" prop="itemNo" width="80" align="center" />
           <el-table-column label="业务单号" prop="bizNo" min-width="180" />
@@ -335,6 +441,13 @@
             <template #default="scope">{{ summarizeJson(scope.row.inputJson) }}</template>
           </el-table-column>
         </el-table>
+        <pagination
+          v-show="(detailData.inputBatch.itemTotal || 0) > 0"
+          :total="detailData.inputBatch.itemTotal || 0"
+          v-model:page="detailBatchQuery.pageNum"
+          v-model:limit="detailBatchQuery.pageSize"
+          @pagination="handleDetailBatchPageChange"
+        />
       </div>
 
       <div class="run-page__detail-section">
@@ -349,9 +462,20 @@
           <el-table-column label="范围" min-width="150">
             <template #default="scope">{{ scope.row.startItemNo }} - {{ scope.row.endItemNo }}</template>
           </el-table-column>
+          <el-table-column label="认领节点" width="120" align="center">
+            <template #default="scope">{{ scope.row.executeNode || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="认领时间" min-width="170" align="center">
+            <template #default="scope">{{ scope.row.claimTime || scope.row.startedTime || '-' }}</template>
+          </el-table-column>
           <el-table-column label="状态" width="120" align="center">
             <template #default="scope">
               <el-tag :type="resolvePartitionTag(scope.row.partitionStatus)">{{ resolveTaskStatus(scope.row.partitionStatus) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="落库模式" width="120" align="center">
+            <template #default="scope">
+              <el-tag :type="resolvePartitionPersistModeTag(scope.row.persistMode)">{{ resolvePartitionPersistMode(scope.row.persistMode) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="总量" prop="totalCount" width="90" align="center" />
@@ -359,6 +483,7 @@
             <template #default="scope">{{ scope.row.successCount || 0 }}/{{ scope.row.failCount || 0 }}</template>
           </el-table-column>
           <el-table-column label="耗时(ms)" prop="durationMs" width="110" align="center" />
+          <el-table-column label="恢复提示" prop="recoveryHint" min-width="260" />
           <el-table-column label="错误摘要" prop="lastError" min-width="220" />
           <el-table-column label="操作" width="130" fixed="right" align="center">
             <template #default="scope">
@@ -374,9 +499,12 @@
         <div class="run-page__section-head">
           <div>
             <h3>任务明细</h3>
-            <p>保留明细级失败重试，兼容当前台账查看口径。</p>
+            <p>明细改为分页加载，兼容大批量任务下的失败定位与明细级重试。</p>
           </div>
         </div>
+        <p class="run-page__batch-range-tip">
+          {{ buildSampleRangeText(detailQuery.pageNum, detailQuery.pageSize, detailData.detailPage?.total || 0, detailData.details?.length || 0) }}
+        </p>
         <el-table :data="detailData.details || []" size="small">
           <el-table-column label="分片号" prop="partitionNo" width="90" align="center" />
           <el-table-column label="业务单号" prop="bizNo" min-width="180" />
@@ -396,6 +524,13 @@
             </template>
           </el-table-column>
         </el-table>
+        <pagination
+          v-show="(detailData.detailPage?.total || 0) > 0"
+          :total="detailData.detailPage?.total || 0"
+          v-model:page="detailQuery.pageNum"
+          v-model:limit="detailQuery.pageSize"
+          @pagination="handleDetailPageChange"
+        />
       </div>
     </el-drawer>
 
@@ -403,7 +538,7 @@
       <el-form :model="batchForm" label-width="92px">
         <el-form-item label="运行场景" required>
           <el-select v-model="batchForm.sceneId" filterable style="width: 100%">
-            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
           </el-select>
         </el-form-item>
         <el-form-item label="执行版本">
@@ -423,14 +558,21 @@
       </el-form>
 
       <el-alert v-if="batchPreview.batch?.batchNo" class="run-page__template-alert" type="success" :closable="false" :title="`批次 ${batchPreview.batch.batchNo} 创建成功，共 ${batchPreview.batch.totalCount || 0} 条。`" />
-      <el-table v-if="batchPreview.items?.length" :data="batchPreview.items.slice(0, 10)" size="small" border>
+      <el-table v-if="batchPreview.items?.length" :data="batchPreview.items || []" size="small" border>
         <el-table-column label="序号" prop="itemNo" width="80" align="center" />
         <el-table-column label="业务单号" prop="bizNo" min-width="180" />
         <el-table-column label="状态" prop="itemStatus" width="120" align="center" />
         <el-table-column label="输入摘要" min-width="340">
           <template #default="scope">{{ summarizeJson(scope.row.inputJson) }}</template>
-        </el-table-column>
+          </el-table-column>
       </el-table>
+      <pagination
+        v-show="(batchPreview.itemTotal || 0) > 0"
+        :total="batchPreview.itemTotal || 0"
+        v-model:page="batchPreviewQuery.pageNum"
+        v-model:limit="batchPreviewQuery.pageSize"
+        @pagination="handleBatchPreviewPageChange"
+      />
 
       <template #footer>
         <div class="dialog-footer">
@@ -445,7 +587,7 @@
       <el-form :model="batchQuery" :inline="true" label-width="80px">
         <el-form-item label="场景">
           <el-select v-model="batchQuery.sceneId" clearable filterable style="width: 220px">
-            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
           </el-select>
         </el-form-item>
         <el-form-item label="账期">
@@ -496,15 +638,29 @@
         <div class="run-page__summary-card"><span>输入总量</span><strong>{{ partitionMonitorData.summary?.sourceCount || 0 }}</strong></div>
         <div class="run-page__summary-card"><span>成功数量</span><strong>{{ partitionMonitorData.summary?.successCount || 0 }}</strong></div>
         <div class="run-page__summary-card"><span>失败数量</span><strong>{{ partitionMonitorData.summary?.failCount || 0 }}</strong></div>
+        <div class="run-page__summary-card"><span>已认领分片</span><strong>{{ partitionMonitorData.summary?.claimedPartitionCount || 0 }}</strong></div>
+        <div class="run-page__summary-card"><span>僵尸风险分片</span><strong>{{ partitionMonitorData.summary?.staleRunningOwnerCount || 0 }}</strong></div>
+        <div class="run-page__summary-card"><span>无 owner 运行中</span><strong>{{ partitionMonitorData.summary?.runningWithoutOwnerCount || 0 }}</strong></div>
       </div>
       <el-table :data="partitionMonitorData.partitions || []" size="small" border>
         <el-table-column label="分片号" prop="partitionNo" width="90" align="center" />
         <el-table-column label="范围" min-width="150">
           <template #default="scope">{{ scope.row.startItemNo }} - {{ scope.row.endItemNo }}</template>
         </el-table-column>
+        <el-table-column label="认领节点" width="120" align="center">
+          <template #default="scope">{{ scope.row.executeNode || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="认领时间" min-width="170" align="center">
+          <template #default="scope">{{ scope.row.claimTime || scope.row.startedTime || '-' }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="120" align="center">
           <template #default="scope">
             <el-tag :type="resolvePartitionTag(scope.row.partitionStatus)">{{ resolveTaskStatus(scope.row.partitionStatus) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="落库模式" width="120" align="center">
+          <template #default="scope">
+            <el-tag :type="resolvePartitionPersistModeTag(scope.row.persistMode)">{{ resolvePartitionPersistMode(scope.row.persistMode) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="总量" prop="totalCount" width="90" align="center" />
@@ -512,6 +668,7 @@
           <template #default="scope">{{ scope.row.successCount || 0 }}/{{ scope.row.failCount || 0 }}</template>
         </el-table-column>
         <el-table-column label="耗时(ms)" prop="durationMs" width="110" align="center" />
+        <el-table-column label="恢复提示" prop="recoveryHint" min-width="260" />
         <el-table-column label="错误摘要" prop="lastError" min-width="220" />
         <el-table-column label="操作" width="130" fixed="right" align="center">
           <template #default="scope">
@@ -572,13 +729,28 @@ const batchTotal = ref(0)
 const partitionMonitorOpen = ref(false)
 const partitionMonitorData = ref({})
 const selectedBatch = reactive({})
+const batchPreviewQuery = reactive({
+  pageNum: 1,
+  pageSize: 10
+})
+const detailBatchQuery = reactive({
+  pageNum: 1,
+  pageSize: 10
+})
+const detailQuery = reactive({
+  pageNum: 1,
+  pageSize: 20
+})
 const stats = reactive({ taskCount: 0, runningCount: 0, successCount: 0, failedCount: 0 })
 const overview = reactive({
   recentTaskTrend: [],
   recentPartitionTrend: [],
   topRiskTasks: [],
   taskStatusDistribution: [],
-  inputSourceDistribution: []
+  inputSourceDistribution: [],
+  ownerSummary: {},
+  partitionOwnerDistribution: [],
+  topOwnerRiskTasks: []
 })
 const routeTaskContext = reactive({
   taskId: route.query.taskId ? Number(route.query.taskId) : undefined,
@@ -633,6 +805,60 @@ const metricItems = computed(() => [
   { label: '失败/部分成功', value: stats.failedCount, desc: '需要关注或重试的任务数' }
 ])
 
+const ownerSummaryItems = computed(() => [
+  { label: '已认领分片', value: overview.ownerSummary?.claimedPartitionCount || 0 },
+  { label: '活跃节点数', value: overview.ownerSummary?.activeOwnerCount || 0 },
+  { label: '僵尸风险分片', value: overview.ownerSummary?.staleRunningOwnerCount || 0 },
+  { label: '无 owner 运行中', value: overview.ownerSummary?.runningWithoutOwnerCount || 0 }
+])
+
+const submissionStrategy = computed(() => {
+  if (form.inputSourceType === 'INPUT_BATCH') {
+    return {
+      type: 'success',
+      title: '当前使用导入批次模式',
+      description: '导入批次更符合企业级正式核算口径，适合生产批量装载、分片执行、失败恢复和台账追溯。'
+    }
+  }
+  return {
+    type: 'warning',
+    title: '当前使用 JSON 直传模式',
+    description: 'JSON 直传更适合联调、补录和小批量验证；生产批量任务建议先创建导入批次，再由任务中心提交正式核算。'
+  }
+})
+
+const inlineInputInsight = computed(() => {
+  if (form.inputSourceType !== 'INLINE_JSON') return null
+  const statsResult = inspectInlineInputJson(form.inputJson)
+  if (statsResult.invalid) {
+    return {
+      type: 'error',
+      title: '当前输入不是有效的计费对象 JSON',
+      description: '正式核算仅支持 JSON 对象或对象数组。若输入来自业务系统大宽表，建议先走数据接入中心或导入批次。'
+    }
+  }
+  if (!statsResult.count) {
+    return {
+      type: 'info',
+      title: '当前模板适合单笔联调',
+      description: '填充少量样例后可直接验证；若后续要跑生产批次，建议转成导入批次以保留装载、分片与恢复能力。'
+    }
+  }
+  const partitionCount = Math.max(1, Math.ceil(statsResult.count / 500))
+  if (statsResult.count > 500) {
+    return {
+      type: 'warning',
+      title: `当前输入共 ${statsResult.count} 条，预计拆成 ${partitionCount} 个分片执行`,
+      description: '这类规模已接近批量任务口径。企业级使用建议先创建导入批次，再通过任务中心提交，便于分页预览、恢复和留痕。'
+    }
+  }
+  return {
+    type: 'info',
+    title: `当前输入共 ${statsResult.count} 条，预计拆成 ${partitionCount} 个分片执行`,
+    description: '当前规模可继续在线提交；如果后续需要重复执行或与上游系统对接，仍建议沉淀为导入批次。'
+  }
+})
+
 async function loadBaseOptions() {
   const [dictMap, sceneResp] = await Promise.all([
     getRemoteDictOptionMap(['cost_calc_task_type', 'cost_calc_task_status']),
@@ -684,7 +910,10 @@ async function getList() {
       recentPartitionTrend: overviewResp?.data?.recentPartitionTrend || [],
       topRiskTasks: overviewResp?.data?.topRiskTasks || [],
       taskStatusDistribution: overviewResp?.data?.taskStatusDistribution || [],
-      inputSourceDistribution: overviewResp?.data?.inputSourceDistribution || []
+      inputSourceDistribution: overviewResp?.data?.inputSourceDistribution || [],
+      ownerSummary: overviewResp?.data?.ownerSummary || {},
+      partitionOwnerDistribution: overviewResp?.data?.partitionOwnerDistribution || [],
+      topOwnerRiskTasks: overviewResp?.data?.topOwnerRiskTasks || []
     })
   } finally {
     loading.value = false
@@ -761,6 +990,8 @@ function fillBatchExample() {
 
 function openBatchDialog() {
   fillBatchExample()
+  batchPreviewQuery.pageNum = 1
+  batchPreviewQuery.pageSize = 10
   batchPreview.value = {}
   batchDialogOpen.value = true
 }
@@ -770,6 +1001,8 @@ async function handleCreateBatch() {
     proxy.$modal.msgWarning('请填写导入批次的场景、账期和批量 JSON 数组')
     return
   }
+  batchPreviewQuery.pageNum = 1
+  batchPreviewQuery.pageSize = 10
   const resp = await createTaskInputBatch({ ...batchForm })
   batchPreview.value = resp.data || {}
   applyBatchPreview(batchPreview.value)
@@ -808,7 +1041,7 @@ function resetBatchQuery() {
 }
 
 async function handleSelectBatch(row) {
-  await loadBatchPreviewById(row.batchId)
+  await loadBatchPreviewById(row.batchId, { resetPreviewPage: true })
   form.inputSourceType = 'INPUT_BATCH'
   form.sourceBatchNo = row.batchNo
   form.sceneId = row.sceneId || form.sceneId
@@ -818,13 +1051,13 @@ async function handleSelectBatch(row) {
 }
 
 async function previewBatchRow(row) {
-  await loadBatchPreviewById(row.batchId)
+  await loadBatchPreviewById(row.batchId, { resetPreviewPage: true })
 }
 
 async function loadBatchPreviewByBatchNo(batchNo) {
   if (!batchNo) return
   if (detailData.value?.task?.sourceBatchNo === batchNo && detailData.value?.inputBatch?.batch?.batchId) {
-    await loadBatchPreviewById(detailData.value.inputBatch.batch.batchId)
+    await loadBatchPreviewById(detailData.value.inputBatch.batch.batchId, { resetPreviewPage: true })
     return
   }
   if (batchPreview.value?.batch?.batchNo === batchNo) {
@@ -833,7 +1066,7 @@ async function loadBatchPreviewByBatchNo(batchNo) {
   }
   const matched = batchList.value.find(item => item.batchNo === batchNo)
   if (matched?.batchId) {
-    await loadBatchPreviewById(matched.batchId)
+    await loadBatchPreviewById(matched.batchId, { resetPreviewPage: true })
     return
   }
   batchPickerOpen.value = true
@@ -841,14 +1074,18 @@ async function loadBatchPreviewByBatchNo(batchNo) {
   await loadBatchList()
   const current = batchList.value.find(item => item.batchNo === batchNo)
   if (current?.batchId) {
-    await loadBatchPreviewById(current.batchId)
+    await loadBatchPreviewById(current.batchId, { resetPreviewPage: true })
     return
   }
   proxy.$modal.msgWarning('未找到对应批次，请先通过历史批次列表查询')
 }
 
-async function loadBatchPreviewById(batchId) {
-  const resp = await getTaskInputBatchDetail(batchId)
+async function loadBatchPreviewById(batchId, options = {}) {
+  if (options.resetPreviewPage) {
+    batchPreviewQuery.pageNum = 1
+    batchPreviewQuery.pageSize = 10
+  }
+  const resp = await getTaskInputBatchDetail(batchId, batchPreviewQuery)
   applyBatchPreview(resp.data)
 }
 
@@ -859,6 +1096,22 @@ function applyBatchPreview(data) {
   Object.assign(selectedBatch, batch)
   if (batch.batchNo) {
     form.sourceBatchNo = batch.batchNo
+  }
+}
+
+async function handleBatchPreviewPageChange() {
+  const batchId = batchPreview.value?.batch?.batchId || selectedBatch.batchId
+  if (!batchId) return
+  await loadBatchPreviewById(batchId)
+}
+
+async function handleDetailBatchPageChange() {
+  const batchId = detailData.value?.inputBatch?.batch?.batchId
+  if (!batchId) return
+  const resp = await getTaskInputBatchDetail(batchId, detailBatchQuery)
+  detailData.value = {
+    ...detailData.value,
+    inputBatch: resp.data || {}
   }
 }
 
@@ -935,13 +1188,17 @@ function openResultCenter(task) {
 }
 
 async function handleDetail(row) {
-  const resp = await getTaskDetail(row.taskId)
+  detailQuery.pageNum = 1
+  const resp = await getTaskDetail(row.taskId, detailQuery)
   detailData.value = resp.data || {}
+  detailQuery.pageSize = detailData.value.detailPage?.pageSize || detailQuery.pageSize
+  detailBatchQuery.pageNum = 1
+  detailBatchQuery.pageSize = 10
   detailOpen.value = true
 }
 
 async function handleOpenPartitionMonitor(row) {
-  const resp = await getTaskDetail(row.taskId)
+  const resp = await getTaskDetail(row.taskId, { pageNum: 1, pageSize: 1 })
   partitionMonitorData.value = resp.data || {}
   partitionMonitorOpen.value = true
 }
@@ -961,10 +1218,14 @@ async function openTaskByRouteContext() {
 
 async function refreshCurrentDetail() {
   if (!detailData.value.task?.taskId) return
-  const resp = await getTaskDetail(detailData.value.task.taskId)
+  const resp = await getTaskDetail(detailData.value.task.taskId, detailQuery)
   detailData.value = resp.data || {}
+  if (detailData.value?.inputBatch?.batch?.batchId && detailBatchQuery.pageNum > 1) {
+    await handleDetailBatchPageChange()
+  }
   if (partitionMonitorOpen.value && partitionMonitorData.value?.task?.taskId === detailData.value.task?.taskId) {
-    partitionMonitorData.value = resp.data || {}
+    const partitionResp = await getTaskDetail(detailData.value.task.taskId, { pageNum: 1, pageSize: 1 })
+    partitionMonitorData.value = partitionResp.data || {}
   }
 }
 
@@ -980,10 +1241,16 @@ async function handleRetryPartition(row) {
   proxy.$modal.msgSuccess('已发起分片重试')
   await refreshCurrentDetail()
   if (partitionMonitorData.value?.task?.taskId && !detailData.value?.task?.taskId) {
-    const resp = await getTaskDetail(partitionMonitorData.value.task.taskId)
+    const resp = await getTaskDetail(partitionMonitorData.value.task.taskId, { pageNum: 1, pageSize: 1 })
     partitionMonitorData.value = resp.data || {}
   }
   getList()
+}
+
+async function handleDetailPageChange() {
+  if (!detailData.value.task?.taskId) return
+  const resp = await getTaskDetail(detailData.value.task.taskId, detailQuery)
+  detailData.value = resp.data || {}
 }
 
 async function handleCancel(row) {
@@ -1015,6 +1282,16 @@ function resolvePartitionTag(value) {
   return 'info'
 }
 
+function resolvePartitionPersistMode(value) {
+  if (value === 'SINGLE_FALLBACK') return '逐条降级'
+  return '批量写入'
+}
+
+function resolvePartitionPersistModeTag(value) {
+  if (value === 'SINGLE_FALLBACK') return 'warning'
+  return 'success'
+}
+
 function canRetryPartition(row) {
   return ['FAILED', 'PARTIAL_SUCCESS'].includes(row.partitionStatus) || Number(row.failCount || 0) > 0
 }
@@ -1032,6 +1309,37 @@ function normalizeBatchExample(inputJson) {
   if (trimmed.startsWith('[')) return trimmed
   if (trimmed.startsWith('{')) return `[\n  ${trimmed}\n]`
   return '[]'
+}
+
+function inspectInlineInputJson(value) {
+  const trimmed = (value || '').trim()
+  if (!trimmed) {
+    return { count: 0, invalid: false }
+  }
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (Array.isArray(parsed)) {
+      return { count: parsed.length, invalid: false }
+    }
+    if (parsed && typeof parsed === 'object') {
+      return { count: 1, invalid: false }
+    }
+    return { count: 0, invalid: true }
+  } catch (error) {
+    return { count: 0, invalid: true }
+  }
+}
+
+function buildSampleRangeText(pageNum, pageSize, total, currentSize) {
+  const safeTotal = Number(total || 0)
+  if (!safeTotal) {
+    return '当前暂无可展示的样例明细。'
+  }
+  const safePageNum = Number(pageNum || 1)
+  const safePageSize = Number(pageSize || 10)
+  const start = (safePageNum - 1) * safePageSize + 1
+  const end = Math.min(start + Math.max(Number(currentSize || 0), 1) - 1, safeTotal)
+  return `当前展示第 ${start}-${end} 条样例，共 ${safeTotal} 条。`
 }
 
 function summarizeJson(value) {
@@ -1137,6 +1445,7 @@ onActivated(async () => {
   background: color-mix(in srgb, var(--el-color-warning-light-9) 40%, var(--el-bg-color-page));
 }
 .run-page__action-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.run-page__strategy-alert { margin-bottom: 18px; }
 .run-page__template-alert { margin-top: 14px; }
 .run-page__template-table { margin-top: 12px; }
 .run-page__summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
@@ -1144,6 +1453,8 @@ onActivated(async () => {
 .run-page__summary-card strong { font-size: 24px; color: var(--el-color-warning-dark-2); }
 .run-page__batch-select { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 10px; width: 100%; }
 .run-page__batch-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin-top: 12px; padding: 12px 14px; color: var(--el-text-color-regular); }
+.run-page__batch-preview { display: grid; gap: 12px; margin-top: 16px; }
+.run-page__batch-range-tip { margin: 10px 0 12px; color: var(--el-text-color-secondary); font-size: 13px; }
 .run-page__detail-section { margin-top: 18px; }
 @media (max-width: 1200px) {
   .run-page__metrics, .run-page__overview-grid, .run-page__workspace, .run-page__summary, .run-page__batch-card, .run-page__distribution-grid { grid-template-columns: 1fr; }

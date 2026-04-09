@@ -195,6 +195,7 @@
                 <version>${ruoyi.version}</version>
             </dependency>
 
+
             <!-- 通用工具-->
             <dependency>
                 <groupId>com.ruoyi</groupId>

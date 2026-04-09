@@ -93,7 +93,7 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="88px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable style="width: 240px">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="对象类型" prop="objectType">
@@ -120,7 +120,12 @@
           <h3>审计记录</h3>
           <p>支持按对象、动作和操作人筛选，查看前后快照差异。</p>
         </div>
-        <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+        <div class="audit-page__section-actions">
+          <el-button type="warning" plain icon="Download" @click="handleExport">
+            导出审计
+          </el-button>
+          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+        </div>
       </div>
 
       <el-table v-loading="loading" :data="auditList">
@@ -277,6 +282,12 @@ async function loadReadiness() {
 function handleQuery() {
   queryParams.pageNum = 1
   getList()
+}
+
+function handleExport() {
+  proxy.download('cost/governance/audit/export', {
+    ...queryParams
+  }, `cost_audit_${Date.now()}.xlsx`)
 }
 
 function resetQuery() {
@@ -504,6 +515,12 @@ function handleCopySuccess() {
       margin: 8px 0 0;
       color: #708198;
     }
+  }
+
+  &__section-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
   &__compare {

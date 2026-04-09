@@ -15,7 +15,7 @@ import java.util.Date;
  *
  * <p>追溯表与台账表分离，运行链只在正式核算时落追溯记录，满足线程五“结果可解释”目标。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @TableName("cost_result_trace")

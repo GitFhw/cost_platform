@@ -8,7 +8,7 @@ import lombok.Data;
  *
  * <p>线程二要求变量中心支持 Excel 模板导入与预览，因此单独定义导入模板对象，避免直接暴露内部主键字段。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostVariableImportRow

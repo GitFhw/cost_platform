@@ -16,7 +16,7 @@ import lombok.ToString;
 /**
  * 变量主数据对象 cost_variable
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @ToString(callSuper = true)

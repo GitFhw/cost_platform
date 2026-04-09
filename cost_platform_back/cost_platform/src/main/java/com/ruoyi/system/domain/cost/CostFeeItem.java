@@ -16,7 +16,7 @@ import lombok.ToString;
 /**
  * 费用主数据对象 cost_fee_item
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @ToString(callSuper = true)
@@ -54,6 +54,10 @@ public class CostFeeItem extends BaseEntity
     @Excel(name = "业务域", dictType = "cost_business_domain")
     @TableField(exist = false)
     private String businessDomain;
+
+    /** 场景默认对象维度 */
+    @TableField(exist = false)
+    private String sceneDefaultObjectDimension;
 
     /** 费用编码 */
     @Excel(name = "费用编码")

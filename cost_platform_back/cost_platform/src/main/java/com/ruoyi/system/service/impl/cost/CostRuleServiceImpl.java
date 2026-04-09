@@ -53,7 +53,7 @@ import java.util.TreeSet;
  * 3. 阶梯必须显式绑定依据变量，并在保存时做连续性、重叠和空区间校验；
  * 4. 当前阶段先打通配置维护和治理预检查，为线程四发布快照与线程五运行链预留稳定结构。
  *
- * @author codex
+ * @author HwFan
  */
 @Service
 public class CostRuleServiceImpl implements ICostRuleService

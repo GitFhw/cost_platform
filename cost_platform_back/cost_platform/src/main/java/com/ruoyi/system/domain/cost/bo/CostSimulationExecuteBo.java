@@ -7,7 +7,7 @@ import lombok.Data;
 /**
  * 试算执行请求
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostSimulationExecuteBo

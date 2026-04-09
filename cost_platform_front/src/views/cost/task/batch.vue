@@ -15,7 +15,7 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable style="width: 220px">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="账期" prop="billMonth">
@@ -81,11 +81,19 @@
         <el-descriptions-item label="总量">{{ detailData.batch.totalCount || 0 }}</el-descriptions-item>
         <el-descriptions-item label="有效/错误">{{ detailData.batch.validCount || 0 }}/{{ detailData.batch.errorCount || 0 }}</el-descriptions-item>
       </el-descriptions>
+      <el-alert
+        v-if="detailData.loadingGuide?.title"
+        class="batch-page__guide"
+        :title="detailData.loadingGuide.title"
+        :description="detailData.loadingGuide.description"
+        :type="detailData.loadingGuide.type || 'info'"
+        :closable="false"
+      />
 
       <div class="batch-page__section-head">
         <div>
           <h3>样例明细</h3>
-          <p>展示前 10 条输入样例，便于快速确认批次内容。</p>
+          <p>当前按服务端分页读取样例明细，便于在大批量批次下继续快速确认内容。</p>
         </div>
       </div>
       <el-table :data="detailData.items || []" size="small" border>
@@ -96,6 +104,13 @@
           <template #default="scope">{{ summarizeJson(scope.row.inputJson) }}</template>
         </el-table-column>
       </el-table>
+      <pagination
+        v-show="detailTotal > 0"
+        :total="detailTotal"
+        v-model:page="detailQuery.pageNum"
+        v-model:limit="detailQuery.pageSize"
+        @pagination="getDetail"
+      />
     </el-drawer>
   </div>
 </template>
@@ -116,6 +131,8 @@ const batchList = ref([])
 const sceneOptions = ref([])
 const detailOpen = ref(false)
 const detailData = ref({})
+const detailTotal = ref(0)
+const currentBatchId = ref(undefined)
 
 const queryParams = reactive({
   pageNum: 1,
@@ -124,6 +141,11 @@ const queryParams = reactive({
   billMonth: '',
   batchNo: '',
   batchStatus: ''
+})
+
+const detailQuery = reactive({
+  pageNum: 1,
+  pageSize: 10
 })
 
 async function loadBaseOptions() {
@@ -158,9 +180,18 @@ function resetQuery() {
   getList()
 }
 
-async function handleDetail(row) {
-  const resp = await getTaskInputBatchDetail(row.batchId)
+async function getDetail() {
+  if (!currentBatchId.value) return
+  const resp = await getTaskInputBatchDetail(currentBatchId.value, detailQuery)
   detailData.value = resp.data || {}
+  detailTotal.value = resp.data?.itemTotal || 0
+}
+
+async function handleDetail(row) {
+  currentBatchId.value = row.batchId
+  detailQuery.pageNum = 1
+  detailQuery.pageSize = 10
+  await getDetail()
   detailOpen.value = true
 }
 
@@ -202,6 +233,7 @@ onActivated(getList)
 .batch-page__subtitle { margin: 10px 0 0; color: var(--el-text-color-regular); line-height: 1.8; }
 .batch-page__hero-actions { display: flex; gap: 10px; align-items: flex-start; }
 .batch-page__table { padding: 16px; }
+.batch-page__guide { margin: 16px 0; }
 .batch-page__section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 0 16px; }
 .batch-page__section-head h3 { margin: 0; font-size: 18px; }
 .batch-page__section-head p { margin: 6px 0 0; color: var(--el-text-color-secondary); font-size: 13px; }

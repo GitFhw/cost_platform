@@ -87,17 +87,19 @@ export function listTaskInputBatch(query) {
   })
 }
 
-export function getTaskInputBatchDetail(batchId) {
+export function getTaskInputBatchDetail(batchId, query) {
   return request({
     url: '/cost/run/task/input-batch/' + batchId,
-    method: 'get'
+    method: 'get',
+    params: query
   })
 }
 
-export function getTaskDetail(taskId) {
+export function getTaskDetail(taskId, query) {
   return request({
     url: '/cost/run/task/' + taskId,
-    method: 'get'
+    method: 'get',
+    params: query
   })
 }
 
@@ -164,5 +166,29 @@ export function getRunInputTemplate(query) {
     url: '/cost/run/input-template',
     method: 'get',
     params: query
+  })
+}
+
+export function getFeeRunInputTemplate(query) {
+  return request({
+    url: '/cost/run/input-template/fee',
+    method: 'get',
+    params: query
+  })
+}
+
+export function previewBuiltInput(data) {
+  return request({
+    url: '/cost/run/input-build/preview',
+    method: 'post',
+    data
+  })
+}
+
+export function calculateFee(data) {
+  return request({
+    url: '/cost/run/fee/calculate',
+    method: 'post',
+    data
   })
 }

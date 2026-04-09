@@ -13,7 +13,7 @@ import java.util.Date;
 /**
  * 正式核算输入批次明细对象 cost_calc_input_batch_item
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @TableName("cost_calc_input_batch_item")

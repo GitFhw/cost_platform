@@ -5,6 +5,7 @@ import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
+import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostAlarmRecord;
 import com.ruoyi.system.domain.cost.CostAuditLog;
 import com.ruoyi.system.domain.cost.CostBillPeriod;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 
 /**
@@ -32,7 +34,7 @@ import java.util.List;
  *
  * <p>统一承接账期治理、重算申请、审计台账、运行告警和运行快照缓存治理入口。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @RestController
 @RequestMapping("/cost/governance")
@@ -55,6 +57,15 @@ public class CostGovernanceController extends BaseController
         startPage();
         List<CostBillPeriod> list = governanceService.selectPeriodList(query);
         return getDataTable(list);
+    }
+
+    @PreAuthorize("@ss.hasPermi('cost:period:list')")
+    @PostMapping("/period/export")
+    public void exportPeriod(HttpServletResponse response, CostBillPeriod query)
+    {
+        List<CostBillPeriod> list = governanceService.selectPeriodList(query);
+        ExcelUtil<CostBillPeriod> util = new ExcelUtil<>(CostBillPeriod.class);
+        util.exportExcel(response, list, "账期台账");
     }
 
     @PreAuthorize("@ss.hasPermi('cost:period:query')")
@@ -87,6 +98,15 @@ public class CostGovernanceController extends BaseController
         startPage();
         List<CostRecalcOrder> list = governanceService.selectRecalcList(query);
         return getDataTable(list);
+    }
+
+    @PreAuthorize("@ss.hasPermi('cost:period:list')")
+    @PostMapping("/recalc/export")
+    public void exportRecalc(HttpServletResponse response, CostRecalcOrder query)
+    {
+        List<CostRecalcOrder> list = governanceService.selectRecalcList(query);
+        ExcelUtil<CostRecalcOrder> util = new ExcelUtil<>(CostRecalcOrder.class);
+        util.exportExcel(response, list, "重算差异台账");
     }
 
     @PreAuthorize("@ss.hasPermi('cost:period:query')")
@@ -141,6 +161,15 @@ public class CostGovernanceController extends BaseController
         startPage();
         List<CostAuditLog> list = governanceService.selectAuditList(query);
         return getDataTable(list);
+    }
+
+    @PreAuthorize("@ss.hasPermi('cost:audit:list')")
+    @PostMapping("/audit/export")
+    public void exportAudit(HttpServletResponse response, CostAuditLog query)
+    {
+        List<CostAuditLog> list = governanceService.selectAuditList(query);
+        ExcelUtil<CostAuditLog> util = new ExcelUtil<>(CostAuditLog.class);
+        util.exportExcel(response, list, "审计台账");
     }
 
     @PreAuthorize("@ss.hasPermi('cost:alarm:list')")

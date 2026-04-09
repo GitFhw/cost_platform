@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Flyway 配置，明确使用主库执行迁移。
  * 
- * @author codex
+ * @author HwFan
  */
 @Configuration
 public class FlywayConfig

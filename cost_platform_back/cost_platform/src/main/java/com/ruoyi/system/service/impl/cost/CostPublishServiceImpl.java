@@ -53,7 +53,7 @@ import java.util.stream.Collectors;
 /**
  * 发布中心服务实现
  *
- * @author codex
+ * @author HwFan
  */
 @Service
 public class CostPublishServiceImpl implements ICostPublishService
@@ -98,6 +98,9 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     @Autowired
     private CostSimulationRecordMapper simulationRecordMapper;
+
+    @Autowired
+    private CostDistributedLockSupport distributedLockSupport;
 
     @Override
     public Map<String, Object> selectPublishStats(CostPublishVersion query)
@@ -234,7 +237,10 @@ public class CostPublishServiceImpl implements ICostPublishService
     @Transactional(rollbackFor = Exception.class)
     public int publishScene(CostPublishCreateBo bo)
     {
-        Map<String, Object> precheck = selectPublishPrecheck(bo.getSceneId());
+        return distributedLockSupport.executeSceneVersioningLock(bo.getSceneId(),
+                "当前场景正在执行发布/生效/回滚，请稍后重试", () ->
+                {
+                    Map<String, Object> precheck = selectPublishPrecheck(bo.getSceneId());
         if (!Boolean.TRUE.equals(precheck.get("publishable")))
         {
             throw new ServiceException("当前场景存在阻断项，请先处理后再发布");
@@ -266,23 +272,34 @@ public class CostPublishServiceImpl implements ICostPublishService
         {
             activateVersionInternal(version, false, operator, now);
         }
-        return 1;
+                    return 1;
+                });
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int activateVersion(Long versionId)
     {
-        activateVersionInternal(requireVersion(versionId), false, SecurityUtils.getUsername(), DateUtils.getNowDate());
-        return 1;
+        CostPublishVersion version = requireVersion(versionId);
+        return distributedLockSupport.executeSceneVersioningLock(version.getSceneId(),
+                "当前场景正在执行发布/生效/回滚，请稍后重试", () ->
+                {
+                    activateVersionInternal(version, false, SecurityUtils.getUsername(), DateUtils.getNowDate());
+                    return 1;
+                });
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int rollbackVersion(Long versionId)
     {
-        activateVersionInternal(requireVersion(versionId), true, SecurityUtils.getUsername(), DateUtils.getNowDate());
-        return 1;
+        CostPublishVersion version = requireVersion(versionId);
+        return distributedLockSupport.executeSceneVersioningLock(version.getSceneId(),
+                "当前场景正在执行发布/生效/回滚，请稍后重试", () ->
+                {
+                    activateVersionInternal(version, true, SecurityUtils.getUsername(), DateUtils.getNowDate());
+                    return 1;
+                });
     }
 
     private void appendCheckItems(Long sceneId, SnapshotBundle draftBundle, CostPublishVersion activeVersion,
@@ -477,17 +494,17 @@ public class CostPublishServiceImpl implements ICostPublishService
         {
             if (rollback)
             {
-                throw new ServiceException("褰撳墠鐗堟湰宸茬粡鏄敓鏁堢増鏈紝涓嶉渶鍥炴粴");
+                throw new ServiceException("当前版本已经是生效版本，无需回滚");
             }
             return;
         }
         if (!rollback && !StringUtils.equalsAny(targetVersion.getVersionStatus(), VERSION_STATUS_PUBLISHED, VERSION_STATUS_ROLLED_BACK))
         {
-            throw new ServiceException("鍙湁宸插彂甯冩垨宸插洖婊氱殑鐗堟湰鎵嶈兘璁句负鐢熸晥");
+            throw new ServiceException("只有已发布或已回滚的版本才能设为生效");
         }
         if (rollback && !StringUtils.equalsAny(targetVersion.getVersionStatus(), VERSION_STATUS_PUBLISHED, VERSION_STATUS_ROLLED_BACK))
         {
-            throw new ServiceException("鍙湁鍘嗗彶鍙戝竷鐗堟湰鎵嶈兘浣滀负鍥炴粴鐩爣");
+            throw new ServiceException("只有历史发布版本才能作为回滚目标");
         }
         if (currentActive != null)
         {
@@ -663,9 +680,16 @@ public class CostPublishServiceImpl implements ICostPublishService
             json.put("variableName", variable.getVariableName());
             json.put("variableType", variable.getVariableType());
             json.put("sourceType", variable.getSourceType());
+            json.put("sourceSystem", variable.getSourceSystem());
             json.put("dictType", variable.getDictType());
             json.put("remoteApi", variable.getRemoteApi());
+            json.put("authType", variable.getAuthType());
+            json.put("authConfigJson", variable.getAuthConfigJson());
             json.put("dataPath", variable.getDataPath());
+            json.put("mappingConfigJson", variable.getMappingConfigJson());
+            json.put("syncMode", variable.getSyncMode());
+            json.put("cachePolicy", variable.getCachePolicy());
+            json.put("fallbackPolicy", variable.getFallbackPolicy());
             json.put("formulaExpr", variable.getFormulaExpr());
             json.put("formulaCode", variable.getFormulaCode());
             json.put("dataType", variable.getDataType());
@@ -825,6 +849,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         json.put("businessDomain", scene.getBusinessDomain());
         json.put("orgCode", scene.getOrgCode());
         json.put("sceneType", scene.getSceneType());
+        json.put("defaultObjectDimension", scene.getDefaultObjectDimension());
         json.put("status", scene.getStatus());
         json.put("remark", scene.getRemark());
         return json;

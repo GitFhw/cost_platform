@@ -15,8 +15,6 @@ import java.util.Date;
  *
  * <p>输入批次用于承接正式核算的导入型输入源，保留批次号、账期、场景版本和条数统计，
  * 与原有 inline JSON 提交方式并存，为后续独立导入中心对接提供正式模型。</p>
- *
- * @author codex
  */
 @Data
 @TableName("cost_calc_input_batch")
@@ -60,6 +58,12 @@ public class CostCalcInputBatch implements Serializable
 
     @TableField("error_message")
     private String errorMessage;
+
+    @TableField("access_profile_id")
+    private Long accessProfileId;
+
+    @TableField("checkpoint_json")
+    private String checkpointJson;
 
     @TableField("create_by")
     private String createBy;

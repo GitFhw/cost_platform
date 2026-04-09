@@ -20,7 +20,7 @@ import java.math.BigDecimal;
  * 阶梯明细显式保存区间上下界和边界口径，
  * 便于线程四/五继续承接解释、快照和追溯链路。
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @ToString(callSuper = true)

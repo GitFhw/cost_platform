@@ -6,7 +6,7 @@ import com.ruoyi.system.domain.cost.CostPublishSnapshot;
 /**
  * 发布快照 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostPublishSnapshotMapper extends BaseMapper<CostPublishSnapshot>
 {

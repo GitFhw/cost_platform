@@ -7,7 +7,7 @@ import lombok.Data;
  *
  * <p>线程二要求变量中心支持复制能力，便于在同场景或跨场景快速复用影响因素配置。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostVariableCopyRequest

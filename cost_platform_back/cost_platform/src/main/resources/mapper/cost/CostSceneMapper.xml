@@ -11,6 +11,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="businessDomain" column="business_domain" />
         <result property="orgCode" column="org_code" />
         <result property="sceneType" column="scene_type" />
+        <result property="defaultObjectDimension" column="default_object_dimension" />
         <result property="activeVersionId" column="active_version_id" />
         <result property="activeVersionNo" column="active_version_no" />
         <result property="status" column="status" />
@@ -28,6 +29,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                s.business_domain,
                s.org_code,
                s.scene_type,
+               s.default_object_dimension,
                s.active_version_id,
                pv.version_no as active_version_no,
                s.status,
@@ -53,7 +55,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 and s.scene_type = #{sceneType}
             </if>
             <if test="orgCode != null and orgCode != ''">
-                and s.org_code like concat('%', #{orgCode}, '%')
+                and s.org_code = #{orgCode}
             </if>
             <if test="status != null and status != ''">
                 and s.status = #{status}
@@ -86,6 +88,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                s.scene_code as sceneCode,
                s.scene_name as sceneName,
                s.business_domain as businessDomain,
+               s.default_object_dimension as defaultObjectDimension,
                s.status as status,
                s.active_version_id as activeVersionId,
                (select count(1) from cost_fee_item f where f.scene_id = s.scene_id) as feeCount,

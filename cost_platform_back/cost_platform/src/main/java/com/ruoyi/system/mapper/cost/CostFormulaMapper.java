@@ -12,7 +12,7 @@ import java.util.Map;
  *
  * <p>线程七将公式抽为可治理资产，变量、规则、发布快照和运行链都通过公式编码引用。</p>
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostFormulaMapper extends BaseMapper<CostFormula>
 {

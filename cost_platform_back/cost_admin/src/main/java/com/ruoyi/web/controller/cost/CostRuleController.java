@@ -22,7 +22,7 @@ import java.util.List;
 /**
  * 规则中心控制器
  *
- * @author codex
+ * @author HwFan
  */
 @RestController
 @RequestMapping("/cost/rule")

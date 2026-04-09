@@ -4,7 +4,10 @@ import com.ruoyi.system.domain.cost.CostCalcTask;
 import com.ruoyi.system.domain.cost.CostCalcInputBatch;
 import com.ruoyi.system.domain.cost.CostResultLedger;
 import com.ruoyi.system.domain.cost.CostSimulationRecord;
+import com.ruoyi.system.domain.cost.bo.CostAccessProfileBuildBatchBo;
+import com.ruoyi.system.domain.cost.bo.CostAccessProfilePreviewFetchBo;
 import com.ruoyi.system.domain.cost.bo.CostCalcInputBatchCreateBo;
+import com.ruoyi.system.domain.cost.bo.CostInputBuildPreviewBo;
 import com.ruoyi.system.domain.cost.bo.CostFeeCalculateBo;
 import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
 import com.ruoyi.system.domain.cost.bo.CostSimulationExecuteBo;
@@ -15,7 +18,7 @@ import java.util.Map;
 /**
  * 线程五运行链服务接口
  *
- * @author codex
+ * @author HwFan
  */
 public interface ICostRunService
 {
@@ -41,9 +44,9 @@ public interface ICostRunService
 
     List<CostCalcInputBatch> selectInputBatchList(CostCalcInputBatch query);
 
-    Map<String, Object> selectInputBatchDetail(Long batchId);
+    Map<String, Object> selectInputBatchDetail(Long batchId, Integer pageNum, Integer pageSize);
 
-    Map<String, Object> selectTaskDetail(Long taskId);
+    Map<String, Object> selectTaskDetail(Long taskId, Integer pageNum, Integer pageSize);
 
     int retryTaskDetail(Long detailId);
 
@@ -64,6 +67,12 @@ public interface ICostRunService
     Map<String, Object> buildInputTemplate(Long sceneId, Long versionId, String taskType);
 
     Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, Long feeId, String feeCode, String taskType);
+
+    Map<String, Object> previewBuiltInput(CostInputBuildPreviewBo bo);
+
+    Map<String, Object> previewBuiltInputByProfile(Long profileId, CostAccessProfilePreviewFetchBo bo);
+
+    Map<String, Object> createInputBatchByProfile(Long profileId, CostAccessProfileBuildBatchBo bo);
 
     Map<String, Object> calculateFee(CostFeeCalculateBo bo);
 }

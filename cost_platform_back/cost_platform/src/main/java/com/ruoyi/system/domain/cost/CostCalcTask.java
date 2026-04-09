@@ -18,7 +18,7 @@ import java.util.Date;
  * <p>线程五用该表承接正式核算和批量任务台账。
  * 当前阶段先落单笔正式核算与手工批量任务，后续线程六再增强分布式并发与 Redis 锁。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @ToString(callSuper = true)

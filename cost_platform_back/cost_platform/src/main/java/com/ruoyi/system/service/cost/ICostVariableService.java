@@ -14,7 +14,7 @@ import java.util.Map;
 /**
  * 变量中心服务接口。
  *
- * @author codex
+ * @author HwFan
  */
 public interface ICostVariableService
 {

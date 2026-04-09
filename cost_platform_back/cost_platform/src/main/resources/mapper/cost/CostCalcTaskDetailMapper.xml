@@ -63,4 +63,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </foreach>
     </update>
 
+    <select id="selectTopErrors" resultType="java.util.LinkedHashMap">
+        select error_message as message, count(1) as count
+        from cost_calc_task_detail
+        where task_id = #{taskId}
+          and detail_status = 'FAILED'
+          and error_message is not null
+          and error_message != ''
+        group by error_message
+        order by count(1) desc
+        limit #{limit}
+    </select>
+
 </mapper>

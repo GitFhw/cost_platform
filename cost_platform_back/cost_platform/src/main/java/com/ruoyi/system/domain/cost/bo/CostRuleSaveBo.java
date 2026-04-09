@@ -17,7 +17,7 @@ import java.util.Map;
  *
  * 用于统一承接规则主表、条件列表、阶梯列表和结构化定价配置。
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostRuleSaveBo

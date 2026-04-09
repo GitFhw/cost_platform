@@ -44,6 +44,8 @@
 - 若依基础库脚本：`cost_platform_back/sql/ry_20260320.sql`
 - 核算平台业务表基线：`企业级核算平台完整数据库设计.sql`
 - 线程一基础治理增量脚本：`cost_platform_back/sql/cost_thread1_governance_20260330.sql`
+- 统一初始化快照：`cost_platform_back/cost_admin/src/main/resources/db/cost_init.sql`
+- 初始化快照生成脚本：`cost_platform_back/bin/build-cost-init.ps1`
 
 ## Flyway 迁移
 
@@ -58,6 +60,7 @@
 - 全新测试库或培训库：直接创建空库，启动应用后由 Flyway 自动完成基线和增量迁移
 - 已有开发库：先确认库内已经具备若依基础表和核算平台业务表基线，再让 Flyway 做 baseline 和后续增量
 - 不要只手工导入若依原始库后再执行 Flyway。当前基线脚本把若依基础表和核算平台业务表放在同一个 baseline 里，只导若依原始库会导致 Flyway 跳过业务表基线
+- 如果需要交付“一次性初始化 SQL”给空库环境，可使用 `cost_init.sql`；该文件由 `build-cost-init.ps1` 从当前 migration 快照统一生成，生成后应与最新 migration 目录一起复核
 
 补充说明：
 

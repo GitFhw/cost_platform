@@ -6,7 +6,7 @@ import com.ruoyi.system.domain.cost.CostSimulationRecord;
 /**
  * 试算记录 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostSimulationRecordMapper extends BaseMapper<CostSimulationRecord>
 {

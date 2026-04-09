@@ -8,7 +8,7 @@ import jakarta.validation.constraints.NotNull;
 /**
  * 发起重算申请请求对象
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostRecalcApplyBo

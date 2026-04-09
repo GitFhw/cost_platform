@@ -5,7 +5,7 @@ import lombok.Data;
 /**
  * 共享变量模板应用请求。
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostVariableTemplateApplyRequest

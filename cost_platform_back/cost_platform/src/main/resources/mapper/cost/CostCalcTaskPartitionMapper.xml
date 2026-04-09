@@ -16,6 +16,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             processed_count,
             success_count,
             fail_count,
+            amount_total,
             last_error
         )
         values
@@ -31,9 +32,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 #{item.processedCount},
                 #{item.successCount},
                 #{item.failCount},
+                #{item.amountTotal},
                 #{item.lastError}
             )
         </foreach>
     </insert>
+
+    <select id="sumAmountByTaskId" resultType="java.math.BigDecimal">
+        select coalesce(sum(amount_total), 0)
+        from cost_calc_task_partition
+        where task_id = #{taskId}
+    </select>
 
 </mapper>

@@ -7,15 +7,18 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ruoyi.common.constant.CacheConstants;
 import com.ruoyi.common.core.redis.RedisCache;
 import com.ruoyi.system.domain.cost.CostFeeItem;
+import com.ruoyi.system.domain.cost.CostPublishVersion;
 import com.ruoyi.system.domain.cost.CostRule;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.CostSimulationRecord;
 import com.ruoyi.system.domain.cost.CostVariable;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
+import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
 import com.ruoyi.system.mapper.cost.CostRuleMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.mapper.cost.CostSimulationRecordMapper;
 import com.ruoyi.system.mapper.cost.CostVariableMapper;
+import com.ruoyi.system.service.impl.cost.CostDistributedLockSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -29,10 +32,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Iterator;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -66,6 +71,12 @@ class CostPublishControllerManualIT
 
     @Autowired
     private CostSimulationRecordMapper simulationRecordMapper;
+
+    @Autowired
+    private CostPublishVersionMapper publishVersionMapper;
+
+    @Autowired
+    private CostDistributedLockSupport distributedLockSupport;
 
     @Test
     void shouldBlockPublishPrecheckWhenFormulaReferencesAreNotGoverned() throws Exception
@@ -166,6 +177,54 @@ class CostPublishControllerManualIT
         }
     }
 
+    @Test
+    void shouldBlockPublishActivateAndRollbackWhenSceneVersioningLockExists() throws Exception
+    {
+        Long sceneId = requireSceneId();
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+
+        Long versionId = publishScene(sceneId, authorization, "lock-baseline-" + stamp);
+        String lockKey = distributedLockSupport.buildSceneVersioningLockKey(sceneId);
+        redisCache.setCacheObject(lockKey, "itest-lock", 30, TimeUnit.SECONDS);
+
+        try
+        {
+            ObjectNode publishBody = objectMapper.createObjectNode();
+            publishBody.put("sceneId", sceneId);
+            publishBody.put("publishDesc", "lock-regression-" + stamp);
+            publishBody.put("activateNow", false);
+
+            JsonNode publishResponse = readBody(mockMvc.perform(post("/cost/publish")
+                            .header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsBytes(publishBody)))
+                    .andExpect(status().isOk())
+                    .andReturn());
+            assertThat(publishResponse.path("code").asInt()).isEqualTo(500);
+            assertThat(publishResponse.path("msg").asText()).contains("发布/生效/回滚");
+
+            JsonNode activateResponse = readBody(mockMvc.perform(put("/cost/publish/activate/{versionId}", versionId)
+                            .header("Authorization", authorization))
+                    .andExpect(status().isOk())
+                    .andReturn());
+            assertThat(activateResponse.path("code").asInt()).isEqualTo(500);
+            assertThat(activateResponse.path("msg").asText()).contains("发布/生效/回滚");
+
+            JsonNode rollbackResponse = readBody(mockMvc.perform(put("/cost/publish/rollback/{versionId}", versionId)
+                            .header("Authorization", authorization))
+                    .andExpect(status().isOk())
+                    .andReturn());
+            assertThat(rollbackResponse.path("code").asInt()).isEqualTo(500);
+            assertThat(rollbackResponse.path("msg").asText()).contains("发布/生效/回滚");
+        }
+        finally
+        {
+            redisCache.deleteObject(lockKey);
+        }
+    }
+
     private Long requireSceneId()
     {
         CostScene scene = sceneMapper.selectOne(Wrappers.<CostScene>lambdaQuery()
@@ -182,6 +241,38 @@ class CostPublishControllerManualIT
         return feeMapper.selectFeeOptions(query).stream()
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("missing enabled fees in seeded real-cost scene"));
+    }
+
+    private Long publishScene(Long sceneId, String authorization, String publishDesc) throws Exception
+    {
+        Long previousLatestVersionId = latestVersionId(sceneId);
+
+        ObjectNode publishBody = objectMapper.createObjectNode();
+        publishBody.put("sceneId", sceneId);
+        publishBody.put("publishDesc", publishDesc);
+        publishBody.put("activateNow", false);
+
+        JsonNode publish = readBody(mockMvc.perform(post("/cost/publish")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(publishBody)))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(publish.path("code").asInt()).isEqualTo(200);
+
+        CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
+        assertThat(latestVersion).isNotNull();
+        if (previousLatestVersionId != null)
+        {
+            assertThat(latestVersion.getVersionId()).isNotEqualTo(previousLatestVersionId);
+        }
+        return latestVersion.getVersionId();
+    }
+
+    private Long latestVersionId(Long sceneId)
+    {
+        CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
+        return latestVersion == null ? null : latestVersion.getVersionId();
     }
 
     private CostVariable buildFormulaVariable(Long sceneId, String variableCode, String variableName)

@@ -14,7 +14,7 @@ import java.util.Map;
 /**
  * 线程六治理增强服务接口
  *
- * @author codex
+ * @author HwFan
  */
 public interface ICostGovernanceService
 {

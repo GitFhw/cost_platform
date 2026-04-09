@@ -5,7 +5,7 @@ import lombok.Data;
 /**
  * 发布前检查项
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostPublishCheckItemVo

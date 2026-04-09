@@ -5,7 +5,7 @@ import lombok.Data;
 /**
  * 变量治理预检查结果
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostVariableGovernanceCheckVo

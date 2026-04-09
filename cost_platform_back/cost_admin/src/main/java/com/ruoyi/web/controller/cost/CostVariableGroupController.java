@@ -17,7 +17,7 @@ import java.util.List;
 /**
  * 变量分组控制器
  *
- * @author codex
+ * @author HwFan
  */
 @RestController
 @RequestMapping("/cost/variable/group")

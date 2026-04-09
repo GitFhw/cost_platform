@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-container variable-center">
     <section class="variable-center__hero">
       <div>
@@ -19,6 +19,97 @@
       </div>
     </section>
 
+    <section class="variable-center__workspace">
+      <div class="variable-center__work-card">
+        <div class="variable-center__work-head">
+          <div>
+            <h3>模板治理</h3>
+            <p>共享影响因素模板当前仍以内置模板库为主，但已经可以作为跨场景复用入口统一治理。</p>
+          </div>
+          <el-button type="primary" plain icon="Collection" @click="handleTemplateCenter">打开模板库</el-button>
+        </div>
+        <div class="variable-center__template-metrics">
+          <div class="variable-center__template-metric">
+            <span>模板数量</span>
+            <strong>{{ templateList.length }}</strong>
+          </div>
+          <div class="variable-center__template-metric">
+            <span>模板变量总数</span>
+            <strong>{{ templateVariableCount }}</strong>
+          </div>
+          <div class="variable-center__template-metric">
+            <span>已复用模板数</span>
+            <strong>{{ reusedTemplateCount }}</strong>
+          </div>
+        </div>
+        <div class="variable-center__template-tags">
+          <el-tag v-for="item in topTemplates" :key="item.templateCode" size="small">
+            {{ item.templateName }} / {{ item.appliedSceneCount || 0 }}场景
+          </el-tag>
+          <span v-if="!topTemplates.length" class="variable-center__muted">暂无模板数据</span>
+        </div>
+        <div v-if="lastTemplateApplyResult.templateCode" class="variable-center__latest-apply">
+          <strong>最近应用</strong>
+          <span>{{ lastTemplateApplyResult.templateName }} -> {{ lastTemplateApplyResult.sceneLabel || '-' }}</span>
+          <span>{{ lastTemplateApplyResult.summary }}</span>
+        </div>
+      </div>
+
+      <div class="variable-center__work-card">
+        <div class="variable-center__work-head">
+          <div>
+            <h3>接入动作</h3>
+            <p>把新增、导入、模板下载和复用动作集中到工作台，减少只在表格里找入口。</p>
+          </div>
+        </div>
+        <div class="variable-center__action-grid">
+          <button class="variable-center__action-card" type="button" @click="handleAdd">
+            <strong>新增变量</strong>
+            <span>录入输入、字典、第三方接口或公式变量。</span>
+          </button>
+          <button class="variable-center__action-card" type="button" @click="handleImport">
+            <strong>导入变量</strong>
+            <span>先做预览校验，再批量导入变量清单。</span>
+          </button>
+          <button class="variable-center__action-card" type="button" @click="downloadImportTemplate">
+            <strong>下载模板</strong>
+            <span>按平台模板整理 Excel 后再执行导入。</span>
+          </button>
+          <button class="variable-center__action-card" type="button" @click="handleTemplateCenter">
+            <strong>应用共享模板</strong>
+            <span>把内置影响因素模板复制到目标场景。</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="variable-center__work-card">
+        <div class="variable-center__work-head">
+          <div>
+            <h3>来源口径</h3>
+            <p>变量中心当前阶段的口径是先标准化变量，再让规则、公式和运行链复用这些标准变量。</p>
+          </div>
+        </div>
+        <div class="variable-center__guide-list">
+          <div class="variable-center__guide-item">
+            <el-tag type="success" size="small">INPUT</el-tag>
+            <span>直接承接业务输入，适合第三方已经整理好的计费对象字段。</span>
+          </div>
+          <div class="variable-center__guide-item">
+            <el-tag type="info" size="small">DICT</el-tag>
+            <span>从系统字典或核算字典取值，避免在规则里重复硬编码枚举。</span>
+          </div>
+          <div class="variable-center__guide-item">
+            <el-tag type="warning" size="small">REMOTE</el-tag>
+            <span>承接第三方接口变量；当前配置能力已齐，但真实执行链仍属于后续增强项。</span>
+          </div>
+          <div class="variable-center__guide-item">
+            <el-tag size="small">FORMULA</el-tag>
+            <span>复用公式实验室资产，通过 `formulaCode` 统一进入运行链。</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <el-alert
       title="变量中心统一承接输入变量、字典变量、第三方接入变量和公式变量，并提供导入预览、复制复用与共享模板能力。"
       type="info"
@@ -29,7 +120,7 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable placeholder="请选择场景" style="width: 220px" @change="handleSceneChange">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="变量分组" prop="groupId">
@@ -110,7 +201,7 @@
       <el-form ref="variableRef" :model="form" :rules="rules" label-width="108px">
         <el-form-item label="所属场景" prop="sceneId">
           <el-select v-model="form.sceneId" filterable style="width: 100%" @change="loadFormGroups">
-            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
           </el-select>
         </el-form-item>
         <el-form-item label="变量分组" prop="groupId">
@@ -163,9 +254,12 @@
         <template v-if="form.sourceType === 'FORMULA'">
           <el-form-item label="公式编码" prop="formulaCode">
             <el-select v-model="form.formulaCode" clearable filterable style="width: 100%" placeholder="请选择公式实验室中的公式编码">
-              <el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaCode} / ${item.formulaName}`" :value="item.formulaCode" />
+              <el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaName} / ${item.formulaCode}`" :value="item.formulaCode" />
             </el-select>
           </el-form-item>
+          <div class="variable-center__drawer-actions">
+            <el-button type="primary" link @click="openFormulaWorkbench">前往公式实验室</el-button>
+          </div>
           <el-form-item label="中文公式">
             <div class="variable-center__formula-preview">{{ selectedFormulaMeta.businessFormula || '请选择公式编码，系统会自动回填中文公式与标准表达式。' }}</div>
           </el-form-item>
@@ -267,7 +361,7 @@
         </el-form-item>
         <el-form-item label="目标场景" prop="targetSceneId">
           <el-select v-model="copyForm.targetSceneId" filterable style="width: 100%" @change="loadCopyGroups">
-            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
           </el-select>
         </el-form-item>
         <el-form-item label="目标分组" prop="targetGroupId">
@@ -296,7 +390,7 @@
           <el-form :model="templateForm" label-width="96px">
             <el-form-item label="目标场景">
               <el-select v-model="templateForm.sceneId" filterable style="width: 100%" @change="loadTemplateGroups">
-                <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+                <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
               </el-select>
             </el-form-item>
             <el-form-item label="目标分组">
@@ -308,19 +402,132 @@
               <el-checkbox v-model="templateForm.updateSupport">已有变量编码时允许更新</el-checkbox>
             </el-form-item>
           </el-form>
+          <div class="variable-template-toolbar">
+            <el-input v-model="templateKeyword" clearable placeholder="模板编码/名称" />
+            <el-select v-model="templateSourceTypeFilter" clearable placeholder="来源类型">
+              <el-option v-for="item in templateSourceTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </div>
           <div class="variable-template-list">
-            <div v-for="item in templateList" :key="item.templateCode" class="variable-template-card" :class="{ 'is-active': templateForm.templateCode === item.templateCode }" @click="templateForm.templateCode = item.templateCode">
+            <div v-for="item in filteredTemplateList" :key="item.templateCode" class="variable-template-card" :class="{ 'is-active': templateForm.templateCode === item.templateCode }" @click="templateForm.templateCode = item.templateCode">
               <div class="variable-template-card__title">{{ item.templateName }}</div>
+              <div class="variable-template-card__code">{{ item.templateCode }}</div>
               <div class="variable-template-card__desc">{{ item.description }}</div>
               <div class="variable-template-card__meta">{{ item.namespaceHint }}</div>
-              <el-tag type="info">{{ item.variableCount }} 个变量</el-tag>
+              <div class="variable-template-card__tags">
+                <el-tag type="info">{{ item.variableCount }} 个变量</el-tag>
+                <el-tag type="success">{{ item.appliedSceneCount || 0 }} 个场景</el-tag>
+                <el-tag type="warning">完整覆盖 {{ item.fullyAppliedSceneCount || 0 }}</el-tag>
+              </div>
+              <div class="variable-template-card__foot">
+                {{ item.latestSceneName ? `最近复用：${item.latestSceneName}` : '暂无复用记录' }}
+              </div>
             </div>
+            <el-empty v-if="!filteredTemplateList.length" description="暂无匹配模板" />
           </div>
         </el-col>
         <el-col :span="13">
           <el-empty v-if="!currentTemplate" description="请选择左侧共享模板" />
           <template v-else>
             <el-alert :title="currentTemplate.templateName" :description="currentTemplate.namespaceHint" type="info" :closable="false" show-icon />
+            <div class="variable-template-summary mt12">
+              <div class="variable-template-summary__item">
+                <span>模板变量数</span>
+                <strong>{{ currentTemplateMetrics.total }}</strong>
+              </div>
+              <div class="variable-template-summary__item">
+                <span>输入变量</span>
+                <strong>{{ currentTemplateMetrics.input }}</strong>
+              </div>
+              <div class="variable-template-summary__item">
+                <span>字典变量</span>
+                <strong>{{ currentTemplateMetrics.dict }}</strong>
+              </div>
+              <div class="variable-template-summary__item">
+                <span>公式变量</span>
+                <strong>{{ currentTemplateMetrics.formula }}</strong>
+              </div>
+            </div>
+            <div class="variable-template-governance mt12">
+              <div class="variable-template-governance__item">
+                <span>已复用场景</span>
+                <strong>{{ currentTemplate.appliedSceneCount || 0 }}</strong>
+              </div>
+              <div class="variable-template-governance__item">
+                <span>完整覆盖场景</span>
+                <strong>{{ currentTemplate.fullyAppliedSceneCount || 0 }}</strong>
+              </div>
+              <div class="variable-template-governance__item">
+                <span>已落地变量</span>
+                <strong>{{ currentTemplate.matchedVariableCount || 0 }}</strong>
+              </div>
+              <div class="variable-template-governance__item">
+                <span>最近复用时间</span>
+                <strong>{{ formatDateTime(currentTemplate.latestAppliedTime) }}</strong>
+              </div>
+            </div>
+            <el-alert
+              class="mt12"
+              type="success"
+              :closable="false"
+              show-icon
+              :title="currentTemplate.latestSceneName ? `最近复用场景：${currentTemplate.latestSceneName}` : '当前模板还没有复用到具体场景。'"
+              :description="currentTemplate.recentSceneNames?.length ? `复用场景示例：${currentTemplate.recentSceneNames.join('、')}` : '模板库目前仍以内置模板为主，可通过左侧选择目标场景直接落地。'"
+            />
+            <el-alert
+              v-if="templateApplyMatchesCurrent"
+              class="mt12"
+              type="success"
+              :closable="false"
+              show-icon
+              :title="`最近一次应用结果：${lastTemplateApplyResult.summary}`"
+              :description="lastTemplateApplyResult.appliedAt ? `应用时间：${formatDateTime(lastTemplateApplyResult.appliedAt)}` : ''"
+            />
+            <el-table :data="currentTemplate.sceneSummaries || []" size="small" class="mt12" max-height="220" empty-text="当前还没有场景复用记录">
+              <el-table-column prop="sceneLabel" label="复用场景" min-width="220" />
+              <el-table-column prop="matchedCount" label="已落地变量" width="110" align="center" />
+              <el-table-column label="覆盖率" width="110" align="center">
+                <template #default="scope">{{ scope.row.coverageRate }}%</template>
+              </el-table-column>
+              <el-table-column label="最近复用时间" min-width="150" align="center">
+                <template #default="scope">{{ formatDateTime(scope.row.latestAppliedTime) }}</template>
+              </el-table-column>
+            </el-table>
+            <div class="variable-template-impact mt12" v-loading="templateImpactLoading">
+              <div class="variable-template-impact__item">
+                <span>场景现有变量</span>
+                <strong>{{ templateImpact.sceneVariableCount }}</strong>
+              </div>
+              <div class="variable-template-impact__item">
+                <span>本次可新增</span>
+                <strong>{{ templateImpact.insertableCount }}</strong>
+              </div>
+              <div class="variable-template-impact__item">
+                <span>编码重叠</span>
+                <strong>{{ templateImpact.overlapCount }}</strong>
+              </div>
+              <div class="variable-template-impact__item">
+                <span>{{ templateForm.updateSupport ? '将覆盖更新' : '将跳过' }}</span>
+                <strong>{{ templateForm.updateSupport ? templateImpact.updateCount : templateImpact.skippedCount }}</strong>
+              </div>
+            </div>
+            <el-alert
+              v-if="templateImpact.overlapCount"
+              class="mt12"
+              :type="templateForm.updateSupport ? 'warning' : 'info'"
+              :closable="false"
+              show-icon
+              :title="templateForm.updateSupport ? '存在同编码变量，应用模板后会覆盖这些变量。' : '存在同编码变量，当前设置下会跳过这些变量。'"
+              :description="templateImpact.skippedCodes.length ? `示例编码：${templateImpact.skippedCodes.join('、')}` : ''"
+            />
+            <el-alert
+              v-if="templateImpact.truncated"
+              class="mt12"
+              type="warning"
+              :closable="false"
+              show-icon
+              title="当前场景变量数量超过本页预演上限，影响预演按前 5000 条变量估算。"
+            />
             <el-table :data="currentTemplate.items" size="small" class="mt12" max-height="360">
               <el-table-column prop="variableCode" label="变量编码" min-width="180" />
               <el-table-column prop="variableName" label="变量名称" min-width="140" />
@@ -368,21 +575,43 @@
 
     <el-drawer v-model="governanceOpen" title="变量治理检查" size="500px" append-to-body>
       <div v-loading="governanceLoading" v-if="governanceInfo.variableId">
+        <div class="variable-governance__summary">
+          <div class="variable-governance__item">
+            <span>允许删除</span>
+            <strong>{{ governanceInfo.canDelete ? '是' : '否' }}</strong>
+          </div>
+          <div class="variable-governance__item">
+            <span>允许停用</span>
+            <strong>{{ governanceInfo.canDisable ? '是' : '否' }}</strong>
+          </div>
+          <div class="variable-governance__item">
+            <span>当前状态</span>
+            <strong>{{ resolveDictLabel(variableStatusOptions, governanceInfo.status) }}</strong>
+          </div>
+          <div class="variable-governance__item">
+            <span>发布引用</span>
+            <strong>{{ governanceInfo.publishedVersionCount }}</strong>
+          </div>
+        </div>
         <el-descriptions :column="1" border>
           <el-descriptions-item label="变量">{{ governanceInfo.variableCode }} / {{ governanceInfo.variableName }}</el-descriptions-item>
+          <el-descriptions-item label="所属场景">{{ governanceInfo.sceneCode }} / {{ governanceInfo.sceneName }}</el-descriptions-item>
           <el-descriptions-item label="费用关系引用">{{ governanceInfo.feeRelCount }}</el-descriptions-item>
           <el-descriptions-item label="规则条件引用">{{ governanceInfo.ruleConditionCount }}</el-descriptions-item>
           <el-descriptions-item label="规则计量引用">{{ governanceInfo.ruleQuantityCount }}</el-descriptions-item>
           <el-descriptions-item label="发布版本引用">{{ governanceInfo.publishedVersionCount }}</el-descriptions-item>
         </el-descriptions>
         <el-alert :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon class="mt12" />
+        <el-alert :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon class="mt12" />
+        <el-alert title="删除建议" :description="governanceInfo.removeAdvice" type="info" :closable="false" show-icon class="mt12" />
+        <el-alert title="停用建议" :description="governanceInfo.disableAdvice" type="info" :closable="false" show-icon class="mt12" />
       </div>
     </el-drawer>
   </div>
 </template>
 
 <script setup name="CostVariable">
-import { computed, getCurrentInstance, reactive, ref, toRefs } from 'vue'
+import { computed, getCurrentInstance, reactive, ref, toRefs, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { optionselectFormula } from '@/api/cost/formula'
@@ -453,6 +682,18 @@ const importPreview = ref({ totalRows: 0, passRows: 0, failRows: 0, importable: 
 const copyOpen = ref(false)
 const copySource = ref({})
 const templateOpen = ref(false)
+const templateImpactLoading = ref(false)
+const templateImpact = ref({
+  sceneVariableCount: 0,
+  templateVariableCount: 0,
+  insertableCount: 0,
+  overlapCount: 0,
+  updateCount: 0,
+  skippedCount: 0,
+  skippedCodes: [],
+  truncated: false
+})
+const lastTemplateApplyResult = ref({})
 const statistics = reactive({ variableCount: 0, enabledVariableCount: 0, remoteVariableCount: 0, formulaVariableCount: 0 })
 const selectedFormulaMeta = computed(() => formulaOptions.value.find(item => item.formulaCode === form.value.formulaCode) || {})
 const dictTypeOptionGroups = computed(() => {
@@ -511,7 +752,93 @@ const metricItems = computed(() => [
   { label: '公式变量数', value: statistics.formulaVariableCount, desc: '来源为公式派生的变量数量' }
 ])
 
+const topTemplates = computed(() => templateList.value.slice(0, 4))
+const templateVariableCount = computed(() => templateList.value.reduce((total, item) => {
+  return total + Number(item.variableCount || item.items?.length || 0)
+}, 0))
+const reusedTemplateCount = computed(() => templateList.value.filter(item => Number(item.appliedSceneCount || 0) > 0).length)
+const templateApplyMatchesCurrent = computed(() => {
+  return templateOpen.value
+    && lastTemplateApplyResult.value?.templateCode
+    && lastTemplateApplyResult.value.templateCode === templateForm.value.templateCode
+    && lastTemplateApplyResult.value.sceneId === templateForm.value.sceneId
+})
+const templateKeyword = ref('')
+const templateSourceTypeFilter = ref(undefined)
+const templateSourceTypeOptions = computed(() => {
+  const values = new Set()
+  templateList.value.forEach(template => {
+    ;(template.items || []).forEach(item => {
+      if (item?.sourceType) {
+        values.add(item.sourceType)
+      }
+    })
+  })
+  return sourceTypeOptions.value.filter(item => values.has(item.value))
+})
+const filteredTemplateList = computed(() => {
+  const keyword = templateKeyword.value?.trim()?.toLowerCase()
+  return templateList.value.filter(item => {
+    const matchesKeyword = !keyword || [item.templateCode, item.templateName, item.description]
+      .filter(Boolean)
+      .some(value => String(value).toLowerCase().includes(keyword))
+    const matchesSource = !templateSourceTypeFilter.value || (item.items || []).some(variable => variable.sourceType === templateSourceTypeFilter.value)
+    return matchesKeyword && matchesSource
+  })
+})
+
 const currentTemplate = computed(() => templateList.value.find(item => item.templateCode === templateForm.value.templateCode))
+const currentTemplateMetrics = computed(() => {
+  const items = currentTemplate.value?.items || []
+  return {
+    total: items.length,
+    input: items.filter(item => item.sourceType === 'INPUT').length,
+    dict: items.filter(item => item.sourceType === 'DICT').length,
+    formula: items.filter(item => item.sourceType === 'FORMULA').length
+  }
+})
+
+function resetTemplateImpact() {
+  templateImpact.value = {
+    sceneVariableCount: 0,
+    templateVariableCount: currentTemplate.value?.items?.length || 0,
+    insertableCount: 0,
+    overlapCount: 0,
+    updateCount: 0,
+    skippedCount: 0,
+    skippedCodes: [],
+    truncated: false
+  }
+}
+
+async function refreshTemplateImpact() {
+  if (!templateOpen.value || !templateForm.value.sceneId || !currentTemplate.value) {
+    resetTemplateImpact()
+    return
+  }
+  templateImpactLoading.value = true
+  try {
+    const response = await listVariable({ sceneId: templateForm.value.sceneId, pageNum: 1, pageSize: 5000 })
+    const rows = response?.rows || []
+    const totalCount = Number(response?.total || rows.length)
+    const existingCodes = new Set(rows.map(item => item.variableCode))
+    const templateItems = currentTemplate.value?.items || []
+    const overlapItems = templateItems.filter(item => existingCodes.has(item.variableCode))
+    const insertableItems = templateItems.filter(item => !existingCodes.has(item.variableCode))
+    templateImpact.value = {
+      sceneVariableCount: totalCount,
+      templateVariableCount: templateItems.length,
+      insertableCount: insertableItems.length,
+      overlapCount: overlapItems.length,
+      updateCount: templateForm.value.updateSupport ? overlapItems.length : 0,
+      skippedCount: templateForm.value.updateSupport ? 0 : overlapItems.length,
+      skippedCodes: overlapItems.slice(0, 8).map(item => item.variableCode),
+      truncated: totalCount > rows.length
+    }
+  } finally {
+    templateImpactLoading.value = false
+  }
+}
 
 async function loadBaseOptions() {
   const dictTypeResponsePromise = dictTypeOptions.value.length
@@ -624,6 +951,13 @@ async function loadTemplateGroups() {
     templateForm.value.groupId = undefined
   }
 }
+
+watch(
+  [() => templateOpen.value, () => templateForm.value.sceneId, () => templateForm.value.templateCode, () => templateForm.value.updateSupport],
+  () => {
+    refreshTemplateImpact()
+  }
+)
 
 function resetFormModel() {
   form.value = {
@@ -899,15 +1233,34 @@ async function handleTemplateCenter() {
   templateForm.value.groupId = queryParams.value.groupId
   templateForm.value.templateCode = templateList.value[0]?.templateCode
   templateForm.value.updateSupport = false
+  templateKeyword.value = ''
+  templateSourceTypeFilter.value = undefined
+  resetTemplateImpact()
   templateGroupOptions.value = await loadGroups(templateForm.value.sceneId)
   templateOpen.value = true
 }
 
 async function submitTemplateApply() {
   const response = await applyVariableTemplate(templateForm.value)
+  const sceneMeta = sceneOptions.value.find(item => item.sceneId === templateForm.value.sceneId)
+  const templateMeta = templateList.value.find(item => item.templateCode === templateForm.value.templateCode)
+  const groupMeta = templateGroupOptions.value.find(item => item.groupId === templateForm.value.groupId)
+  lastTemplateApplyResult.value = {
+    ...response.data,
+    sceneId: templateForm.value.sceneId,
+    sceneLabel: sceneMeta ? `${sceneMeta.sceneCode} / ${sceneMeta.sceneName}` : '-',
+    groupName: groupMeta?.groupName || '未指定分组',
+    templateName: templateMeta?.templateName || templateForm.value.templateCode,
+    appliedAt: new Date(),
+    summary: response.data?.message || '共享模板应用成功'
+  }
   proxy.$modal.msgSuccess(response.data?.message || '共享模板应用成功')
   templateOpen.value = false
   getList()
+}
+
+function openFormulaWorkbench() {
+  proxy.$router.push({ path: '/cost/formula', query: { sceneId: form.value.sceneId || queryParams.value.sceneId || '' } })
 }
 
 function resolveDictLabel(optionsRef, value) {
@@ -934,6 +1287,24 @@ function formatJson(value) {
   }
 }
 
+function formatDateTime(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  const parts = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ]
+  const time = [
+    String(date.getHours()).padStart(2, '0'),
+    String(date.getMinutes()).padStart(2, '0')
+  ]
+  return `${parts.join('-')} ${time.join(':')}`
+}
+
 onActivated(() => {
   getList()
 })
@@ -951,22 +1322,85 @@ getList()
 .variable-center__metric-card { display: grid; gap: 6px; padding: 14px 16px; border: 1px solid var(--el-border-color-light); border-radius: 12px; background: var(--el-bg-color-overlay); }
 .variable-center__metric-label, .variable-center__metric-desc { font-size: 12px; color: var(--el-text-color-secondary); }
 .variable-center__metric-value { font-size: 24px; color: var(--el-color-primary); }
+.variable-center__workspace { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.variable-center__work-card { display: grid; gap: 16px; padding: 18px; border: 1px solid var(--el-border-color-light); border-radius: 16px; background: linear-gradient(180deg, color-mix(in srgb, var(--el-color-primary-light-9) 10%, var(--el-bg-color-overlay)), var(--el-bg-color-overlay)); }
+.variable-center__work-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.variable-center__work-head h3 { margin: 0; font-size: 16px; }
+.variable-center__work-head p { margin: 8px 0 0; color: var(--el-text-color-secondary); line-height: 1.7; }
+.variable-center__template-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.variable-center__template-metric { display: grid; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--el-fill-color-extra-light); }
+.variable-center__template-metric span { font-size: 12px; color: var(--el-text-color-secondary); }
+.variable-center__template-metric strong { font-size: 20px; color: var(--el-color-primary); }
+.variable-center__template-tags { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.variable-center__latest-apply { display: grid; gap: 4px; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--el-color-success-light-9) 34%, var(--el-bg-color-overlay)); }
+.variable-center__latest-apply strong { font-size: 13px; color: var(--el-color-success); }
+.variable-center__latest-apply span { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.7; }
+.variable-center__muted { font-size: 12px; color: var(--el-text-color-secondary); }
+.variable-center__action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.variable-center__action-card { display: grid; gap: 6px; padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 14px; background: var(--el-bg-color-overlay); text-align: left; transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; cursor: pointer; }
+.variable-center__action-card strong { font-size: 14px; color: var(--el-text-color-primary); }
+.variable-center__action-card span { font-size: 12px; line-height: 1.7; color: var(--el-text-color-secondary); }
+.variable-center__action-card:hover { border-color: color-mix(in srgb, var(--el-color-primary) 40%, var(--el-border-color-light)); box-shadow: 0 10px 24px rgba(24, 144, 255, 0.08); transform: translateY(-1px); }
+.variable-center__guide-list { display: grid; gap: 10px; }
+.variable-center__guide-item { display: grid; grid-template-columns: auto 1fr; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--el-fill-color-extra-light); }
+.variable-center__guide-item span { color: var(--el-text-color-secondary); line-height: 1.7; }
 .variable-center__drawer-tip { margin-bottom: 16px; padding: 12px 14px; border-radius: 12px; color: var(--el-text-color-regular); background: color-mix(in srgb, var(--el-color-primary-light-9) 32%, var(--el-bg-color-overlay)); line-height: 1.8; }
 .variable-center__drawer-tip--compact { margin-top: 10px; margin-bottom: 0; padding: 10px 12px; font-size: 12px; }
+.variable-center__drawer-actions { display: flex; justify-content: flex-end; margin: -6px 0 10px; }
 .variable-center__formula-preview { width: 100%; padding: 12px 14px; border-radius: 12px; background: var(--el-fill-color-light); line-height: 1.7; color: var(--el-text-color-regular); }
 .variable-detail { display: grid; gap: 14px; }
 .variable-detail__header { padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 12px; }
 .variable-detail__title { font-size: 18px; font-weight: 700; }
 .variable-detail__meta { margin-top: 6px; color: var(--el-text-color-secondary); font-size: 12px; }
 .variable-detail__json { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: Consolas, Monaco, monospace; }
+.variable-governance__summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.variable-governance__item { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: var(--el-fill-color-extra-light); }
+.variable-governance__item span { font-size: 12px; color: var(--el-text-color-secondary); }
+.variable-governance__item strong { font-size: 18px; color: var(--el-text-color-primary); }
+.variable-template-toolbar { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; margin-bottom: 12px; }
 .variable-template-list { display: grid; gap: 12px; max-height: 420px; overflow: auto; }
 .variable-template-card { padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 12px; cursor: pointer; background: var(--el-bg-color-overlay); display: grid; gap: 8px; }
 .variable-template-card.is-active { border-color: var(--el-color-primary); box-shadow: 0 0 0 1px color-mix(in srgb, var(--el-color-primary) 24%, transparent); }
 .variable-template-card__title { font-weight: 700; }
+.variable-template-card__code,
 .variable-template-card__desc, .variable-template-card__meta { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.7; }
+.variable-template-card__tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.variable-template-card__foot { font-size: 12px; color: var(--el-text-color-secondary); }
+.variable-template-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.variable-template-summary__item { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: var(--el-fill-color-extra-light); }
+.variable-template-summary__item span { font-size: 12px; color: var(--el-text-color-secondary); }
+.variable-template-summary__item strong { font-size: 18px; color: var(--el-color-primary); }
+.variable-template-governance { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.variable-template-governance__item { display: grid; gap: 4px; padding: 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--el-color-success) 24%, var(--el-border-color-light)); background: color-mix(in srgb, var(--el-color-success-light-9) 30%, var(--el-bg-color-overlay)); }
+.variable-template-governance__item span { font-size: 12px; color: var(--el-text-color-secondary); }
+.variable-template-governance__item strong { font-size: 18px; color: var(--el-text-color-primary); }
+.variable-template-impact { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.variable-template-impact__item { display: grid; gap: 4px; padding: 12px; border-radius: 12px; border: 1px solid var(--el-border-color-light); background: var(--el-bg-color-overlay); }
+.variable-template-impact__item span { font-size: 12px; color: var(--el-text-color-secondary); }
+.variable-template-impact__item strong { font-size: 18px; color: var(--el-text-color-primary); }
 .mt12 { margin-top: 12px; }
 
 @media (max-width: 1200px) {
   .variable-center__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .variable-center__workspace { grid-template-columns: 1fr; }
+  .variable-center__template-metrics,
+  .variable-center__action-grid,
+  .variable-governance__summary,
+  .variable-template-summary,
+  .variable-template-governance,
+  .variable-template-impact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 768px) {
+  .variable-center__hero,
+  .variable-center__work-head { flex-direction: column; }
+  .variable-center__metrics,
+  .variable-center__template-metrics,
+  .variable-center__action-grid,
+  .variable-governance__summary,
+  .variable-template-toolbar,
+  .variable-template-summary,
+  .variable-template-governance,
+  .variable-template-impact { grid-template-columns: 1fr; }
 }
 </style>

@@ -13,7 +13,7 @@ import java.util.Map;
  * 在规则中心工作区内，允许业务人员针对单个费目录入多变量样本值，
  * 直接预演当前规则草稿是否命中条件、命中哪一档阶梯。
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostRuleTierPreviewBo

@@ -31,7 +31,7 @@ import java.util.Map;
 /**
  * 变量中心控制器。
  *
- * @author codex
+ * @author HwFan
  */
 @RestController
 @RequestMapping("/cost/variable")

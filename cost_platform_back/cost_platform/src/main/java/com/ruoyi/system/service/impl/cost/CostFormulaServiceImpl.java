@@ -35,7 +35,7 @@ import java.util.Map;
  * <p>线程七在这里建立“公式主数据 -> 测试验证 -> 被变量/规则引用”的治理主线，
  * 先把公式作为独立资产做对，再在后续线程逐步扩大引用范围。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Service
 public class CostFormulaServiceImpl implements ICostFormulaService

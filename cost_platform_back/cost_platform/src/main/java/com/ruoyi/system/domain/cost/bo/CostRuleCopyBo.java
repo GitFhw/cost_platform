@@ -14,7 +14,7 @@ import java.util.List;
  *
  * 线程三要求复制规则时保留原规则结构，只调整新规则基础信息和条件值。
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostRuleCopyBo

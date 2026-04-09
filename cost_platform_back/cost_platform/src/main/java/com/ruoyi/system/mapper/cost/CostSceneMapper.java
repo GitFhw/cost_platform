@@ -9,7 +9,7 @@ import com.ruoyi.system.domain.vo.CostSceneGovernanceCheckVo;
 /**
  * 场景中心Mapper接口
  * 
- * @author codex
+ * @author HwFan
  */
 public interface CostSceneMapper extends BaseMapper<CostScene>
 {

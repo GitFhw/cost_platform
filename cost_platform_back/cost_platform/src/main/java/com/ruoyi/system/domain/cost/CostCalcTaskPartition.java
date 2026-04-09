@@ -8,6 +8,7 @@ import lombok.Data;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.Date;
 
 /**
@@ -16,7 +17,7 @@ import java.util.Date;
  * <p>分片表用于承接大批量正式核算的调度状态、执行统计和错误摘要，
  * 让任务头、分片、明细三层职责清晰分离，为后续百万级任务重试和监控提供基础。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @TableName("cost_calc_task_partition")
@@ -68,6 +69,30 @@ public class CostCalcTaskPartition implements Serializable
     /** 分片失败条数 */
     @TableField("fail_count")
     private Integer failCount;
+
+    /** 当前认领执行节点 */
+    @TableField("execute_node")
+    private String executeNode;
+
+    /** 最近认领时间 */
+    @TableField("claim_time")
+    private Date claimTime;
+
+    /** 分片金额汇总 */
+    @TableField("amount_total")
+    private BigDecimal amountTotal;
+
+    /** 结果落库模式 */
+    @TableField("persist_mode")
+    private String persistMode;
+
+    /** 恢复提示 */
+    @TableField("recovery_hint")
+    private String recoveryHint;
+
+    /** 最近错误阶段 */
+    @TableField("last_error_stage")
+    private String lastErrorStage;
 
     /** 分片开始时间 */
     @TableField("started_time")

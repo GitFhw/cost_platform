@@ -6,12 +6,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ruoyi.common.constant.CacheConstants;
 import com.ruoyi.common.core.redis.RedisCache;
+import com.ruoyi.system.domain.cost.CostAlarmRecord;
 import com.ruoyi.system.domain.cost.CostFormula;
 import com.ruoyi.system.domain.cost.CostPublishVersion;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.mapper.cost.CostFormulaMapper;
 import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
+import com.ruoyi.system.service.cost.ICostAlarmService;
+import com.ruoyi.system.service.impl.cost.CostDistributedLockSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -25,6 +28,7 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.Iterator;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -67,6 +71,12 @@ class CostGovernanceControllerManualIT
 
     @Autowired
     private CostFormulaMapper formulaMapper;
+
+    @Autowired
+    private ICostAlarmService alarmService;
+
+    @Autowired
+    private CostDistributedLockSupport distributedLockSupport;
 
     @Test
     void shouldQueryAckAndResolveTaskAlarmFromGovernanceCenter() throws Exception
@@ -256,6 +266,84 @@ class CostGovernanceControllerManualIT
                 .andExpect(status().isOk())
                 .andReturn());
         assertThat(refreshedCacheStats.path("exists").asBoolean()).isFalse();
+    }
+
+    @Test
+    void shouldBlockRuntimeCacheRefreshWhenRefreshLockExists() throws Exception
+    {
+        Long sceneId = requireSceneId();
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+        Long versionId = publishScene(sceneId, authorization, "cache-lock-baseline-" + stamp);
+        String lockKey = distributedLockSupport.buildRuntimeCacheLockKey(null, versionId);
+        redisCache.setCacheObject(lockKey, "itest-lock", 30, TimeUnit.SECONDS);
+
+        try
+        {
+            JsonNode response = readBody(mockMvc.perform(put("/cost/governance/cache/refresh")
+                            .header("Authorization", authorization)
+                            .param("versionId", String.valueOf(versionId)))
+                    .andExpect(status().isOk())
+                    .andReturn());
+            assertThat(response.path("code").asInt()).isEqualTo(500);
+            assertThat(response.path("msg").asText()).contains("运行缓存");
+        }
+        finally
+        {
+            redisCache.deleteObject(lockKey);
+        }
+    }
+
+    @Test
+    void shouldAutoResolveCacheAlarmAfterRefreshRuntimeCache() throws Exception
+    {
+        Long sceneId = requireSceneId();
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+        Long versionId = publishScene(sceneId, authorization, "governance-cache-heal-" + stamp);
+
+        CostAlarmRecord alarm = new CostAlarmRecord();
+        alarm.setSceneId(sceneId);
+        alarm.setVersionId(versionId);
+        alarm.setAlarmType("CACHE_REFRESH_FAILED");
+        alarm.setAlarmLevel("ERROR");
+        alarm.setAlarmTitle("运行快照缓存刷新失败");
+        alarm.setAlarmContent("用于验证缓存刷新成功后的自动自愈。");
+        alarm.setSourceKey("CACHE:" + versionId);
+        alarmService.createAlarm(alarm);
+
+        JsonNode openAlarmList = readBody(mockMvc.perform(get("/cost/governance/alarm/list")
+                        .header("Authorization", authorization)
+                        .param("sceneId", String.valueOf(sceneId))
+                        .param("alarmStatus", "OPEN")
+                        .param("pageNum", "1")
+                        .param("pageSize", "20"))
+                .andExpect(status().isOk())
+                .andReturn());
+        JsonNode cacheAlarm = findNodeByField(openAlarmList.path("rows"), "sourceKey", "CACHE:" + versionId);
+        assertThat(cacheAlarm).isNotNull();
+
+        JsonNode refreshResponse = readBody(mockMvc.perform(put("/cost/governance/cache/refresh")
+                        .header("Authorization", authorization)
+                        .param("sceneId", String.valueOf(sceneId))
+                        .param("versionId", String.valueOf(versionId)))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(refreshResponse.path("code").asInt()).isEqualTo(200);
+
+        JsonNode resolvedAlarmList = readBody(mockMvc.perform(get("/cost/governance/alarm/list")
+                        .header("Authorization", authorization)
+                        .param("sceneId", String.valueOf(sceneId))
+                        .param("alarmStatus", "RESOLVED")
+                        .param("pageNum", "1")
+                        .param("pageSize", "20"))
+                .andExpect(status().isOk())
+                .andReturn());
+        JsonNode resolvedAlarm = findNodeByField(resolvedAlarmList.path("rows"), "sourceKey", "CACHE:" + versionId);
+        assertThat(resolvedAlarm).isNotNull();
+        assertThat(resolvedAlarm.path("alarmStatus").asText()).isEqualTo("RESOLVED");
     }
 
     private Long requireSceneId()

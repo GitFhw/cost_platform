@@ -8,7 +8,7 @@ import java.util.Map;
  * <p>线程七开始统一承接公式、变量公式与规则公式的语法校验和执行入口，
  * 为后续公式编码引用、快照执行和追溯解释提供一致能力。</p>
  *
- * @author codex
+ * @author HwFan
  */
 public interface ICostExpressionService
 {

@@ -12,7 +12,7 @@ import java.util.Map;
 /**
  * 规则中心 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostRuleMapper extends BaseMapper<CostRule>
 {

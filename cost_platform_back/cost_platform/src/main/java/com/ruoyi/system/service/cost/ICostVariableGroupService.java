@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * 变量分组服务接口
  *
- * @author codex
+ * @author HwFan
  */
 public interface ICostVariableGroupService
 {

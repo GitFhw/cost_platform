@@ -5,11 +5,13 @@ import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
+import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostCalcInputBatch;
 import com.ruoyi.system.domain.cost.CostCalcTask;
 import com.ruoyi.system.domain.cost.CostResultLedger;
 import com.ruoyi.system.domain.cost.CostSimulationRecord;
 import com.ruoyi.system.domain.cost.bo.CostCalcInputBatchCreateBo;
+import com.ruoyi.system.domain.cost.bo.CostInputBuildPreviewBo;
 import com.ruoyi.system.domain.cost.bo.CostFeeCalculateBo;
 import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
 import com.ruoyi.system.domain.cost.bo.CostSimulationExecuteBo;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 
 /**
@@ -34,7 +37,7 @@ import java.util.List;
  * <p>统一承接试算、正式核算任务、结果台账和追溯解释的接口入口。
  * 当前阶段只实现线程五范围内的运行链路，不提前实现线程六的重算、审计和治理增强。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @RestController
 @RequestMapping("/cost/run")
@@ -68,6 +71,14 @@ public class CostRunController extends BaseController
     /**
      * 执行单笔试算
      */
+    @PreAuthorize("@ss.hasPermi('cost:simulation:list') or @ss.hasPermi('cost:task:list')")
+    @Log(title = "数据接入", businessType = BusinessType.OTHER)
+    @PostMapping("/input-build/preview")
+    public AjaxResult previewInputBuild(@Validated @RequestBody CostInputBuildPreviewBo bo)
+    {
+        return success(runService.previewBuiltInput(bo));
+    }
+
     @PreAuthorize("@ss.hasPermi('cost:simulation:execute')")
     @Log(title = "试算中心", businessType = BusinessType.INSERT)
     @PostMapping("/simulation/execute")
@@ -168,9 +179,11 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:task:query')")
     @GetMapping("/task/input-batch/{batchId}")
-    public AjaxResult inputBatchDetail(@PathVariable Long batchId)
+    public AjaxResult inputBatchDetail(@PathVariable Long batchId,
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize)
     {
-        return success(runService.selectInputBatchDetail(batchId));
+        return success(runService.selectInputBatchDetail(batchId, pageNum, pageSize));
     }
 
     /**
@@ -178,9 +191,11 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:task:query')")
     @GetMapping("/task/{taskId}")
-    public AjaxResult taskDetail(@PathVariable Long taskId)
+    public AjaxResult taskDetail(@PathVariable Long taskId,
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "20") Integer pageSize)
     {
-        return success(runService.selectTaskDetail(taskId));
+        return success(runService.selectTaskDetail(taskId, pageNum, pageSize));
     }
 
     /**
@@ -236,6 +251,18 @@ public class CostRunController extends BaseController
         startPage();
         List<CostResultLedger> list = runService.selectResultList(query);
         return getDataTable(list);
+    }
+
+    /**
+     * 导出结果台账
+     */
+    @PreAuthorize("@ss.hasPermi('cost:result:list')")
+    @PostMapping("/result/export")
+    public void exportResult(HttpServletResponse response, CostResultLedger query)
+    {
+        List<CostResultLedger> list = runService.selectResultList(query);
+        ExcelUtil<CostResultLedger> util = new ExcelUtil<>(CostResultLedger.class);
+        util.exportExcel(response, list, "结果台账");
     }
 
     /**
