@@ -12,8 +12,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface CostVariableMapper extends BaseMapper<CostVariable>
-{
+public interface CostVariableMapper extends BaseMapper<CostVariable> {
     /**
      * 查询变量列表
      */

@@ -15,14 +15,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -35,8 +28,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/cost/variable")
-public class CostVariableController extends BaseController
-{
+public class CostVariableController extends BaseController {
     @Autowired
     private ICostVariableService variableService;
 
@@ -45,8 +37,7 @@ public class CostVariableController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/list")
-    public TableDataInfo list(CostVariable variable)
-    {
+    public TableDataInfo list(CostVariable variable) {
         startPage();
         List<CostVariable> list = variableService.selectVariableList(variable);
         return getDataTable(list);
@@ -57,8 +48,7 @@ public class CostVariableController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/stats")
-    public AjaxResult stats(CostVariable variable)
-    {
+    public AjaxResult stats(CostVariable variable) {
         return success(variableService.selectVariableStats(variable));
     }
 
@@ -67,8 +57,7 @@ public class CostVariableController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/governance/{variableId}")
-    public AjaxResult governance(@PathVariable Long variableId)
-    {
+    public AjaxResult governance(@PathVariable Long variableId) {
         return success(variableService.selectVariableGovernanceCheck(variableId));
     }
 
@@ -77,8 +66,7 @@ public class CostVariableController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/optionselect")
-    public AjaxResult optionselect(CostVariable variable)
-    {
+    public AjaxResult optionselect(CostVariable variable) {
         return success(variableService.selectVariableOptions(variable));
     }
 
@@ -88,8 +76,7 @@ public class CostVariableController extends BaseController
     @Log(title = "变量中心", businessType = BusinessType.EXPORT)
     @PreAuthorize("@ss.hasPermi('cost:variable:export')")
     @PostMapping("/export")
-    public void export(HttpServletResponse response, CostVariable variable)
-    {
+    public void export(HttpServletResponse response, CostVariable variable) {
         List<CostVariable> list = variableService.selectVariableList(variable);
         ExcelUtil<CostVariable> util = new ExcelUtil<>(CostVariable.class);
         util.exportExcel(response, list, "变量中心");
@@ -100,8 +87,7 @@ public class CostVariableController extends BaseController
      */
     @PostMapping("/importTemplate")
     @PreAuthorize("@ss.hasPermi('cost:variable:export')")
-    public void importTemplate(HttpServletResponse response)
-    {
+    public void importTemplate(HttpServletResponse response) {
         ExcelUtil<CostVariableImportRow> util = new ExcelUtil<>(CostVariableImportRow.class);
         util.importTemplateExcel(response, "变量导入模板", "线程二-变量导入模板");
     }
@@ -111,8 +97,7 @@ public class CostVariableController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:add')")
     @PostMapping("/importPreview")
-    public AjaxResult importPreview(MultipartFile file) throws Exception
-    {
+    public AjaxResult importPreview(MultipartFile file) throws Exception {
         return success(variableService.previewImport(file));
     }
 
@@ -122,8 +107,7 @@ public class CostVariableController extends BaseController
     @Log(title = "变量中心", businessType = BusinessType.IMPORT)
     @PreAuthorize("@ss.hasPermi('cost:variable:add')")
     @PostMapping("/importData")
-    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception
-    {
+    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception {
         return success(variableService.importVariables(file, updateSupport, getUsername()));
     }
 
@@ -132,8 +116,7 @@ public class CostVariableController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:query')")
     @GetMapping("/{variableId}")
-    public AjaxResult getInfo(@PathVariable Long variableId)
-    {
+    public AjaxResult getInfo(@PathVariable Long variableId) {
         return success(variableService.selectVariableById(variableId));
     }
 
@@ -143,10 +126,8 @@ public class CostVariableController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:variable:add')")
     @Log(title = "变量中心", businessType = BusinessType.INSERT)
     @PostMapping
-    public AjaxResult add(@Validated @RequestBody CostVariable variable)
-    {
-        if (!variableService.checkVariableCodeUnique(variable))
-        {
+    public AjaxResult add(@Validated @RequestBody CostVariable variable) {
+        if (!variableService.checkVariableCodeUnique(variable)) {
             return error("新增变量'" + variable.getVariableName() + "'失败，同场景下变量编码已存在");
         }
         variable.setCreateBy(getUsername());
@@ -159,10 +140,8 @@ public class CostVariableController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:variable:edit')")
     @Log(title = "变量中心", businessType = BusinessType.UPDATE)
     @PutMapping
-    public AjaxResult edit(@Validated @RequestBody CostVariable variable)
-    {
-        if (!variableService.checkVariableCodeUnique(variable))
-        {
+    public AjaxResult edit(@Validated @RequestBody CostVariable variable) {
+        if (!variableService.checkVariableCodeUnique(variable)) {
             return error("修改变量'" + variable.getVariableName() + "'失败，同场景下变量编码已存在");
         }
         variable.setUpdateBy(getUsername());
@@ -175,8 +154,7 @@ public class CostVariableController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:variable:add')")
     @Log(title = "变量中心", businessType = BusinessType.INSERT)
     @PostMapping("/copy")
-    public AjaxResult copy(@RequestBody CostVariableCopyRequest request)
-    {
+    public AjaxResult copy(@RequestBody CostVariableCopyRequest request) {
         return success(variableService.copyVariable(request));
     }
 
@@ -185,8 +163,7 @@ public class CostVariableController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/sharedTemplates")
-    public AjaxResult sharedTemplates()
-    {
+    public AjaxResult sharedTemplates() {
         return success(variableService.selectSharedTemplates());
     }
 
@@ -196,8 +173,7 @@ public class CostVariableController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:variable:add')")
     @Log(title = "变量中心", businessType = BusinessType.INSERT)
     @PostMapping("/sharedTemplates/apply")
-    public AjaxResult applySharedTemplate(@RequestBody CostVariableTemplateApplyRequest request)
-    {
+    public AjaxResult applySharedTemplate(@RequestBody CostVariableTemplateApplyRequest request) {
         return success(variableService.applySharedTemplate(request, getUsername()));
     }
 
@@ -207,8 +183,7 @@ public class CostVariableController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:variable:remove')")
     @Log(title = "变量中心", businessType = BusinessType.DELETE)
     @DeleteMapping("/{variableIds}")
-    public AjaxResult remove(@PathVariable Long[] variableIds)
-    {
+    public AjaxResult remove(@PathVariable Long[] variableIds) {
         return toAjax(variableService.deleteVariableByIds(variableIds));
     }
 
@@ -217,8 +192,7 @@ public class CostVariableController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:edit')")
     @PostMapping("/remote/test")
-    public AjaxResult testRemote(@RequestBody Map<String, Object> request)
-    {
+    public AjaxResult testRemote(@RequestBody Map<String, Object> request) {
         return success(variableService.testRemoteConnection(request));
     }
 
@@ -227,8 +201,7 @@ public class CostVariableController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @PostMapping("/remote/preview")
-    public AjaxResult previewRemote(@RequestBody Map<String, Object> request)
-    {
+    public AjaxResult previewRemote(@RequestBody Map<String, Object> request) {
         return success(variableService.previewRemoteData(request));
     }
 
@@ -237,11 +210,9 @@ public class CostVariableController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:edit')")
     @PostMapping("/remote/refresh")
-    public AjaxResult refreshRemote(@RequestBody(required = false) Map<String, Object> request)
-    {
+    public AjaxResult refreshRemote(@RequestBody(required = false) Map<String, Object> request) {
         Long sceneId = null;
-        if (request != null && request.get("sceneId") != null)
-        {
+        if (request != null && request.get("sceneId") != null) {
             sceneId = Long.valueOf(String.valueOf(request.get("sceneId")));
         }
         return success(variableService.refreshRemoteCache(sceneId));

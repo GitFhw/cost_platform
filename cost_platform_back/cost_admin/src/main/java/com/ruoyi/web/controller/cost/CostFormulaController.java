@@ -14,14 +14,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -32,8 +25,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/cost/formula")
-public class CostFormulaController extends BaseController
-{
+public class CostFormulaController extends BaseController {
     @Autowired
     private ICostFormulaService formulaService;
 
@@ -42,8 +34,7 @@ public class CostFormulaController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:formula:list')")
     @GetMapping("/list")
-    public TableDataInfo list(CostFormula formula)
-    {
+    public TableDataInfo list(CostFormula formula) {
         startPage();
         List<CostFormula> list = formulaService.selectFormulaList(formula);
         return getDataTable(list);
@@ -54,8 +45,7 @@ public class CostFormulaController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:formula:list')")
     @GetMapping("/stats")
-    public AjaxResult stats(CostFormula formula)
-    {
+    public AjaxResult stats(CostFormula formula) {
         return success(formulaService.selectFormulaStats(formula));
     }
 
@@ -64,8 +54,7 @@ public class CostFormulaController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:formula:list')")
     @GetMapping("/governance/{formulaId}")
-    public AjaxResult governance(@PathVariable Long formulaId)
-    {
+    public AjaxResult governance(@PathVariable Long formulaId) {
         return success(formulaService.selectFormulaGovernanceCheck(formulaId));
     }
 
@@ -74,8 +63,7 @@ public class CostFormulaController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:formula:list')")
     @GetMapping("/optionselect")
-    public AjaxResult optionselect(CostFormula formula)
-    {
+    public AjaxResult optionselect(CostFormula formula) {
         return success(formulaService.selectFormulaOptions(formula));
     }
 
@@ -84,8 +72,7 @@ public class CostFormulaController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:formula:list')")
     @GetMapping("/templateOptions")
-    public AjaxResult templateOptions(CostFormula formula)
-    {
+    public AjaxResult templateOptions(CostFormula formula) {
         return success(formulaService.selectTemplateOptions(formula));
     }
 
@@ -95,8 +82,7 @@ public class CostFormulaController extends BaseController
     @Log(title = "公式实验室", businessType = BusinessType.EXPORT)
     @PreAuthorize("@ss.hasPermi('cost:formula:export')")
     @PostMapping("/export")
-    public void export(HttpServletResponse response, CostFormula formula)
-    {
+    public void export(HttpServletResponse response, CostFormula formula) {
         List<CostFormula> list = formulaService.selectFormulaList(formula);
         ExcelUtil<CostFormula> util = new ExcelUtil<>(CostFormula.class);
         util.exportExcel(response, list, "公式实验室");
@@ -107,8 +93,7 @@ public class CostFormulaController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:formula:query')")
     @GetMapping("/{formulaId}")
-    public AjaxResult getInfo(@PathVariable Long formulaId)
-    {
+    public AjaxResult getInfo(@PathVariable Long formulaId) {
         return success(formulaService.selectFormulaById(formulaId));
     }
 
@@ -117,8 +102,7 @@ public class CostFormulaController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:formula:query')")
     @GetMapping("/versions/{formulaId}")
-    public AjaxResult versions(@PathVariable Long formulaId)
-    {
+    public AjaxResult versions(@PathVariable Long formulaId) {
         List<CostFormulaVersion> list = formulaService.selectFormulaVersionList(formulaId);
         return success(list);
     }
@@ -128,8 +112,7 @@ public class CostFormulaController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:formula:query')")
     @GetMapping("/version/{versionId}")
-    public AjaxResult version(@PathVariable Long versionId)
-    {
+    public AjaxResult version(@PathVariable Long versionId) {
         return success(formulaService.selectFormulaVersionDetail(versionId));
     }
 
@@ -139,8 +122,7 @@ public class CostFormulaController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:formula:edit')")
     @Log(title = "公式实验室", businessType = BusinessType.UPDATE)
     @PutMapping("/version/rollback/{versionId}")
-    public AjaxResult rollbackVersion(@PathVariable Long versionId)
-    {
+    public AjaxResult rollbackVersion(@PathVariable Long versionId) {
         return toAjax(formulaService.rollbackFormulaVersion(versionId, getUsername()));
     }
 
@@ -150,10 +132,8 @@ public class CostFormulaController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:formula:add')")
     @Log(title = "公式实验室", businessType = BusinessType.INSERT)
     @PostMapping
-    public AjaxResult add(@Validated @RequestBody CostFormula formula)
-    {
-        if (!formulaService.checkFormulaCodeUnique(formula))
-        {
+    public AjaxResult add(@Validated @RequestBody CostFormula formula) {
+        if (!formulaService.checkFormulaCodeUnique(formula)) {
             return error("新增公式'" + formula.getFormulaName() + "'失败，同场景下公式编码已存在");
         }
         formula.setCreateBy(getUsername());
@@ -166,10 +146,8 @@ public class CostFormulaController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:formula:edit')")
     @Log(title = "公式实验室", businessType = BusinessType.UPDATE)
     @PutMapping
-    public AjaxResult edit(@Validated @RequestBody CostFormula formula)
-    {
-        if (!formulaService.checkFormulaCodeUnique(formula))
-        {
+    public AjaxResult edit(@Validated @RequestBody CostFormula formula) {
+        if (!formulaService.checkFormulaCodeUnique(formula)) {
             return error("修改公式'" + formula.getFormulaName() + "'失败，同场景下公式编码已存在");
         }
         formula.setUpdateBy(getUsername());
@@ -182,8 +160,7 @@ public class CostFormulaController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:formula:remove')")
     @Log(title = "公式实验室", businessType = BusinessType.DELETE)
     @DeleteMapping("/{formulaIds}")
-    public AjaxResult remove(@PathVariable Long[] formulaIds)
-    {
+    public AjaxResult remove(@PathVariable Long[] formulaIds) {
         return toAjax(formulaService.deleteFormulaByIds(formulaIds));
     }
 
@@ -192,8 +169,7 @@ public class CostFormulaController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:formula:test')")
     @PostMapping("/test")
-    public AjaxResult test(@RequestBody CostFormulaTestBo bo)
-    {
+    public AjaxResult test(@RequestBody CostFormulaTestBo bo) {
         return success(formulaService.testFormula(bo, getUsername()));
     }
 }

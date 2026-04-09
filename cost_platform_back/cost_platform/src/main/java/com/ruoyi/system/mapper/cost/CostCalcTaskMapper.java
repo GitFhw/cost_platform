@@ -8,6 +8,5 @@ import com.ruoyi.system.domain.cost.CostCalcTask;
  *
  * @author HwFan
  */
-public interface CostCalcTaskMapper extends BaseMapper<CostCalcTask>
-{
+public interface CostCalcTaskMapper extends BaseMapper<CostCalcTask> {
 }

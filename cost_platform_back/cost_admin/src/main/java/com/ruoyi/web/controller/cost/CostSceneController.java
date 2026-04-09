@@ -1,18 +1,5 @@
 package com.ruoyi.web.controller.cost;
 
-import java.util.List;
-import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
@@ -21,16 +8,22 @@ import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.service.cost.ICostSceneService;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * 场景中心控制器
- * 
+ *
  * @author HwFan
  */
 @RestController
 @RequestMapping("/cost/scene")
-public class CostSceneController extends BaseController
-{
+public class CostSceneController extends BaseController {
     @Autowired
     private ICostSceneService sceneService;
 
@@ -39,8 +32,7 @@ public class CostSceneController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:scene:list')")
     @GetMapping("/list")
-    public TableDataInfo list(CostScene scene)
-    {
+    public TableDataInfo list(CostScene scene) {
         startPage();
         List<CostScene> list = sceneService.selectSceneList(scene);
         return getDataTable(list);
@@ -51,8 +43,7 @@ public class CostSceneController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:scene:list')")
     @GetMapping("/stats")
-    public AjaxResult stats(CostScene scene)
-    {
+    public AjaxResult stats(CostScene scene) {
         return success(sceneService.selectSceneStats(scene));
     }
 
@@ -61,8 +52,7 @@ public class CostSceneController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:scene:list')")
     @GetMapping("/governance/{sceneId}")
-    public AjaxResult governance(@PathVariable Long sceneId)
-    {
+    public AjaxResult governance(@PathVariable Long sceneId) {
         return success(sceneService.selectSceneGovernanceCheck(sceneId));
     }
 
@@ -71,8 +61,7 @@ public class CostSceneController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:scene:list')")
     @GetMapping("/optionselect")
-    public AjaxResult optionselect(CostScene scene)
-    {
+    public AjaxResult optionselect(CostScene scene) {
         return success(sceneService.selectSceneOptions(scene));
     }
 
@@ -82,8 +71,7 @@ public class CostSceneController extends BaseController
     @Log(title = "场景中心", businessType = BusinessType.EXPORT)
     @PreAuthorize("@ss.hasPermi('cost:scene:export')")
     @PostMapping("/export")
-    public void export(HttpServletResponse response, CostScene scene)
-    {
+    public void export(HttpServletResponse response, CostScene scene) {
         List<CostScene> list = sceneService.selectSceneList(scene);
         ExcelUtil<CostScene> util = new ExcelUtil<CostScene>(CostScene.class);
         util.exportExcel(response, list, "场景中心");
@@ -94,8 +82,7 @@ public class CostSceneController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:scene:query')")
     @GetMapping("/{sceneId}")
-    public AjaxResult getInfo(@PathVariable Long sceneId)
-    {
+    public AjaxResult getInfo(@PathVariable Long sceneId) {
         return success(sceneService.selectSceneById(sceneId));
     }
 
@@ -105,10 +92,8 @@ public class CostSceneController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:scene:add')")
     @Log(title = "场景中心", businessType = BusinessType.INSERT)
     @PostMapping
-    public AjaxResult add(@Validated @RequestBody CostScene scene)
-    {
-        if (!sceneService.checkSceneCodeUnique(scene))
-        {
+    public AjaxResult add(@Validated @RequestBody CostScene scene) {
+        if (!sceneService.checkSceneCodeUnique(scene)) {
             return error("新增场景'" + scene.getSceneName() + "'失败，场景编码已存在");
         }
         return toAjax(sceneService.insertScene(scene));
@@ -120,10 +105,8 @@ public class CostSceneController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:scene:edit')")
     @Log(title = "场景中心", businessType = BusinessType.UPDATE)
     @PutMapping
-    public AjaxResult edit(@Validated @RequestBody CostScene scene)
-    {
-        if (!sceneService.checkSceneCodeUnique(scene))
-        {
+    public AjaxResult edit(@Validated @RequestBody CostScene scene) {
+        if (!sceneService.checkSceneCodeUnique(scene)) {
             return error("修改场景'" + scene.getSceneName() + "'失败，场景编码已存在");
         }
         return toAjax(sceneService.updateScene(scene));
@@ -135,8 +118,7 @@ public class CostSceneController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:scene:remove')")
     @Log(title = "场景中心", businessType = BusinessType.DELETE)
     @DeleteMapping("/{sceneIds}")
-    public AjaxResult remove(@PathVariable Long[] sceneIds)
-    {
+    public AjaxResult remove(@PathVariable Long[] sceneIds) {
         return toAjax(sceneService.deleteSceneByIds(sceneIds));
     }
 }

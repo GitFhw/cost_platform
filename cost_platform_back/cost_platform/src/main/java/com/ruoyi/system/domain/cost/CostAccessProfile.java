@@ -19,8 +19,7 @@ import lombok.ToString;
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
 @TableName("cost_access_profile")
-public class CostAccessProfile extends BaseEntity
-{
+public class CostAccessProfile extends BaseEntity {
     private static final long serialVersionUID = 1L;
 
     @TableId(value = "profile_id", type = IdType.AUTO)

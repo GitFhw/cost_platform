@@ -9,8 +9,7 @@ import java.util.List;
  *
  * @author HwFan
  */
-public interface ICostVariableGroupService
-{
+public interface ICostVariableGroupService {
     /**
      * 查询变量分组列表
      */

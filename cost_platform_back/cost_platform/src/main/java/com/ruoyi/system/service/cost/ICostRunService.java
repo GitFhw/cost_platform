@@ -1,16 +1,10 @@
 package com.ruoyi.system.service.cost;
 
-import com.ruoyi.system.domain.cost.CostCalcTask;
 import com.ruoyi.system.domain.cost.CostCalcInputBatch;
+import com.ruoyi.system.domain.cost.CostCalcTask;
 import com.ruoyi.system.domain.cost.CostResultLedger;
 import com.ruoyi.system.domain.cost.CostSimulationRecord;
-import com.ruoyi.system.domain.cost.bo.CostAccessProfileBuildBatchBo;
-import com.ruoyi.system.domain.cost.bo.CostAccessProfilePreviewFetchBo;
-import com.ruoyi.system.domain.cost.bo.CostCalcInputBatchCreateBo;
-import com.ruoyi.system.domain.cost.bo.CostInputBuildPreviewBo;
-import com.ruoyi.system.domain.cost.bo.CostFeeCalculateBo;
-import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
-import com.ruoyi.system.domain.cost.bo.CostSimulationExecuteBo;
+import com.ruoyi.system.domain.cost.bo.*;
 
 import java.util.List;
 import java.util.Map;
@@ -20,8 +14,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface ICostRunService
-{
+public interface ICostRunService {
     Map<String, Object> selectSimulationStats(CostSimulationRecord query);
 
     List<CostSimulationRecord> selectSimulationList(CostSimulationRecord query);

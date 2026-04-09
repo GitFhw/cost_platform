@@ -8,8 +8,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ConfigurationProperties(prefix = "cost.dispatch")
-public class CostDispatchProperties
-{
+public class CostDispatchProperties {
     /**
      * Dispatch coordinator scan interval in seconds.
      */
@@ -25,33 +24,27 @@ public class CostDispatchProperties
      */
     private String nodeId;
 
-    public Long getDispatchIntervalSeconds()
-    {
+    public Long getDispatchIntervalSeconds() {
         return dispatchIntervalSeconds;
     }
 
-    public void setDispatchIntervalSeconds(Long dispatchIntervalSeconds)
-    {
+    public void setDispatchIntervalSeconds(Long dispatchIntervalSeconds) {
         this.dispatchIntervalSeconds = dispatchIntervalSeconds;
     }
 
-    public Long getStaleTimeoutSeconds()
-    {
+    public Long getStaleTimeoutSeconds() {
         return staleTimeoutSeconds;
     }
 
-    public void setStaleTimeoutSeconds(Long staleTimeoutSeconds)
-    {
+    public void setStaleTimeoutSeconds(Long staleTimeoutSeconds) {
         this.staleTimeoutSeconds = staleTimeoutSeconds;
     }
 
-    public String getNodeId()
-    {
+    public String getNodeId() {
         return nodeId;
     }
 
-    public void setNodeId(String nodeId)
-    {
+    public void setNodeId(String nodeId) {
         this.nodeId = nodeId;
     }
 }

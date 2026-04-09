@@ -23,15 +23,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class CostFormulaControllerManualIT
-{
+class CostFormulaControllerManualIT {
     private static final String SCENE_CODE = "SHOUGANG-ORE-HR-001";
 
     @Autowired
@@ -53,8 +50,7 @@ class CostFormulaControllerManualIT
     private CostFormulaVersionMapper formulaVersionMapper;
 
     @Test
-    void shouldRollbackFormulaToHistoricalVersion() throws Exception
-    {
+    void shouldRollbackFormulaToHistoricalVersion() throws Exception {
         Long sceneId = requireSceneId();
         CostFormula baseline = createLegacyFormula(sceneId);
         String originalExpr = baseline.getFormulaExpr();
@@ -62,8 +58,7 @@ class CostFormulaControllerManualIT
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
 
-        try
-        {
+        try {
             ObjectNode updateBody = objectMapper.valueToTree(baseline);
             updateBody.put("workbenchConfigJson", buildWorkbenchConfigJson(baseline));
             updateBody.put("businessFormula", "临时回滚验证公式");
@@ -114,23 +109,19 @@ class CostFormulaControllerManualIT
                     .andReturn());
             assertThat(rollbackVersionDetail.path("formulaExpr").asText()).isEqualTo(originalExpr);
             assertThat(rollbackVersionDetail.path("businessFormula").asText()).isEqualTo(originalBusinessFormula);
-        }
-        finally
-        {
+        } finally {
             cleanupFormula(baseline.getFormulaId());
         }
     }
 
-    private Long requireSceneId()
-    {
+    private Long requireSceneId() {
         CostScene scene = sceneMapper.selectOne(Wrappers.<CostScene>lambdaQuery()
                 .eq(CostScene::getSceneCode, SCENE_CODE));
         assertThat(scene).isNotNull();
         return scene.getSceneId();
     }
 
-    private CostFormula createLegacyFormula(Long sceneId)
-    {
+    private CostFormula createLegacyFormula(Long sceneId) {
         String formulaCode = "IT_ROLLBACK_" + System.currentTimeMillis();
         Date now = new Date();
         CostFormula formula = new CostFormula();
@@ -158,8 +149,7 @@ class CostFormulaControllerManualIT
         return formula;
     }
 
-    private String buildWorkbenchConfigJson(CostFormula formula) throws Exception
-    {
+    private String buildWorkbenchConfigJson(CostFormula formula) throws Exception {
         ObjectNode config = objectMapper.createObjectNode();
         config.put("mode", "EXPERT");
         config.put("pattern", "IF_ELSE");
@@ -176,15 +166,13 @@ class CostFormulaControllerManualIT
         return objectMapper.writeValueAsString(config);
     }
 
-    private void cleanupFormula(Long formulaId)
-    {
+    private void cleanupFormula(Long formulaId) {
         formulaVersionMapper.delete(Wrappers.<com.ruoyi.system.domain.cost.CostFormulaVersion>lambdaQuery()
                 .eq(com.ruoyi.system.domain.cost.CostFormulaVersion::getFormulaId, formulaId));
         formulaMapper.deleteById(formulaId);
     }
 
-    private String loginAndGetToken() throws Exception
-    {
+    private String loginAndGetToken() throws Exception {
         JsonNode captcha = readBody(mockMvc.perform(get("/captchaImage"))
                 .andExpect(status().isOk())
                 .andReturn());
@@ -207,13 +195,11 @@ class CostFormulaControllerManualIT
         return login.path("token").asText();
     }
 
-    private JsonNode readData(MvcResult result) throws Exception
-    {
+    private JsonNode readData(MvcResult result) throws Exception {
         return readBody(result).path("data");
     }
 
-    private JsonNode readBody(MvcResult result) throws Exception
-    {
+    private JsonNode readBody(MvcResult result) throws Exception {
         String content = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
         return objectMapper.readTree(content);
     }

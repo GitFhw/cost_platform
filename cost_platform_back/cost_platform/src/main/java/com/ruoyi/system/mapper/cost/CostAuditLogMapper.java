@@ -8,6 +8,5 @@ import com.ruoyi.system.domain.cost.CostAuditLog;
  *
  * @author HwFan
  */
-public interface CostAuditLogMapper extends BaseMapper<CostAuditLog>
-{
+public interface CostAuditLogMapper extends BaseMapper<CostAuditLog> {
 }

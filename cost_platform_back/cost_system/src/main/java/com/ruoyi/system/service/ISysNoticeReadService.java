@@ -1,15 +1,15 @@
 package com.ruoyi.system.service;
 
-import java.util.List;
 import com.ruoyi.system.domain.SysNotice;
+
+import java.util.List;
 
 /**
  * 公告已读记录 服务层
  *
  * @author ruoyi
  */
-public interface ISysNoticeReadService
-{
+public interface ISysNoticeReadService {
     /**
      * 标记已读（幂等，重复调用不报错）
      *
@@ -22,6 +22,7 @@ public interface ISysNoticeReadService
      * 查询某用户未读公告数量
      *
      * @param userId 用户ID
+     *
      * @return 未读数量
      */
     public int selectUnreadCount(Long userId);
@@ -31,6 +32,7 @@ public interface ISysNoticeReadService
      *
      * @param userId 用户ID
      * @param limit  最多返回条数
+     *
      * @return 带 isRead 标记的公告列表
      */
     public List<SysNotice> selectNoticeListWithReadStatus(Long userId, int limit);

@@ -12,8 +12,7 @@ import java.util.List;
  *
  * @author HwFan
  */
-public interface CostCalcTaskPartitionMapper extends BaseMapper<CostCalcTaskPartition>
-{
+public interface CostCalcTaskPartitionMapper extends BaseMapper<CostCalcTaskPartition> {
     /**
      * 批量写入任务分片。
      */

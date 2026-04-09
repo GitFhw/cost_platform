@@ -11,14 +11,7 @@ import com.ruoyi.system.service.cost.ICostPublishService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -29,8 +22,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/cost/publish")
-public class CostPublishController extends BaseController
-{
+public class CostPublishController extends BaseController {
     @Autowired
     private ICostPublishService publishService;
 
@@ -39,8 +31,7 @@ public class CostPublishController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:publish:list')")
     @GetMapping("/stats")
-    public AjaxResult stats(CostPublishVersion query)
-    {
+    public AjaxResult stats(CostPublishVersion query) {
         return success(publishService.selectPublishStats(query));
     }
 
@@ -49,8 +40,7 @@ public class CostPublishController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:publish:list')")
     @GetMapping("/list")
-    public TableDataInfo list(CostPublishVersion query)
-    {
+    public TableDataInfo list(CostPublishVersion query) {
         startPage();
         List<CostPublishVersion> list = publishService.selectPublishVersionList(query);
         return getDataTable(list);
@@ -61,8 +51,7 @@ public class CostPublishController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:publish:query')")
     @GetMapping("/precheck/{sceneId}")
-    public AjaxResult precheck(@PathVariable Long sceneId)
-    {
+    public AjaxResult precheck(@PathVariable Long sceneId) {
         return success(publishService.selectPublishPrecheck(sceneId));
     }
 
@@ -72,8 +61,7 @@ public class CostPublishController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:publish:query')")
     @GetMapping("/{versionId}")
     public AjaxResult detail(@PathVariable Long versionId,
-            @RequestParam(value = "feeCode", required = false) String feeCode)
-    {
+                             @RequestParam(value = "feeCode", required = false) String feeCode) {
         return success(publishService.selectPublishVersionDetail(versionId, feeCode));
     }
 
@@ -83,9 +71,8 @@ public class CostPublishController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:publish:query')")
     @GetMapping("/diff")
     public AjaxResult diff(@RequestParam("fromVersionId") Long fromVersionId,
-            @RequestParam("toVersionId") Long toVersionId,
-            @RequestParam(value = "feeCode", required = false) String feeCode)
-    {
+                           @RequestParam("toVersionId") Long toVersionId,
+                           @RequestParam(value = "feeCode", required = false) String feeCode) {
         return success(publishService.selectPublishDiff(fromVersionId, toVersionId, feeCode));
     }
 
@@ -95,8 +82,7 @@ public class CostPublishController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:publish:add')")
     @Log(title = "发布中心", businessType = BusinessType.INSERT)
     @PostMapping
-    public AjaxResult publish(@Validated @RequestBody CostPublishCreateBo bo)
-    {
+    public AjaxResult publish(@Validated @RequestBody CostPublishCreateBo bo) {
         return toAjax(publishService.publishScene(bo));
     }
 
@@ -106,8 +92,7 @@ public class CostPublishController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:publish:activate')")
     @Log(title = "发布中心", businessType = BusinessType.UPDATE)
     @PutMapping("/activate/{versionId}")
-    public AjaxResult activate(@PathVariable Long versionId)
-    {
+    public AjaxResult activate(@PathVariable Long versionId) {
         return toAjax(publishService.activateVersion(versionId));
     }
 
@@ -117,8 +102,7 @@ public class CostPublishController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:publish:rollback')")
     @Log(title = "发布中心", businessType = BusinessType.UPDATE)
     @PutMapping("/rollback/{versionId}")
-    public AjaxResult rollback(@PathVariable Long versionId)
-    {
+    public AjaxResult rollback(@PathVariable Long versionId) {
         return toAjax(publishService.rollbackVersion(versionId));
     }
 }

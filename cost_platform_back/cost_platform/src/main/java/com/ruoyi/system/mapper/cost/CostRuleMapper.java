@@ -14,8 +14,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface CostRuleMapper extends BaseMapper<CostRule>
-{
+public interface CostRuleMapper extends BaseMapper<CostRule> {
     /**
      * 查询规则列表
      */

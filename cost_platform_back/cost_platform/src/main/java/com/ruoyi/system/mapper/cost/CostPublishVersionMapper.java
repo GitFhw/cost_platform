@@ -13,8 +13,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface CostPublishVersionMapper extends BaseMapper<CostPublishVersion>
-{
+public interface CostPublishVersionMapper extends BaseMapper<CostPublishVersion> {
     /**
      * 查询版本台账
      */

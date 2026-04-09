@@ -33,10 +33,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.HttpMethod.POST;
 import static org.springframework.test.web.client.ExpectedCount.once;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -44,8 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class CostAlarmNotificationManualIT
-{
+class CostAlarmNotificationManualIT {
     private static final String SCENE_CODE = "SHOUGANG-ORE-HR-001";
     private static final String WEBHOOK_ENABLED_KEY = "cost.alarm.webhook.enabled";
     private static final String WEBHOOK_URL_KEY = "cost.alarm.webhook.url";
@@ -81,8 +77,7 @@ class CostAlarmNotificationManualIT
     private ISysConfigService configService;
 
     @Test
-    void shouldSendWebhookAndExposeNotificationSummary() throws Exception
-    {
+    void shouldSendWebhookAndExposeNotificationSummary() throws Exception {
         Long sceneId = requireSceneId();
         String sceneName = requireSceneName(sceneId);
         String token = loginAndGetToken();
@@ -109,8 +104,7 @@ class CostAlarmNotificationManualIT
                         """.formatted(sceneId, SCENE_CODE, sceneName), false))
                 .andRespond(withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
 
-        try
-        {
+        try {
             upsertConfig("成本告警-WebHook通知开关", WEBHOOK_ENABLED_KEY, "true", "测试启用 Webhook");
             upsertConfig("成本告警-WebHook地址", WEBHOOK_URL_KEY, "https://example.internal/alarm-webhook", "测试 Webhook 地址");
             upsertConfig("成本告警-WebHook扩展头", WEBHOOK_HEADERS_KEY, "{\"X-App\":\"cost-platform\"}", "测试扩展头");
@@ -144,23 +138,19 @@ class CostAlarmNotificationManualIT
             assertThat(summary.path("secretConfigured").asBoolean()).isTrue();
             assertThat(summary.path("channelType").asText()).isEqualTo("WEBHOOK");
             assertThat(summary.path("target").asText()).contains("example.");
-        }
-        finally
-        {
+        } finally {
             restoreConfigs(snapshots);
             configService.resetConfigCache();
         }
     }
 
     @Test
-    void shouldAggregateEscalateAndResolveAlarmBySourceKey()
-    {
+    void shouldAggregateEscalateAndResolveAlarmBySourceKey() {
         Long sceneId = requireSceneId();
         String stamp = LocalTime.now().format(STAMP_FORMATTER);
         String sourceKey = "ALARM-AGG-" + stamp;
 
-        for (int i = 1; i <= 3; i++)
-        {
+        for (int i = 1; i <= 3; i++) {
             CostAlarmRecord alarmRecord = new CostAlarmRecord();
             alarmRecord.setSceneId(sceneId);
             alarmRecord.setAlarmType("CACHE_REFRESH_FAILED");
@@ -189,67 +179,54 @@ class CostAlarmNotificationManualIT
         assertThat(resolved.getRemark()).contains("缓存恢复");
     }
 
-    private Long requireSceneId()
-    {
+    private Long requireSceneId() {
         CostScene scene = sceneMapper.selectOne(Wrappers.<CostScene>lambdaQuery()
                 .eq(CostScene::getSceneCode, SCENE_CODE));
         assertThat(scene).as("missing seeded scene %s", SCENE_CODE).isNotNull();
         return scene.getSceneId();
     }
 
-    private String requireSceneName(Long sceneId)
-    {
+    private String requireSceneName(Long sceneId) {
         CostScene scene = sceneMapper.selectById(sceneId);
         assertThat(scene).isNotNull();
         return scene.getSceneName();
     }
 
-    private Map<String, ConfigSnapshot> snapshotConfigs(String... keys)
-    {
+    private Map<String, ConfigSnapshot> snapshotConfigs(String... keys) {
         LinkedHashMap<String, ConfigSnapshot> snapshots = new LinkedHashMap<>();
-        for (String key : keys)
-        {
+        for (String key : keys) {
             SysConfig existing = sysConfigMapper.checkConfigKeyUnique(key);
             snapshots.put(key, new ConfigSnapshot(existing));
         }
         return snapshots;
     }
 
-    private void restoreConfigs(Map<String, ConfigSnapshot> snapshots)
-    {
+    private void restoreConfigs(Map<String, ConfigSnapshot> snapshots) {
         snapshots.forEach((key, snapshot) -> {
-            if (snapshot.exists())
-            {
+            if (snapshot.exists()) {
                 SysConfig config = snapshot.toConfig();
                 config.setUpdateBy("admin");
                 sysConfigMapper.updateConfig(config);
-            }
-            else if (snapshot.getInsertedConfigId() != null)
-            {
+            } else if (snapshot.getInsertedConfigId() != null) {
                 sysConfigMapper.deleteConfigById(snapshot.getInsertedConfigId());
             }
         });
     }
 
-    private void refreshInsertedConfigIds(Map<String, ConfigSnapshot> snapshots)
-    {
+    private void refreshInsertedConfigIds(Map<String, ConfigSnapshot> snapshots) {
         snapshots.forEach((key, snapshot) -> {
-            if (!snapshot.exists() && snapshot.getInsertedConfigId() == null)
-            {
+            if (!snapshot.exists() && snapshot.getInsertedConfigId() == null) {
                 SysConfig inserted = sysConfigMapper.checkConfigKeyUnique(key);
-                if (inserted != null)
-                {
+                if (inserted != null) {
                     snapshot.setInsertedConfigId(inserted.getConfigId());
                 }
             }
         });
     }
 
-    private void upsertConfig(String name, String key, String value, String remark)
-    {
+    private void upsertConfig(String name, String key, String value, String remark) {
         SysConfig existing = sysConfigMapper.checkConfigKeyUnique(key);
-        if (existing == null)
-        {
+        if (existing == null) {
             SysConfig config = new SysConfig();
             config.setConfigName(name);
             config.setConfigKey(key);
@@ -268,8 +245,7 @@ class CostAlarmNotificationManualIT
         sysConfigMapper.updateConfig(existing);
     }
 
-    private String loginAndGetToken() throws Exception
-    {
+    private String loginAndGetToken() throws Exception {
         JsonNode captcha = readBody(mockMvc.perform(get("/captchaImage"))
                 .andExpect(status().isOk())
                 .andReturn());
@@ -292,19 +268,16 @@ class CostAlarmNotificationManualIT
         return login.path("token").asText();
     }
 
-    private JsonNode readData(MvcResult result) throws Exception
-    {
+    private JsonNode readData(MvcResult result) throws Exception {
         return readBody(result).path("data");
     }
 
-    private JsonNode readBody(MvcResult result) throws Exception
-    {
+    private JsonNode readBody(MvcResult result) throws Exception {
         String content = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
         return objectMapper.readTree(content);
     }
 
-    private static class ConfigSnapshot
-    {
+    private static class ConfigSnapshot {
         private final Long configId;
         private final String configName;
         private final String configKey;
@@ -313,10 +286,8 @@ class CostAlarmNotificationManualIT
         private final String remark;
         private Long insertedConfigId;
 
-        private ConfigSnapshot(SysConfig config)
-        {
-            if (config == null)
-            {
+        private ConfigSnapshot(SysConfig config) {
+            if (config == null) {
                 this.configId = null;
                 this.configName = null;
                 this.configKey = null;
@@ -333,23 +304,19 @@ class CostAlarmNotificationManualIT
             this.remark = config.getRemark();
         }
 
-        private boolean exists()
-        {
+        private boolean exists() {
             return configId != null;
         }
 
-        private Long getInsertedConfigId()
-        {
+        private Long getInsertedConfigId() {
             return insertedConfigId;
         }
 
-        private void setInsertedConfigId(Long insertedConfigId)
-        {
+        private void setInsertedConfigId(Long insertedConfigId) {
             this.insertedConfigId = insertedConfigId;
         }
 
-        private SysConfig toConfig()
-        {
+        private SysConfig toConfig() {
             SysConfig config = new SysConfig();
             config.setConfigId(configId);
             config.setConfigName(configName);

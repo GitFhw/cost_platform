@@ -1,11 +1,7 @@
 package com.ruoyi.framework.config;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import javax.sql.DataSource;
+import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
+import com.ruoyi.common.utils.StringUtils;
 import org.apache.ibatis.io.VFS;
 import org.apache.ibatis.plugin.Interceptor;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -22,95 +18,76 @@ import org.springframework.core.type.classreading.CachingMetadataReaderFactory;
 import org.springframework.core.type.classreading.MetadataReader;
 import org.springframework.core.type.classreading.MetadataReaderFactory;
 import org.springframework.util.ClassUtils;
-import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
-import com.ruoyi.common.utils.StringUtils;
+
+import javax.sql.DataSource;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 
 /**
  * MyBatis/MyBatis-Plus 支持 * 匹配扫描包。
  * 保持若依原有 XML Mapper 可继续运行，同时为核算模块渐进接入 MyBatis-Plus 提供统一工厂。
- * 
+ *
  * @author ruoyi
  */
 @Configuration
-public class MyBatisConfig
-{
+public class MyBatisConfig {
+    static final String DEFAULT_RESOURCE_PATTERN = "**/*.class";
     @Autowired
     private Environment env;
-
     @Autowired(required = false)
     private Interceptor[] interceptors;
 
-    static final String DEFAULT_RESOURCE_PATTERN = "**/*.class";
-
-    public static String setTypeAliasesPackage(String typeAliasesPackage)
-    {
+    public static String setTypeAliasesPackage(String typeAliasesPackage) {
         ResourcePatternResolver resolver = (ResourcePatternResolver) new PathMatchingResourcePatternResolver();
         MetadataReaderFactory metadataReaderFactory = new CachingMetadataReaderFactory(resolver);
         List<String> allResult = new ArrayList<String>();
-        try
-        {
-            for (String aliasesPackage : typeAliasesPackage.split(","))
-            {
+        try {
+            for (String aliasesPackage : typeAliasesPackage.split(",")) {
                 List<String> result = new ArrayList<String>();
                 aliasesPackage = ResourcePatternResolver.CLASSPATH_ALL_URL_PREFIX
                         + ClassUtils.convertClassNameToResourcePath(aliasesPackage.trim()) + "/" + DEFAULT_RESOURCE_PATTERN;
                 Resource[] resources = resolver.getResources(aliasesPackage);
-                if (resources != null && resources.length > 0)
-                {
+                if (resources != null && resources.length > 0) {
                     MetadataReader metadataReader = null;
-                    for (Resource resource : resources)
-                    {
-                        if (resource.isReadable())
-                        {
+                    for (Resource resource : resources) {
+                        if (resource.isReadable()) {
                             metadataReader = metadataReaderFactory.getMetadataReader(resource);
-                            try
-                            {
+                            try {
                                 result.add(Class.forName(metadataReader.getClassMetadata().getClassName()).getPackage().getName());
-                            }
-                            catch (ClassNotFoundException e)
-                            {
+                            } catch (ClassNotFoundException e) {
                                 e.printStackTrace();
                             }
                         }
                     }
                 }
-                if (result.size() > 0)
-                {
+                if (result.size() > 0) {
                     HashSet<String> hashResult = new HashSet<String>(result);
                     allResult.addAll(hashResult);
                 }
             }
-            if (allResult.size() > 0)
-            {
+            if (allResult.size() > 0) {
                 typeAliasesPackage = String.join(",", (String[]) allResult.toArray(new String[0]));
-            }
-            else
-            {
+            } else {
                 throw new RuntimeException("mybatis typeAliasesPackage 路径扫描错误,参数typeAliasesPackage:" + typeAliasesPackage + "未找到任何包");
             }
-        }
-        catch (IOException e)
-        {
+        } catch (IOException e) {
             e.printStackTrace();
         }
         return typeAliasesPackage;
     }
 
-    public Resource[] resolveMapperLocations(String[] mapperLocations)
-    {
+    public Resource[] resolveMapperLocations(String[] mapperLocations) {
         ResourcePatternResolver resourceResolver = new PathMatchingResourcePatternResolver();
         List<Resource> resources = new ArrayList<Resource>();
-        if (mapperLocations != null)
-        {
-            for (String mapperLocation : mapperLocations)
-            {
-                try
-                {
+        if (mapperLocations != null) {
+            for (String mapperLocation : mapperLocations) {
+                try {
                     Resource[] mappers = resourceResolver.getResources(mapperLocation);
                     resources.addAll(Arrays.asList(mappers));
-                }
-                catch (IOException e)
-                {
+                } catch (IOException e) {
                     // ignore
                 }
             }
@@ -119,8 +96,7 @@ public class MyBatisConfig
     }
 
     @Bean
-    public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception
-    {
+    public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
         String typeAliasesPackage = env.getProperty("mybatis.typeAliasesPackage");
         String mapperLocations = env.getProperty("mybatis.mapperLocations");
         String configLocation = env.getProperty("mybatis.configLocation");
@@ -132,8 +108,7 @@ public class MyBatisConfig
         sessionFactory.setTypeAliasesPackage(typeAliasesPackage);
         sessionFactory.setMapperLocations(resolveMapperLocations(StringUtils.split(mapperLocations, ",")));
         sessionFactory.setConfigLocation(new DefaultResourceLoader().getResource(configLocation));
-        if (interceptors != null && interceptors.length > 0)
-        {
+        if (interceptors != null && interceptors.length > 0) {
             sessionFactory.setPlugins(interceptors);
         }
         return sessionFactory.getObject();

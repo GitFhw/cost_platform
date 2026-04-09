@@ -8,6 +8,5 @@ import com.ruoyi.system.domain.cost.CostRecalcOrder;
  *
  * @author HwFan
  */
-public interface CostRecalcOrderMapper extends BaseMapper<CostRecalcOrder>
-{
+public interface CostRecalcOrderMapper extends BaseMapper<CostRecalcOrder> {
 }

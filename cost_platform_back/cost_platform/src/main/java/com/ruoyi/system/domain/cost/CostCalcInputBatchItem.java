@@ -17,8 +17,7 @@ import java.util.Date;
  */
 @Data
 @TableName("cost_calc_input_batch_item")
-public class CostCalcInputBatchItem implements Serializable
-{
+public class CostCalcInputBatchItem implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 

@@ -8,8 +8,7 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostRuleGovernanceCheckVo
-{
+public class CostRuleGovernanceCheckVo {
     private Long ruleId;
     private Long sceneId;
     private Long feeId;

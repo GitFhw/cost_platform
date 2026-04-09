@@ -11,8 +11,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface ICostPublishService
-{
+public interface ICostPublishService {
     /**
      * 查询发布统计
      */

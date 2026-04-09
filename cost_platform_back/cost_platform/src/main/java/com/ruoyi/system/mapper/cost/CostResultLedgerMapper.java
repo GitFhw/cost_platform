@@ -12,8 +12,7 @@ import java.util.List;
  *
  * @author HwFan
  */
-public interface CostResultLedgerMapper extends BaseMapper<CostResultLedger>
-{
+public interface CostResultLedgerMapper extends BaseMapper<CostResultLedger> {
     /**
      * 批量写入结果台账。
      */

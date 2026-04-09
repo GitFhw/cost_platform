@@ -12,23 +12,34 @@ import java.util.Map;
  * @author HwFan
  */
 @Data
-public class CostVariableImportPreviewVo
-{
-    /** 总行数 */
+public class CostVariableImportPreviewVo {
+    /**
+     * 总行数
+     */
     private Integer totalRows = 0;
 
-    /** 校验通过行数 */
+    /**
+     * 校验通过行数
+     */
     private Integer passRows = 0;
 
-    /** 校验失败行数 */
+    /**
+     * 校验失败行数
+     */
     private Integer failRows = 0;
 
-    /** 是否可以继续导入 */
+    /**
+     * 是否可以继续导入
+     */
     private Boolean importable = Boolean.FALSE;
 
-    /** 预览数据 */
+    /**
+     * 预览数据
+     */
     private List<Map<String, Object>> previewRows = new ArrayList<>();
 
-    /** 校验问题 */
+    /**
+     * 校验问题
+     */
     private List<CostVariableImportIssueVo> issues = new ArrayList<>();
 }

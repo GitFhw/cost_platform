@@ -2,24 +2,20 @@ package com.ruoyi.system.service.impl.cost;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.ruoyi.common.constant.UserConstants;
-import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.core.domain.entity.SysDictData;
+import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.cost.CostFeeItem;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.vo.CostFeeGovernanceCheckVo;
 import com.ruoyi.system.mapper.SysDictDataMapper;
-import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.mapper.cost.CostFeeMapper;
+import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.service.cost.ICostFeeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.StringJoiner;
+import java.util.*;
 
 /**
  * 费用中心服务实现
@@ -27,8 +23,7 @@ import java.util.StringJoiner;
  * @author HwFan
  */
 @Service
-public class CostFeeServiceImpl implements ICostFeeService
-{
+public class CostFeeServiceImpl implements ICostFeeService {
     private static final String DICT_TYPE_FEE_STATUS = "cost_fee_status";
     private static final String DICT_TYPE_UNIT_CODE = "cost_unit_code";
 
@@ -45,8 +40,7 @@ public class CostFeeServiceImpl implements ICostFeeService
      * 查询费用列表
      */
     @Override
-    public List<CostFeeItem> selectFeeList(CostFeeItem feeItem)
-    {
+    public List<CostFeeItem> selectFeeList(CostFeeItem feeItem) {
         return feeMapper.selectFeeList(feeItem);
     }
 
@@ -54,8 +48,7 @@ public class CostFeeServiceImpl implements ICostFeeService
      * 查询费用详情
      */
     @Override
-    public CostFeeItem selectFeeById(Long feeId)
-    {
+    public CostFeeItem selectFeeById(Long feeId) {
         return feeMapper.selectById(feeId);
     }
 
@@ -63,8 +56,7 @@ public class CostFeeServiceImpl implements ICostFeeService
      * 查询费用选择框
      */
     @Override
-    public List<CostFeeItem> selectFeeOptions(CostFeeItem feeItem)
-    {
+    public List<CostFeeItem> selectFeeOptions(CostFeeItem feeItem) {
         return feeMapper.selectFeeOptions(feeItem);
     }
 
@@ -72,19 +64,16 @@ public class CostFeeServiceImpl implements ICostFeeService
      * 查询费用统计
      */
     @Override
-    public Map<String, Object> selectFeeStats(CostFeeItem feeItem)
-    {
+    public Map<String, Object> selectFeeStats(CostFeeItem feeItem) {
         Map<String, Object> stats = feeMapper.selectFeeStats(feeItem);
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("feeCount", 0);
         result.put("enabledFeeCount", 0);
         result.put("sceneCoverageCount", 0);
-        if (stats == null)
-        {
+        if (stats == null) {
             return result;
         }
-        for (String key : result.keySet())
-        {
+        for (String key : result.keySet()) {
             Object value = stats.get(key);
             result.put(key, value == null ? 0 : value);
         }
@@ -95,11 +84,9 @@ public class CostFeeServiceImpl implements ICostFeeService
      * 查询费用治理预检查
      */
     @Override
-    public CostFeeGovernanceCheckVo selectFeeGovernanceCheck(Long feeId)
-    {
+    public CostFeeGovernanceCheckVo selectFeeGovernanceCheck(Long feeId) {
         CostFeeGovernanceCheckVo check = feeMapper.selectFeeGovernanceCheck(feeId);
-        if (StringUtils.isNull(check))
-        {
+        if (StringUtils.isNull(check)) {
             return null;
         }
         normalizeGovernanceCount(check);
@@ -123,8 +110,7 @@ public class CostFeeServiceImpl implements ICostFeeService
      * 校验费用编码是否唯一（同一场景内唯一）
      */
     @Override
-    public boolean checkFeeCodeUnique(CostFeeItem feeItem)
-    {
+    public boolean checkFeeCodeUnique(CostFeeItem feeItem) {
         Long feeId = StringUtils.isNull(feeItem.getFeeId()) ? -1L : feeItem.getFeeId();
         Long count = feeMapper.selectCount(Wrappers.<CostFeeItem>lambdaQuery()
                 .eq(CostFeeItem::getSceneId, feeItem.getSceneId())
@@ -137,11 +123,9 @@ public class CostFeeServiceImpl implements ICostFeeService
      * 新增费用
      */
     @Override
-    public int insertFee(CostFeeItem feeItem)
-    {
+    public int insertFee(CostFeeItem feeItem) {
         validateFeeConfig(feeItem);
-        if (feeItem.getSortNo() == null)
-        {
+        if (feeItem.getSortNo() == null) {
             feeItem.setSortNo(10);
         }
         return feeMapper.insert(feeItem);
@@ -151,8 +135,7 @@ public class CostFeeServiceImpl implements ICostFeeService
      * 修改费用
      */
     @Override
-    public int updateFee(CostFeeItem feeItem)
-    {
+    public int updateFee(CostFeeItem feeItem) {
         validateDisableBeforeUpdate(feeItem);
         validateFeeConfig(feeItem);
         return feeMapper.updateById(feeItem);
@@ -160,21 +143,17 @@ public class CostFeeServiceImpl implements ICostFeeService
 
     /**
      * 批量删除费用
-     *
+     * <p>
      * 删除前先执行治理预检查，避免被规则、版本或结果链路引用时误删。
      */
     @Override
-    public int deleteFeeByIds(Long[] feeIds)
-    {
-        for (Long feeId : feeIds)
-        {
+    public int deleteFeeByIds(Long[] feeIds) {
+        for (Long feeId : feeIds) {
             CostFeeGovernanceCheckVo check = selectFeeGovernanceCheck(feeId);
-            if (StringUtils.isNull(check))
-            {
+            if (StringUtils.isNull(check)) {
                 continue;
             }
-            if (!Boolean.TRUE.equals(check.getCanDelete()))
-            {
+            if (!Boolean.TRUE.equals(check.getCanDelete())) {
                 throw new ServiceException(String.format("%1$s不能删除：%2$s", check.getFeeName(), check.getRemoveBlockingReason()));
             }
         }
@@ -184,8 +163,7 @@ public class CostFeeServiceImpl implements ICostFeeService
     /**
      * 标准化治理计数
      */
-    private void normalizeGovernanceCount(CostFeeGovernanceCheckVo check)
-    {
+    private void normalizeGovernanceCount(CostFeeGovernanceCheckVo check) {
         check.setRuleCount(nullSafeLong(check.getRuleCount()));
         check.setVariableRelCount(nullSafeLong(check.getVariableRelCount()));
         check.setPublishedVersionCount(nullSafeLong(check.getPublishedVersionCount()));
@@ -195,20 +173,16 @@ public class CostFeeServiceImpl implements ICostFeeService
     /**
      * 更新前停用校验
      */
-    private void validateDisableBeforeUpdate(CostFeeItem feeItem)
-    {
-        if (StringUtils.isNull(feeItem.getFeeId()) || !"1".equals(feeItem.getStatus()))
-        {
+    private void validateDisableBeforeUpdate(CostFeeItem feeItem) {
+        if (StringUtils.isNull(feeItem.getFeeId()) || !"1".equals(feeItem.getStatus())) {
             return;
         }
         CostFeeItem current = selectFeeById(feeItem.getFeeId());
-        if (StringUtils.isNull(current) || "1".equals(current.getStatus()))
-        {
+        if (StringUtils.isNull(current) || "1".equals(current.getStatus())) {
             return;
         }
         CostFeeGovernanceCheckVo check = selectFeeGovernanceCheck(feeItem.getFeeId());
-        if (StringUtils.isNotNull(check) && !Boolean.TRUE.equals(check.getCanDisable()))
-        {
+        if (StringUtils.isNotNull(check) && !Boolean.TRUE.equals(check.getCanDisable())) {
             throw new ServiceException(String.format("%1$s不能停用：%2$s", check.getFeeName(), check.getDisableBlockingReason()));
         }
     }
@@ -217,23 +191,18 @@ public class CostFeeServiceImpl implements ICostFeeService
      * 构造删除阻断说明
      */
     private String buildRemoveBlockingReason(CostFeeGovernanceCheckVo check, boolean hasRuleRef, boolean hasPublishedVersionRef,
-            boolean hasResultRef)
-    {
-        if (!hasRuleRef && !hasPublishedVersionRef && !hasResultRef)
-        {
+                                             boolean hasResultRef) {
+        if (!hasRuleRef && !hasPublishedVersionRef && !hasResultRef) {
             return "当前费用未被规则、版本或结果占用";
         }
         StringJoiner joiner = new StringJoiner("；");
-        if (hasRuleRef)
-        {
+        if (hasRuleRef) {
             joiner.add(String.format("已有%1$d条规则引用当前费用", check.getRuleCount()));
         }
-        if (hasPublishedVersionRef)
-        {
+        if (hasPublishedVersionRef) {
             joiner.add(String.format("已有%1$d个发布版本快照引用当前费用", check.getPublishedVersionCount()));
         }
-        if (hasResultRef)
-        {
+        if (hasResultRef) {
             joiner.add(String.format("已有%1$d条结果台账记录绑定当前费用", check.getResultLedgerCount()));
         }
         return joiner.toString();
@@ -242,19 +211,15 @@ public class CostFeeServiceImpl implements ICostFeeService
     /**
      * 构造停用阻断说明
      */
-    private String buildDisableBlockingReason(CostFeeGovernanceCheckVo check, boolean hasPublishedVersionRef, boolean hasResultRef)
-    {
-        if (!hasPublishedVersionRef && !hasResultRef)
-        {
+    private String buildDisableBlockingReason(CostFeeGovernanceCheckVo check, boolean hasPublishedVersionRef, boolean hasResultRef) {
+        if (!hasPublishedVersionRef && !hasResultRef) {
             return "当前费用未进入发布/结果链路，可安全停用";
         }
         StringJoiner joiner = new StringJoiner("；");
-        if (hasPublishedVersionRef)
-        {
+        if (hasPublishedVersionRef) {
             joiner.add(String.format("已有%1$d个发布版本快照引用当前费用", check.getPublishedVersionCount()));
         }
-        if (hasResultRef)
-        {
+        if (hasResultRef) {
             joiner.add(String.format("已有%1$d条结果台账记录绑定当前费用", check.getResultLedgerCount()));
         }
         return joiner.toString();
@@ -263,10 +228,8 @@ public class CostFeeServiceImpl implements ICostFeeService
     /**
      * 构造停用建议
      */
-    private String buildDisableAdvice(CostFeeGovernanceCheckVo check)
-    {
-        if (check.getRuleCount() <= 0)
-        {
+    private String buildDisableAdvice(CostFeeGovernanceCheckVo check) {
+        if (check.getRuleCount() <= 0) {
             return "当前费用无规则挂载，停用后将从维护和计费选择范围中移除。";
         }
         return String.format("当前费用仍挂载%1$d条规则，停用后将不再参与后续配置与计算选择。", check.getRuleCount());
@@ -275,8 +238,7 @@ public class CostFeeServiceImpl implements ICostFeeService
     /**
      * 空值转0
      */
-    private long nullSafeLong(Long value)
-    {
+    private long nullSafeLong(Long value) {
         return StringUtils.isNull(value) ? 0L : value.longValue();
     }
 
@@ -285,12 +247,10 @@ public class CostFeeServiceImpl implements ICostFeeService
      *
      * @param feeItem 费用对象
      */
-    private void validateFeeConfig(CostFeeItem feeItem)
-    {
+    private void validateFeeConfig(CostFeeItem feeItem) {
         validateSceneEnabled(feeItem.getSceneId());
         validateDictValueExists(DICT_TYPE_FEE_STATUS, feeItem.getStatus(), "费用状态");
-        if (StringUtils.isNotEmpty(feeItem.getUnitCode()))
-        {
+        if (StringUtils.isNotEmpty(feeItem.getUnitCode())) {
             validateDictValueExists(DICT_TYPE_UNIT_CODE, feeItem.getUnitCode(), "计价单位");
         }
     }
@@ -298,19 +258,15 @@ public class CostFeeServiceImpl implements ICostFeeService
     /**
      * 校验费用所属场景必须存在且处于正常状态。
      */
-    private void validateSceneEnabled(Long sceneId)
-    {
-        if (sceneId == null)
-        {
+    private void validateSceneEnabled(Long sceneId) {
+        if (sceneId == null) {
             throw new ServiceException("费用所属场景不能为空");
         }
         CostScene scene = sceneMapper.selectById(sceneId);
-        if (scene == null)
-        {
+        if (scene == null) {
             throw new ServiceException("费用所属场景不存在");
         }
-        if (!"0".equals(scene.getStatus()))
-        {
+        if (!"0".equals(scene.getStatus())) {
             throw new ServiceException("费用所属场景不是正常状态，当前不允许继续维护");
         }
     }
@@ -318,13 +274,11 @@ public class CostFeeServiceImpl implements ICostFeeService
     /**
      * 校验字典值是否存在且启用。
      */
-    private void validateDictValueExists(String dictType, String dictValue, String fieldLabel)
-    {
+    private void validateDictValueExists(String dictType, String dictValue, String fieldLabel) {
         List<SysDictData> dictDataList = dictDataMapper.selectDictDataByType(dictType);
         boolean matched = dictDataList.stream()
                 .anyMatch(item -> dictValue.equals(item.getDictValue()) && "0".equals(item.getStatus()));
-        if (!matched)
-        {
+        if (!matched) {
             throw new ServiceException(String.format("%s取值无效，请从系统字典 %s 中选择合法值：%s", fieldLabel, dictType, dictValue));
         }
     }

@@ -9,13 +9,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class CostExpressionServiceImplTest
-{
+class CostExpressionServiceImplTest {
     private final CostExpressionServiceImpl expressionService = new CostExpressionServiceImpl();
 
     @Test
-    void shouldKeepRatioPrecisionForIntegerInputsInNamespaceContext()
-    {
+    void shouldKeepRatioPrecisionForIntegerInputsInNamespaceContext() {
         Map<String, Object> variables = new LinkedHashMap<>();
         variables.put("DUTY_TEAM_REQUIRED_ATTENDANCE", 10);
         variables.put("ALL_TEAMS_REQUIRED_ATTENDANCE", 20);

@@ -8,6 +8,5 @@ import com.ruoyi.system.domain.cost.CostBillPeriod;
  *
  * @author HwFan
  */
-public interface CostBillPeriodMapper extends BaseMapper<CostBillPeriod>
-{
+public interface CostBillPeriodMapper extends BaseMapper<CostBillPeriod> {
 }

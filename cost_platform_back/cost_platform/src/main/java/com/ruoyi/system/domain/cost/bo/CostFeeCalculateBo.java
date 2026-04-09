@@ -10,28 +10,41 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostFeeCalculateBo
-{
-    /** Scene id */
+public class CostFeeCalculateBo {
+    /**
+     * Scene id
+     */
     @NotNull(message = "场景不能为空")
     private Long sceneId;
 
-    /** Published version id */
+    /**
+     * Published version id
+     */
     private Long versionId;
 
-    /** Fee id */
+    /**
+     * Fee id
+     */
     private Long feeId;
 
-    /** Fee code */
+    /**
+     * Fee code
+     */
     private String feeCode;
 
-    /** Optional bill month context */
+    /**
+     * Optional bill month context
+     */
     private String billMonth;
 
-    /** Input payload, supports object or array */
+    /**
+     * Input payload, supports object or array
+     */
     @NotBlank(message = "费用计算输入数据不能为空")
     private String inputJson;
 
-    /** Whether to include lightweight explain payload for debugging */
+    /**
+     * Whether to include lightweight explain payload for debugging
+     */
     private Boolean includeExplain;
 }

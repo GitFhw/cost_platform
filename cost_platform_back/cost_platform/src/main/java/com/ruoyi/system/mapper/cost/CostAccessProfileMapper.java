@@ -5,8 +5,7 @@ import com.ruoyi.system.domain.cost.CostAccessProfile;
 
 import java.util.List;
 
-public interface CostAccessProfileMapper extends BaseMapper<CostAccessProfile>
-{
+public interface CostAccessProfileMapper extends BaseMapper<CostAccessProfile> {
     List<CostAccessProfile> selectAccessProfileList(CostAccessProfile query);
 
     CostAccessProfile selectAccessProfileById(Long profileId);

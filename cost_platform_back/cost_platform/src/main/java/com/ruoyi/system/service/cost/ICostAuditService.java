@@ -10,10 +10,9 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface ICostAuditService
-{
+public interface ICostAuditService {
     void recordAudit(Long sceneId, String objectType, String objectCode, String actionType,
-            String actionSummary, Object beforeData, Object afterData, String requestNo);
+                     String actionSummary, Object beforeData, Object afterData, String requestNo);
 
     List<CostAuditLog> selectAuditList(CostAuditLog query);
 

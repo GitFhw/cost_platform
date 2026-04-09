@@ -23,8 +23,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/cost/fee")
-public class CostFeeController extends BaseController
-{
+public class CostFeeController extends BaseController {
     @Autowired
     private ICostFeeService feeService;
 
@@ -33,8 +32,7 @@ public class CostFeeController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:fee:list')")
     @GetMapping("/list")
-    public TableDataInfo list(CostFeeItem feeItem)
-    {
+    public TableDataInfo list(CostFeeItem feeItem) {
         startPage();
         List<CostFeeItem> list = feeService.selectFeeList(feeItem);
         return getDataTable(list);
@@ -45,8 +43,7 @@ public class CostFeeController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:fee:list')")
     @GetMapping("/stats")
-    public AjaxResult stats(CostFeeItem feeItem)
-    {
+    public AjaxResult stats(CostFeeItem feeItem) {
         return success(feeService.selectFeeStats(feeItem));
     }
 
@@ -55,8 +52,7 @@ public class CostFeeController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:fee:list')")
     @GetMapping("/governance/{feeId}")
-    public AjaxResult governance(@PathVariable Long feeId)
-    {
+    public AjaxResult governance(@PathVariable Long feeId) {
         return success(feeService.selectFeeGovernanceCheck(feeId));
     }
 
@@ -65,8 +61,7 @@ public class CostFeeController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:fee:list')")
     @GetMapping("/optionselect")
-    public AjaxResult optionselect(CostFeeItem feeItem)
-    {
+    public AjaxResult optionselect(CostFeeItem feeItem) {
         return success(feeService.selectFeeOptions(feeItem));
     }
 
@@ -76,8 +71,7 @@ public class CostFeeController extends BaseController
     @Log(title = "费用中心", businessType = BusinessType.EXPORT)
     @PreAuthorize("@ss.hasPermi('cost:fee:export')")
     @PostMapping("/export")
-    public void export(HttpServletResponse response, CostFeeItem feeItem)
-    {
+    public void export(HttpServletResponse response, CostFeeItem feeItem) {
         List<CostFeeItem> list = feeService.selectFeeList(feeItem);
         ExcelUtil<CostFeeItem> util = new ExcelUtil<>(CostFeeItem.class);
         util.exportExcel(response, list, "费用中心");
@@ -88,8 +82,7 @@ public class CostFeeController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:fee:query')")
     @GetMapping("/{feeId}")
-    public AjaxResult getInfo(@PathVariable Long feeId)
-    {
+    public AjaxResult getInfo(@PathVariable Long feeId) {
         return success(feeService.selectFeeById(feeId));
     }
 
@@ -99,10 +92,8 @@ public class CostFeeController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:fee:add')")
     @Log(title = "费用中心", businessType = BusinessType.INSERT)
     @PostMapping
-    public AjaxResult add(@Validated @RequestBody CostFeeItem feeItem)
-    {
-        if (!feeService.checkFeeCodeUnique(feeItem))
-        {
+    public AjaxResult add(@Validated @RequestBody CostFeeItem feeItem) {
+        if (!feeService.checkFeeCodeUnique(feeItem)) {
             return error("新增费用'" + feeItem.getFeeName() + "'失败，同场景下费用编码已存在");
         }
         return toAjax(feeService.insertFee(feeItem));
@@ -114,10 +105,8 @@ public class CostFeeController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:fee:edit')")
     @Log(title = "费用中心", businessType = BusinessType.UPDATE)
     @PutMapping
-    public AjaxResult edit(@Validated @RequestBody CostFeeItem feeItem)
-    {
-        if (!feeService.checkFeeCodeUnique(feeItem))
-        {
+    public AjaxResult edit(@Validated @RequestBody CostFeeItem feeItem) {
+        if (!feeService.checkFeeCodeUnique(feeItem)) {
             return error("修改费用'" + feeItem.getFeeName() + "'失败，同场景下费用编码已存在");
         }
         return toAjax(feeService.updateFee(feeItem));
@@ -129,8 +118,7 @@ public class CostFeeController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:fee:remove')")
     @Log(title = "费用中心", businessType = BusinessType.DELETE)
     @DeleteMapping("/{feeIds}")
-    public AjaxResult remove(@PathVariable Long[] feeIds)
-    {
+    public AjaxResult remove(@PathVariable Long[] feeIds) {
         return toAjax(feeService.deleteFeeByIds(feeIds));
     }
 }

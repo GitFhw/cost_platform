@@ -1,9 +1,8 @@
 package com.ruoyi.system.domain.cost.bo;
 
-import lombok.Data;
-
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 
 /**
  * 发起重算申请请求对象
@@ -11,8 +10,7 @@ import jakarta.validation.constraints.NotNull;
  * @author HwFan
  */
 @Data
-public class CostRecalcApplyBo
-{
+public class CostRecalcApplyBo {
     @NotNull(message = "所属场景不能为空")
     private Long sceneId;
 

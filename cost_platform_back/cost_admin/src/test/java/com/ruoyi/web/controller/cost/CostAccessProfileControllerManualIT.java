@@ -18,23 +18,16 @@ import org.springframework.web.client.RestTemplate;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.client.ExpectedCount.once;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.http.HttpMethod.POST;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.client.ExpectedCount.once;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class CostAccessProfileControllerManualIT
-{
+class CostAccessProfileControllerManualIT {
     private static final long SCENE_ID = 10005L;
     private static final long FEE_ID = 20041L;
 
@@ -51,8 +44,7 @@ class CostAccessProfileControllerManualIT
     private RestTemplate costAccessRestTemplate;
 
     @Test
-    void shouldCreateUpdateAndRemoveAccessProfile() throws Exception
-    {
+    void shouldCreateUpdateAndRemoveAccessProfile() throws Exception {
         String token = loginAndGetToken();
         String profileCode = "IT_ACCESS_PROFILE_" + System.currentTimeMillis();
 
@@ -130,8 +122,7 @@ class CostAccessProfileControllerManualIT
     }
 
     @Test
-    void shouldFetchHttpProfileAndPreviewBuiltInput() throws Exception
-    {
+    void shouldFetchHttpProfileAndPreviewBuiltInput() throws Exception {
         String token = loginAndGetToken();
         String profileCode = "IT_HTTP_PROFILE_" + System.currentTimeMillis();
 
@@ -177,8 +168,7 @@ class CostAccessProfileControllerManualIT
                 .andRespond(withSuccess("[{\"payload\":{\"bizNo\":\"HTTP-001\",\"teamCode\":\"TEAM-01\",\"teamName\":\"测试协力队\",\"FEMALE_TEAM_HEADCOUNT\":2}}]",
                         MediaType.APPLICATION_JSON));
 
-        try
-        {
+        try {
             JsonNode preview = readData(mockMvc.perform(post("/cost/access/profile/" + profileId + "/preview-fetch")
                             .header("Authorization", "Bearer " + token)
                             .contentType(MediaType.APPLICATION_JSON)
@@ -192,9 +182,7 @@ class CostAccessProfileControllerManualIT
             assertThat(preview.path("mappedRecords").get(0).path("bizNo").asText()).isEqualTo("HTTP-001");
             assertThat(preview.path("mappedRecords").get(0).path("objectCode").asText()).isEqualTo("TEAM-01");
             assertThat(preview.path("fetchedPayloadJson").isArray()).isTrue();
-        }
-        finally
-        {
+        } finally {
             server.verify();
             mockMvc.perform(delete("/cost/access/profile/" + profileId)
                             .header("Authorization", "Bearer " + token))
@@ -203,8 +191,7 @@ class CostAccessProfileControllerManualIT
     }
 
     @Test
-    void shouldFetchHttpProfileAndCreateInputBatch() throws Exception
-    {
+    void shouldFetchHttpProfileAndCreateInputBatch() throws Exception {
         String token = loginAndGetToken();
         String profileCode = "IT_HTTP_BATCH_" + System.currentTimeMillis();
 
@@ -248,8 +235,7 @@ class CostAccessProfileControllerManualIT
                 .andRespond(withSuccess("[{\"payload\":{\"bizNo\":\"BATCH-001\",\"teamCode\":\"TEAM-BATCH-01\",\"teamName\":\"批次协力队\",\"FEMALE_TEAM_HEADCOUNT\":3}}]",
                         MediaType.APPLICATION_JSON));
 
-        try
-        {
+        try {
             JsonNode batch = readData(mockMvc.perform(post("/cost/access/profile/" + profileId + "/input-batch")
                             .header("Authorization", "Bearer " + token)
                             .contentType(MediaType.APPLICATION_JSON)
@@ -263,9 +249,7 @@ class CostAccessProfileControllerManualIT
             assertThat(batch.path("fetchMeta").path("statusCode").asInt()).isEqualTo(200);
             assertThat(batch.path("mappedRecordCount").asInt()).isEqualTo(1);
             assertThat(batch.path("mappedRecords").get(0).path("objectCode").asText()).isEqualTo("TEAM-BATCH-01");
-        }
-        finally
-        {
+        } finally {
             server.verify();
             mockMvc.perform(delete("/cost/access/profile/" + profileId)
                             .header("Authorization", "Bearer " + token))
@@ -274,8 +258,7 @@ class CostAccessProfileControllerManualIT
     }
 
     @Test
-    void shouldFetchPagedHttpProfileAndCreateInputBatch() throws Exception
-    {
+    void shouldFetchPagedHttpProfileAndCreateInputBatch() throws Exception {
         String token = loginAndGetToken();
         String profileCode = "IT_HTTP_PAGED_BATCH_" + System.currentTimeMillis();
 
@@ -322,8 +305,7 @@ class CostAccessProfileControllerManualIT
                 .andRespond(withSuccess("{\"data\":{\"records\":[{\"payload\":{\"bizNo\":\"PAGE-003\",\"teamCode\":\"TEAM-03\",\"teamName\":\"协力队三\",\"FEMALE_TEAM_HEADCOUNT\":4}}],\"hasMore\":false}}",
                         MediaType.APPLICATION_JSON));
 
-        try
-        {
+        try {
             JsonNode batch = readData(mockMvc.perform(post("/cost/access/profile/" + profileId + "/input-batch")
                             .header("Authorization", "Bearer " + token)
                             .contentType(MediaType.APPLICATION_JSON)
@@ -339,9 +321,7 @@ class CostAccessProfileControllerManualIT
             assertThat(batch.path("fetchMeta").path("recordCount").asInt()).isEqualTo(3);
             assertThat(batch.path("mappedRecordCount").asInt()).isEqualTo(3);
             assertThat(batch.path("mappedRecords").get(0).path("objectCode").asText()).isEqualTo("TEAM-01");
-        }
-        finally
-        {
+        } finally {
             server.verify();
             mockMvc.perform(delete("/cost/access/profile/" + profileId)
                             .header("Authorization", "Bearer " + token))
@@ -350,8 +330,7 @@ class CostAccessProfileControllerManualIT
     }
 
     @Test
-    void shouldResumePagedHttpProfileInputBatch() throws Exception
-    {
+    void shouldResumePagedHttpProfileInputBatch() throws Exception {
         String token = loginAndGetToken();
         String profileCode = "IT_HTTP_RESUME_BATCH_" + System.currentTimeMillis();
 
@@ -398,8 +377,7 @@ class CostAccessProfileControllerManualIT
                 .andRespond(withSuccess("{\"data\":{\"records\":[{\"payload\":{\"bizNo\":\"RESUME-003\",\"teamCode\":\"TEAM-13\",\"teamName\":\"协力队三\",\"FEMALE_TEAM_HEADCOUNT\":4}}],\"hasMore\":false}}",
                         MediaType.APPLICATION_JSON));
 
-        try
-        {
+        try {
             JsonNode firstBatch = readData(mockMvc.perform(post("/cost/access/profile/" + profileId + "/input-batch")
                             .header("Authorization", "Bearer " + token)
                             .contentType(MediaType.APPLICATION_JSON)
@@ -426,9 +404,7 @@ class CostAccessProfileControllerManualIT
             assertThat(resumedBatch.path("itemTotal").asInt()).isEqualTo(3);
             assertThat(resumedBatch.path("checkpoint").path("hasMore").asBoolean()).isFalse();
             assertThat(resumedBatch.path("mappedRecords").get(0).path("objectCode").asText()).isEqualTo("TEAM-13");
-        }
-        finally
-        {
+        } finally {
             server.verify();
             mockMvc.perform(delete("/cost/access/profile/" + profileId)
                             .header("Authorization", "Bearer " + token))
@@ -436,8 +412,7 @@ class CostAccessProfileControllerManualIT
         }
     }
 
-    private String loginAndGetToken() throws Exception
-    {
+    private String loginAndGetToken() throws Exception {
         JsonNode captcha = readBody(mockMvc.perform(get("/captchaImage"))
                 .andExpect(status().isOk())
                 .andReturn());
@@ -461,28 +436,22 @@ class CostAccessProfileControllerManualIT
         return login.path("token").asText();
     }
 
-    private JsonNode readData(MvcResult result) throws Exception
-    {
+    private JsonNode readData(MvcResult result) throws Exception {
         JsonNode root = readBody(result);
         assertThat(root.path("code").asInt()).isEqualTo(200);
         return root.path("data");
     }
 
-    private JsonNode readBody(MvcResult result) throws Exception
-    {
+    private JsonNode readBody(MvcResult result) throws Exception {
         return objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8));
     }
 
-    private JsonNode findNodeByField(JsonNode array, String fieldName, String expectedValue)
-    {
-        if (array == null || !array.isArray())
-        {
+    private JsonNode findNodeByField(JsonNode array, String fieldName, String expectedValue) {
+        if (array == null || !array.isArray()) {
             return null;
         }
-        for (JsonNode node : array)
-        {
-            if (expectedValue.equals(node.path(fieldName).asText()))
-            {
+        for (JsonNode node : array) {
+            if (expectedValue.equals(node.path(fieldName).asText())) {
                 return node;
             }
         }

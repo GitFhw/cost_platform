@@ -9,23 +9,10 @@ import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
-import com.ruoyi.system.domain.cost.CostFeeItem;
-import com.ruoyi.system.domain.cost.CostFormula;
-import com.ruoyi.system.domain.cost.CostPublishSnapshot;
-import com.ruoyi.system.domain.cost.CostPublishVersion;
-import com.ruoyi.system.domain.cost.CostRule;
-import com.ruoyi.system.domain.cost.CostScene;
-import com.ruoyi.system.domain.cost.CostVariable;
+import com.ruoyi.system.domain.cost.*;
 import com.ruoyi.system.domain.cost.bo.CostPublishCreateBo;
 import com.ruoyi.system.domain.vo.CostPublishCheckItemVo;
-import com.ruoyi.system.mapper.cost.CostFeeMapper;
-import com.ruoyi.system.mapper.cost.CostFormulaMapper;
-import com.ruoyi.system.mapper.cost.CostPublishSnapshotMapper;
-import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
-import com.ruoyi.system.mapper.cost.CostRuleMapper;
-import com.ruoyi.system.mapper.cost.CostSceneMapper;
-import com.ruoyi.system.mapper.cost.CostSimulationRecordMapper;
-import com.ruoyi.system.mapper.cost.CostVariableMapper;
+import com.ruoyi.system.mapper.cost.*;
 import com.ruoyi.system.service.cost.ICostPublishService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -35,19 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.DecimalFormat;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -56,8 +31,7 @@ import java.util.stream.Collectors;
  * @author HwFan
  */
 @Service
-public class CostPublishServiceImpl implements ICostPublishService
-{
+public class CostPublishServiceImpl implements ICostPublishService {
     private static final String STATUS_ENABLED = "0";
     private static final String VERSION_STATUS_PUBLISHED = "PUBLISHED";
     private static final String VERSION_STATUS_ACTIVE = "ACTIVE";
@@ -103,8 +77,7 @@ public class CostPublishServiceImpl implements ICostPublishService
     private CostDistributedLockSupport distributedLockSupport;
 
     @Override
-    public Map<String, Object> selectPublishStats(CostPublishVersion query)
-    {
+    public Map<String, Object> selectPublishStats(CostPublishVersion query) {
         Map<String, Object> stats = publishVersionMapper.selectPublishStats(query);
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("sceneCount", getLongValue(stats, "sceneCount"));
@@ -115,8 +88,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         result.put("latestBlockingCount", 0);
         result.put("latestCheckResult", "UNAVAILABLE");
         result.put("latestCheckLabel", "暂无校验");
-        if (query != null && query.getSceneId() != null)
-        {
+        if (query != null && query.getSceneId() != null) {
             CostPublishVersion activeVersion = publishVersionMapper.selectActiveVersionByScene(query.getSceneId());
             CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(query.getSceneId());
             result.put("activeVersionId", activeVersion == null ? null : activeVersion.getVersionId());
@@ -135,8 +107,7 @@ public class CostPublishServiceImpl implements ICostPublishService
     }
 
     @Override
-    public Map<String, Object> selectPublishPrecheck(Long sceneId)
-    {
+    public Map<String, Object> selectPublishPrecheck(Long sceneId) {
         SnapshotBundle draftBundle = buildDraftSnapshotBundle(sceneId);
         CostPublishVersion activeVersion = publishVersionMapper.selectActiveVersionByScene(sceneId);
         SnapshotBundle activeBundle = normalizeBundle(activeVersion == null ? null : loadSnapshotBundle(activeVersion.getVersionId()));
@@ -176,14 +147,12 @@ public class CostPublishServiceImpl implements ICostPublishService
     }
 
     @Override
-    public List<CostPublishVersion> selectPublishVersionList(CostPublishVersion query)
-    {
+    public List<CostPublishVersion> selectPublishVersionList(CostPublishVersion query) {
         return publishVersionMapper.selectPublishVersionList(query);
     }
 
     @Override
-    public Map<String, Object> selectPublishVersionDetail(Long versionId, String feeCode)
-    {
+    public Map<String, Object> selectPublishVersionDetail(Long versionId, String feeCode) {
         CostPublishVersion version = requireVersion(versionId);
         SnapshotBundle currentBundle = normalizeBundle(loadSnapshotBundle(versionId));
         CostPublishVersion previousVersion = publishVersionMapper.selectPreviousVersion(version.getSceneId(), versionId);
@@ -201,12 +170,10 @@ public class CostPublishServiceImpl implements ICostPublishService
     }
 
     @Override
-    public Map<String, Object> selectPublishDiff(Long fromVersionId, Long toVersionId, String feeCode)
-    {
+    public Map<String, Object> selectPublishDiff(Long fromVersionId, Long toVersionId, String feeCode) {
         CostPublishVersion fromVersion = requireVersion(fromVersionId);
         CostPublishVersion toVersion = requireVersion(toVersionId);
-        if (!Objects.equals(fromVersion.getSceneId(), toVersion.getSceneId()))
-        {
+        if (!Objects.equals(fromVersion.getSceneId(), toVersion.getSceneId())) {
             throw new ServiceException("版本差异只能在同一场景下比较");
         }
         SnapshotBundle fromBundle = normalizeBundle(loadSnapshotBundle(fromVersionId));
@@ -235,51 +202,46 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int publishScene(CostPublishCreateBo bo)
-    {
+    public int publishScene(CostPublishCreateBo bo) {
         return distributedLockSupport.executeSceneVersioningLock(bo.getSceneId(),
                 "当前场景正在执行发布/生效/回滚，请稍后重试", () ->
                 {
                     Map<String, Object> precheck = selectPublishPrecheck(bo.getSceneId());
-        if (!Boolean.TRUE.equals(precheck.get("publishable")))
-        {
-            throw new ServiceException("当前场景存在阻断项，请先处理后再发布");
-        }
+                    if (!Boolean.TRUE.equals(precheck.get("publishable"))) {
+                        throw new ServiceException("当前场景存在阻断项，请先处理后再发布");
+                    }
 
-        SnapshotBundle draftBundle = buildDraftSnapshotBundle(bo.getSceneId());
-        String operator = SecurityUtils.getUsername();
-        Date now = DateUtils.getNowDate();
+                    SnapshotBundle draftBundle = buildDraftSnapshotBundle(bo.getSceneId());
+                    String operator = SecurityUtils.getUsername();
+                    Date now = DateUtils.getNowDate();
 
-        CostPublishVersion version = new CostPublishVersion();
-        version.setSceneId(bo.getSceneId());
-        version.setVersionNo(buildNextVersionNo(bo.getSceneId(), now));
-        version.setVersionStatus(VERSION_STATUS_PUBLISHED);
-        version.setPublishDesc(bo.getPublishDesc());
-        version.setValidationResultJson(writeJson(precheck));
-        version.setSnapshotHash(draftBundle.snapshotHash);
-        version.setPublishedBy(operator);
-        version.setPublishedTime(now);
-        publishVersionMapper.insert(version);
+                    CostPublishVersion version = new CostPublishVersion();
+                    version.setSceneId(bo.getSceneId());
+                    version.setVersionNo(buildNextVersionNo(bo.getSceneId(), now));
+                    version.setVersionStatus(VERSION_STATUS_PUBLISHED);
+                    version.setPublishDesc(bo.getPublishDesc());
+                    version.setValidationResultJson(writeJson(precheck));
+                    version.setSnapshotHash(draftBundle.snapshotHash);
+                    version.setPublishedBy(operator);
+                    version.setPublishedTime(now);
+                    publishVersionMapper.insert(version);
 
-        for (CostPublishSnapshot snapshot : draftBundle.snapshotRows)
-        {
-            snapshot.setSnapshotId(null);
-            snapshot.setVersionId(version.getVersionId());
-            publishSnapshotMapper.insert(snapshot);
-        }
+                    for (CostPublishSnapshot snapshot : draftBundle.snapshotRows) {
+                        snapshot.setSnapshotId(null);
+                        snapshot.setVersionId(version.getVersionId());
+                        publishSnapshotMapper.insert(snapshot);
+                    }
 
-        if (Boolean.TRUE.equals(bo.getActivateNow()))
-        {
-            activateVersionInternal(version, false, operator, now);
-        }
+                    if (Boolean.TRUE.equals(bo.getActivateNow())) {
+                        activateVersionInternal(version, false, operator, now);
+                    }
                     return 1;
                 });
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int activateVersion(Long versionId)
-    {
+    public int activateVersion(Long versionId) {
         CostPublishVersion version = requireVersion(versionId);
         return distributedLockSupport.executeSceneVersioningLock(version.getSceneId(),
                 "当前场景正在执行发布/生效/回滚，请稍后重试", () ->
@@ -291,8 +253,7 @@ public class CostPublishServiceImpl implements ICostPublishService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int rollbackVersion(Long versionId)
-    {
+    public int rollbackVersion(Long versionId) {
         CostPublishVersion version = requireVersion(versionId);
         return distributedLockSupport.executeSceneVersioningLock(version.getSceneId(),
                 "当前场景正在执行发布/生效/回滚，请稍后重试", () ->
@@ -303,36 +264,26 @@ public class CostPublishServiceImpl implements ICostPublishService
     }
 
     private void appendCheckItems(Long sceneId, SnapshotBundle draftBundle, CostPublishVersion activeVersion,
-            SnapshotBundle activeBundle, List<CostPublishCheckItemVo> items)
-    {
-        if (!STATUS_ENABLED.equals(String.valueOf(draftBundle.sceneSnapshot.get("status"))))
-        {
+                                  SnapshotBundle activeBundle, List<CostPublishCheckItemVo> items) {
+        if (!STATUS_ENABLED.equals(String.valueOf(draftBundle.sceneSnapshot.get("status")))) {
             items.add(createCheckItem("BLOCK", "SCENE_DISABLED", "场景状态检查", "当前场景已停用，不能发布新版本。"));
-        }
-        else
-        {
+        } else {
             items.add(createCheckItem("PASS", "SCENE_STATUS_OK", "场景状态检查", "当前场景状态正常，可进入发布治理。"));
         }
-        if (draftBundle.feesByCode.isEmpty())
-        {
+        if (draftBundle.feesByCode.isEmpty()) {
             items.add(createCheckItem("BLOCK", "NO_FEE", "费用完整性", "当前场景下暂无启用费用，无法形成可运行版本。"));
         }
-        if (draftBundle.variablesByCode.isEmpty())
-        {
+        if (draftBundle.variablesByCode.isEmpty()) {
             items.add(createCheckItem("BLOCK", "NO_VARIABLE", "变量完整性", "当前场景下暂无启用变量，无法形成稳定的规则运行口径。"));
         }
-        if (draftBundle.rulesByCode.isEmpty())
-        {
+        if (draftBundle.rulesByCode.isEmpty()) {
             items.add(createCheckItem("BLOCK", "NO_RULE", "规则完整性", "当前场景下暂无启用规则，无法发布可运行版本。"));
         }
 
         List<Map<String, Object>> feesWithoutRule = publishVersionMapper.selectEnabledFeesWithoutRule(sceneId);
-        if (feesWithoutRule.isEmpty())
-        {
+        if (feesWithoutRule.isEmpty()) {
             items.add(createCheckItem("PASS", "FEE_RULE_COVERED", "费用规则覆盖", "所有启用费用都已挂载至少一条启用规则。"));
-        }
-        else
-        {
+        } else {
             String joined = feesWithoutRule.stream()
                     .map(item -> String.format("%1$s(%2$s)", item.get("feeName"), item.get("feeCode")))
                     .collect(Collectors.joining("、"));
@@ -340,12 +291,9 @@ public class CostPublishServiceImpl implements ICostPublishService
         }
 
         List<Map<String, Object>> tierRuleWithoutTier = publishVersionMapper.selectTierRulesWithoutTier(sceneId);
-        if (tierRuleWithoutTier.isEmpty())
-        {
+        if (tierRuleWithoutTier.isEmpty()) {
             items.add(createCheckItem("PASS", "RULE_TIER_OK", "阶梯结构检查", "当前场景的阶梯规则都已具备完整阶梯明细。"));
-        }
-        else
-        {
+        } else {
             String joined = tierRuleWithoutTier.stream()
                     .map(item -> String.format("%1$s(%2$s)", item.get("ruleName"), item.get("ruleCode")))
                     .collect(Collectors.joining("、"));
@@ -353,18 +301,13 @@ public class CostPublishServiceImpl implements ICostPublishService
         }
 
         appendFormulaReferenceChecks(draftBundle, items);
-        if (activeVersion == null)
-        {
+        if (activeVersion == null) {
             items.add(createCheckItem("WARN", "FIRST_RELEASE", "首发提醒", "当前场景还没有生效版本，本次发布后建议尽快设为生效。"));
             appendFirstReleaseSimulationCheck(sceneId, items);
-        }
-        else if (StringUtils.equals(draftBundle.snapshotHash, activeVersion.getSnapshotHash()))
-        {
+        } else if (StringUtils.equals(draftBundle.snapshotHash, activeVersion.getSnapshotHash())) {
             items.add(createCheckItem("WARN", "SNAPSHOT_NO_CHANGE", "版本差异提醒",
                     String.format("当前草稿与生效版本%1$s的快照哈希一致，发布后可能不会产生业务差异。", activeVersion.getVersionNo())));
-        }
-        else
-        {
+        } else {
             int impactedFeeCount = buildFeeDiffSummary(activeBundle, draftBundle, null).size();
             items.add(createCheckItem("PASS", "SNAPSHOT_CHANGED", "版本差异提醒",
                     String.format(Locale.ROOT, "当前草稿相较生效版本%1$s识别到%2$d个受影响费用。", activeVersion.getVersionNo(), impactedFeeCount)));
@@ -378,15 +321,13 @@ public class CostPublishServiceImpl implements ICostPublishService
      * 再决定是否继续发布。</p>
      *
      * @param sceneId 场景主键
-     * @param items 校验项集合
+     * @param items   校验项集合
      */
-    private void appendFirstReleaseSimulationCheck(Long sceneId, List<CostPublishCheckItemVo> items)
-    {
+    private void appendFirstReleaseSimulationCheck(Long sceneId, List<CostPublishCheckItemVo> items) {
         long successSimulationCount = simulationRecordMapper.selectCount(Wrappers.lambdaQuery(com.ruoyi.system.domain.cost.CostSimulationRecord.class)
                 .eq(com.ruoyi.system.domain.cost.CostSimulationRecord::getSceneId, sceneId)
                 .eq(com.ruoyi.system.domain.cost.CostSimulationRecord::getStatus, SIMULATION_STATUS_SUCCESS));
-        if (successSimulationCount > 0)
-        {
+        if (successSimulationCount > 0) {
             items.add(createCheckItem("PASS", "FIRST_RELEASE_SIMULATION_READY", "试算提醒",
                     String.format(Locale.ROOT, "当前场景已有%1$d条成功试算记录，可作为首次发布前的业务核对依据。", successSimulationCount)));
             return;
@@ -401,26 +342,21 @@ public class CostPublishServiceImpl implements ICostPublishService
      * <p>新配置应以公式编码为唯一入口。发布前再做一次收口，
      * 避免仅存原始表达式的历史兼容数据继续进入新快照。</p>
      */
-    private void appendFormulaReferenceChecks(SnapshotBundle draftBundle, List<CostPublishCheckItemVo> items)
-    {
+    private void appendFormulaReferenceChecks(SnapshotBundle draftBundle, List<CostPublishCheckItemVo> items) {
         List<String> variableMissingCode = new ArrayList<>();
         List<String> variableMissingAsset = new ArrayList<>();
         int formulaVariableCount = 0;
-        for (Map<String, Object> variable : draftBundle.variablesByCode.values())
-        {
-            if (!"FORMULA".equalsIgnoreCase(stringValue(variable.get("sourceType"))))
-            {
+        for (Map<String, Object> variable : draftBundle.variablesByCode.values()) {
+            if (!"FORMULA".equalsIgnoreCase(stringValue(variable.get("sourceType")))) {
                 continue;
             }
             formulaVariableCount++;
             String formulaCode = StringUtils.trim(stringValue(variable.get("formulaCode")));
-            if (StringUtils.isEmpty(formulaCode))
-            {
+            if (StringUtils.isEmpty(formulaCode)) {
                 variableMissingCode.add(buildAssetLabel(variable, "variableName", "variableCode"));
                 continue;
             }
-            if (!draftBundle.formulasByCode.containsKey(formulaCode))
-            {
+            if (!draftBundle.formulasByCode.containsKey(formulaCode)) {
                 variableMissingAsset.add(buildAssetLabel(variable, "variableName", "variableCode") + " -> " + formulaCode);
             }
         }
@@ -428,86 +364,67 @@ public class CostPublishServiceImpl implements ICostPublishService
         List<String> ruleMissingCode = new ArrayList<>();
         List<String> ruleMissingAsset = new ArrayList<>();
         int formulaRuleCount = 0;
-        for (Map<String, Object> rule : draftBundle.rulesByCode.values())
-        {
-            if (!"FORMULA".equalsIgnoreCase(stringValue(rule.get("ruleType"))))
-            {
+        for (Map<String, Object> rule : draftBundle.rulesByCode.values()) {
+            if (!"FORMULA".equalsIgnoreCase(stringValue(rule.get("ruleType")))) {
                 continue;
             }
             formulaRuleCount++;
             String formulaCode = StringUtils.trim(stringValue(rule.get("amountFormulaCode")));
-            if (StringUtils.isEmpty(formulaCode))
-            {
+            if (StringUtils.isEmpty(formulaCode)) {
                 ruleMissingCode.add(buildAssetLabel(rule, "ruleName", "ruleCode"));
                 continue;
             }
-            if (!draftBundle.formulasByCode.containsKey(formulaCode))
-            {
+            if (!draftBundle.formulasByCode.containsKey(formulaCode)) {
                 ruleMissingAsset.add(buildAssetLabel(rule, "ruleName", "ruleCode") + " -> " + formulaCode);
             }
         }
 
-        if (!variableMissingCode.isEmpty())
-        {
+        if (!variableMissingCode.isEmpty()) {
             items.add(createCheckItem("BLOCK", "FORMULA_VARIABLE_CODE_MISSING", "公式编码治理",
                     "以下公式变量仍未绑定公式编码，发布前请先在公式实验室沉淀后重新选择：" + String.join("、", variableMissingCode)));
         }
-        if (!variableMissingAsset.isEmpty())
-        {
+        if (!variableMissingAsset.isEmpty()) {
             items.add(createCheckItem("BLOCK", "FORMULA_VARIABLE_ASSET_MISSING", "公式编码治理",
                     "以下公式变量引用的公式编码当前场景不存在或未启用：" + String.join("、", variableMissingAsset)));
         }
-        if (!ruleMissingCode.isEmpty())
-        {
+        if (!ruleMissingCode.isEmpty()) {
             items.add(createCheckItem("BLOCK", "FORMULA_RULE_CODE_MISSING", "公式编码治理",
                     "以下公式金额规则仍未绑定金额公式编码，发布前请先在公式实验室选择金额公式：" + String.join("、", ruleMissingCode)));
         }
-        if (!ruleMissingAsset.isEmpty())
-        {
+        if (!ruleMissingAsset.isEmpty()) {
             items.add(createCheckItem("BLOCK", "FORMULA_RULE_ASSET_MISSING", "公式编码治理",
                     "以下公式金额规则引用的金额公式编码当前场景不存在或未启用：" + String.join("、", ruleMissingAsset)));
         }
 
-        if (variableMissingCode.isEmpty() && variableMissingAsset.isEmpty() && ruleMissingCode.isEmpty() && ruleMissingAsset.isEmpty())
-        {
-            if (formulaVariableCount > 0 || formulaRuleCount > 0)
-            {
+        if (variableMissingCode.isEmpty() && variableMissingAsset.isEmpty() && ruleMissingCode.isEmpty() && ruleMissingAsset.isEmpty()) {
+            if (formulaVariableCount > 0 || formulaRuleCount > 0) {
                 items.add(createCheckItem("PASS", "FORMULA_REFERENCE_OK", "公式编码治理",
                         String.format(Locale.ROOT, "当前场景 %1$d 个公式变量、%2$d 条公式金额规则均已绑定有效公式编码。", formulaVariableCount, formulaRuleCount)));
-            }
-            else
-            {
+            } else {
                 items.add(createCheckItem("PASS", "FORMULA_REFERENCE_EMPTY", "公式编码治理", "当前场景暂无公式变量或公式金额规则，无需执行公式编码治理检查。"));
             }
         }
     }
 
-    private void activateVersionInternal(CostPublishVersion targetVersion, boolean rollback, String operator, Date operateTime)
-    {
+    private void activateVersionInternal(CostPublishVersion targetVersion, boolean rollback, String operator, Date operateTime) {
         CostScene scene = sceneMapper.selectById(targetVersion.getSceneId());
-        if (StringUtils.isNull(scene))
-        {
+        if (StringUtils.isNull(scene)) {
             throw new ServiceException("所属场景不存在，无法切换版本");
         }
         CostPublishVersion currentActive = publishVersionMapper.selectActiveVersionByScene(targetVersion.getSceneId());
-        if (currentActive != null && Objects.equals(currentActive.getVersionId(), targetVersion.getVersionId()))
-        {
-            if (rollback)
-            {
+        if (currentActive != null && Objects.equals(currentActive.getVersionId(), targetVersion.getVersionId())) {
+            if (rollback) {
                 throw new ServiceException("当前版本已经是生效版本，无需回滚");
             }
             return;
         }
-        if (!rollback && !StringUtils.equalsAny(targetVersion.getVersionStatus(), VERSION_STATUS_PUBLISHED, VERSION_STATUS_ROLLED_BACK))
-        {
+        if (!rollback && !StringUtils.equalsAny(targetVersion.getVersionStatus(), VERSION_STATUS_PUBLISHED, VERSION_STATUS_ROLLED_BACK)) {
             throw new ServiceException("只有已发布或已回滚的版本才能设为生效");
         }
-        if (rollback && !StringUtils.equalsAny(targetVersion.getVersionStatus(), VERSION_STATUS_PUBLISHED, VERSION_STATUS_ROLLED_BACK))
-        {
+        if (rollback && !StringUtils.equalsAny(targetVersion.getVersionStatus(), VERSION_STATUS_PUBLISHED, VERSION_STATUS_ROLLED_BACK)) {
             throw new ServiceException("只有历史发布版本才能作为回滚目标");
         }
-        if (currentActive != null)
-        {
+        if (currentActive != null) {
             publishVersionMapper.update(null, Wrappers.<CostPublishVersion>lambdaUpdate()
                     .eq(CostPublishVersion::getVersionId, currentActive.getVersionId())
                     .set(CostPublishVersion::getVersionStatus, rollback ? VERSION_STATUS_ROLLED_BACK : VERSION_STATUS_PUBLISHED)
@@ -530,11 +447,9 @@ public class CostPublishServiceImpl implements ICostPublishService
                 .set(CostScene::getUpdateTime, operateTime));
     }
 
-    private SnapshotBundle buildDraftSnapshotBundle(Long sceneId)
-    {
+    private SnapshotBundle buildDraftSnapshotBundle(Long sceneId) {
         CostScene scene = sceneMapper.selectById(sceneId);
-        if (StringUtils.isNull(scene))
-        {
+        if (StringUtils.isNull(scene)) {
             throw new ServiceException("场景不存在，请重新选择");
         }
 
@@ -578,8 +493,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         return bundle;
     }
 
-    private SnapshotBundle loadSnapshotBundle(Long versionId)
-    {
+    private SnapshotBundle loadSnapshotBundle(Long versionId) {
         CostPublishVersion version = requireVersion(versionId);
         SnapshotBundle bundle = new SnapshotBundle();
         bundle.sceneId = version.getSceneId();
@@ -587,42 +501,28 @@ public class CostPublishServiceImpl implements ICostPublishService
         bundle.sceneName = version.getSceneName();
         bundle.snapshotHash = version.getSnapshotHash();
         bundle.snapshotRows = publishVersionMapper.selectSnapshotList(versionId, null);
-        for (CostPublishSnapshot snapshot : bundle.snapshotRows)
-        {
+        for (CostPublishSnapshot snapshot : bundle.snapshotRows) {
             Map<String, Object> json = parseJsonMap(snapshot.getSnapshotJson());
-            if (SNAPSHOT_SCENE.equals(snapshot.getSnapshotType()))
-            {
+            if (SNAPSHOT_SCENE.equals(snapshot.getSnapshotType())) {
                 bundle.sceneSnapshot = json;
-            }
-            else if (SNAPSHOT_FEE.equals(snapshot.getSnapshotType()))
-            {
+            } else if (SNAPSHOT_FEE.equals(snapshot.getSnapshotType())) {
                 bundle.feesByCode.put(snapshot.getObjectCode(), json);
-            }
-            else if (SNAPSHOT_VARIABLE.equals(snapshot.getSnapshotType()))
-            {
+            } else if (SNAPSHOT_VARIABLE.equals(snapshot.getSnapshotType())) {
                 bundle.variablesByCode.put(snapshot.getObjectCode(), json);
-            }
-            else if (SNAPSHOT_FORMULA.equals(snapshot.getSnapshotType()))
-            {
+            } else if (SNAPSHOT_FORMULA.equals(snapshot.getSnapshotType())) {
                 bundle.formulasByCode.put(snapshot.getObjectCode(), json);
-            }
-            else if (SNAPSHOT_RULE.equals(snapshot.getSnapshotType()))
-            {
+            } else if (SNAPSHOT_RULE.equals(snapshot.getSnapshotType())) {
                 bundle.rulesByCode.put(snapshot.getObjectCode(), json);
                 String feeCode = stringValue(json.get("feeCode"));
                 bundle.ruleToFeeCode.put(snapshot.getObjectCode(), feeCode);
                 bundle.feeRuleCodes.computeIfAbsent(feeCode, key -> new TreeSet<>()).add(snapshot.getObjectCode());
                 addRefVariable(bundle, feeCode, stringValue(json.get("quantityVariableCode")));
-            }
-            else if (SNAPSHOT_RULE_CONDITION.equals(snapshot.getSnapshotType()))
-            {
+            } else if (SNAPSHOT_RULE_CONDITION.equals(snapshot.getSnapshotType())) {
                 String ruleCode = stringValue(json.get("ruleCode"));
                 String feeCode = stringValue(json.get("feeCode"));
                 bundle.ruleConditionsByRuleCode.computeIfAbsent(ruleCode, key -> new ArrayList<>()).add(json);
                 addRefVariable(bundle, feeCode, stringValue(json.get("variableCode")));
-            }
-            else if (SNAPSHOT_RULE_TIER.equals(snapshot.getSnapshotType()))
-            {
+            } else if (SNAPSHOT_RULE_TIER.equals(snapshot.getSnapshotType())) {
                 String ruleCode = stringValue(json.get("ruleCode"));
                 bundle.ruleTiersByRuleCode.computeIfAbsent(ruleCode, key -> new ArrayList<>()).add(json);
             }
@@ -631,8 +531,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         return bundle;
     }
 
-    private void addSceneSnapshot(SnapshotBundle bundle, CostScene scene)
-    {
+    private void addSceneSnapshot(SnapshotBundle bundle, CostScene scene) {
         CostPublishSnapshot snapshot = new CostPublishSnapshot();
         snapshot.setSnapshotType(SNAPSHOT_SCENE);
         snapshot.setObjectCode(scene.getSceneCode());
@@ -642,11 +541,9 @@ public class CostPublishServiceImpl implements ICostPublishService
         bundle.snapshotRows.add(snapshot);
     }
 
-    private void addFeeSnapshots(SnapshotBundle bundle, List<CostFeeItem> feeItems)
-    {
+    private void addFeeSnapshots(SnapshotBundle bundle, List<CostFeeItem> feeItems) {
         int sortNo = 10;
-        for (CostFeeItem fee : feeItems)
-        {
+        for (CostFeeItem fee : feeItems) {
             Map<String, Object> json = new LinkedHashMap<>();
             json.put("feeCode", fee.getFeeCode());
             json.put("feeName", fee.getFeeName());
@@ -670,11 +567,9 @@ public class CostPublishServiceImpl implements ICostPublishService
         }
     }
 
-    private void addVariableSnapshots(SnapshotBundle bundle, List<CostVariable> variables)
-    {
+    private void addVariableSnapshots(SnapshotBundle bundle, List<CostVariable> variables) {
         int sortNo = 1000;
-        for (CostVariable variable : variables)
-        {
+        for (CostVariable variable : variables) {
             Map<String, Object> json = new LinkedHashMap<>();
             json.put("variableCode", variable.getVariableCode());
             json.put("variableName", variable.getVariableName());
@@ -710,11 +605,9 @@ public class CostPublishServiceImpl implements ICostPublishService
         }
     }
 
-    private void addFormulaSnapshots(SnapshotBundle bundle, List<CostFormula> formulas)
-    {
+    private void addFormulaSnapshots(SnapshotBundle bundle, List<CostFormula> formulas) {
         int sortNo = 1500;
-        for (CostFormula formula : formulas)
-        {
+        for (CostFormula formula : formulas) {
             Map<String, Object> json = new LinkedHashMap<>();
             json.put("formulaCode", formula.getFormulaCode());
             json.put("formulaName", formula.getFormulaName());
@@ -738,11 +631,9 @@ public class CostPublishServiceImpl implements ICostPublishService
         }
     }
 
-    private void addRuleSnapshots(SnapshotBundle bundle, List<CostRule> rules)
-    {
+    private void addRuleSnapshots(SnapshotBundle bundle, List<CostRule> rules) {
         int sortNo = 2000;
-        for (CostRule rule : rules)
-        {
+        for (CostRule rule : rules) {
             Map<String, Object> json = new LinkedHashMap<>();
             json.put("ruleCode", rule.getRuleCode());
             json.put("ruleName", rule.getRuleName());
@@ -776,11 +667,9 @@ public class CostPublishServiceImpl implements ICostPublishService
         }
     }
 
-    private void addConditionSnapshots(SnapshotBundle bundle, List<Map<String, Object>> rows)
-    {
+    private void addConditionSnapshots(SnapshotBundle bundle, List<Map<String, Object>> rows) {
         int sortNo = 3000;
-        for (Map<String, Object> source : rows)
-        {
+        for (Map<String, Object> source : rows) {
             Map<String, Object> json = new LinkedHashMap<>();
             json.put("ruleCode", source.get("ruleCode"));
             json.put("ruleName", source.get("ruleName"));
@@ -810,11 +699,9 @@ public class CostPublishServiceImpl implements ICostPublishService
         }
     }
 
-    private void addTierSnapshots(SnapshotBundle bundle, List<Map<String, Object>> rows)
-    {
+    private void addTierSnapshots(SnapshotBundle bundle, List<Map<String, Object>> rows) {
         int sortNo = 4000;
-        for (Map<String, Object> source : rows)
-        {
+        for (Map<String, Object> source : rows) {
             Map<String, Object> json = new LinkedHashMap<>();
             json.put("ruleCode", source.get("ruleCode"));
             json.put("ruleName", source.get("ruleName"));
@@ -841,8 +728,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         }
     }
 
-    private Map<String, Object> buildSceneSnapshot(CostScene scene)
-    {
+    private Map<String, Object> buildSceneSnapshot(CostScene scene) {
         LinkedHashMap<String, Object> json = new LinkedHashMap<>();
         json.put("sceneCode", scene.getSceneCode());
         json.put("sceneName", scene.getSceneName());
@@ -855,24 +741,20 @@ public class CostPublishServiceImpl implements ICostPublishService
         return json;
     }
 
-    private List<Map<String, Object>> buildFeeDiffSummary(SnapshotBundle fromBundle, SnapshotBundle toBundle, String feeCode)
-    {
+    private List<Map<String, Object>> buildFeeDiffSummary(SnapshotBundle fromBundle, SnapshotBundle toBundle, String feeCode) {
         Set<String> feeCodes = new TreeSet<>();
         if (fromBundle != null) feeCodes.addAll(fromBundle.feesByCode.keySet());
         if (toBundle != null) feeCodes.addAll(toBundle.feesByCode.keySet());
-        if (StringUtils.isNotEmpty(feeCode))
-        {
+        if (StringUtils.isNotEmpty(feeCode)) {
             feeCodes = feeCodes.stream().filter(item -> StringUtils.equals(item, feeCode)).collect(Collectors.toCollection(TreeSet::new));
         }
 
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String code : feeCodes)
-        {
+        for (String code : feeCodes) {
             Map<String, Object> fromDigest = buildFeeDigest(fromBundle, code);
             Map<String, Object> toDigest = buildFeeDigest(toBundle, code);
             String changeType = determineChangeType(fromDigest, toDigest);
-            if ("UNCHANGED".equals(changeType))
-            {
+            if ("UNCHANGED".equals(changeType)) {
                 continue;
             }
 
@@ -903,26 +785,22 @@ public class CostPublishServiceImpl implements ICostPublishService
         return result;
     }
 
-    private List<Map<String, Object>> buildRuleDiffSummary(SnapshotBundle fromBundle, SnapshotBundle toBundle, String feeCode)
-    {
+    private List<Map<String, Object>> buildRuleDiffSummary(SnapshotBundle fromBundle, SnapshotBundle toBundle, String feeCode) {
         Set<String> ruleCodes = new TreeSet<>();
         if (fromBundle != null) ruleCodes.addAll(fromBundle.rulesByCode.keySet());
         if (toBundle != null) ruleCodes.addAll(toBundle.rulesByCode.keySet());
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String ruleCode : ruleCodes)
-        {
+        for (String ruleCode : ruleCodes) {
             String currentFeeCode = firstNonBlank(
                     fromBundle == null ? null : fromBundle.ruleToFeeCode.get(ruleCode),
                     toBundle == null ? null : toBundle.ruleToFeeCode.get(ruleCode));
-            if (StringUtils.isNotEmpty(feeCode) && !StringUtils.equals(feeCode, currentFeeCode))
-            {
+            if (StringUtils.isNotEmpty(feeCode) && !StringUtils.equals(feeCode, currentFeeCode)) {
                 continue;
             }
             Map<String, Object> fromComposite = buildRuleComposite(fromBundle, ruleCode);
             Map<String, Object> toComposite = buildRuleComposite(toBundle, ruleCode);
             String changeType = determineChangeType(fromComposite, toComposite);
-            if ("UNCHANGED".equals(changeType))
-            {
+            if ("UNCHANGED".equals(changeType)) {
                 continue;
             }
             Map<String, Object> fromRule = fromBundle == null ? null : fromBundle.rulesByCode.get(ruleCode);
@@ -951,18 +829,15 @@ public class CostPublishServiceImpl implements ICostPublishService
         return result;
     }
 
-    private List<Map<String, Object>> buildSceneDiffSummary(Map<String, Object> fromScene, Map<String, Object> toScene)
-    {
+    private List<Map<String, Object>> buildSceneDiffSummary(Map<String, Object> fromScene, Map<String, Object> toScene) {
         Set<String> fields = new LinkedHashSet<>();
         if (fromScene != null) fields.addAll(fromScene.keySet());
         if (toScene != null) fields.addAll(toScene.keySet());
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String field : fields)
-        {
+        for (String field : fields) {
             Object fromValue = fromScene == null ? null : fromScene.get(field);
             Object toValue = toScene == null ? null : toScene.get(field);
-            if (Objects.equals(canonicalJsonSingle(fromValue), canonicalJsonSingle(toValue)))
-            {
+            if (Objects.equals(canonicalJsonSingle(fromValue), canonicalJsonSingle(toValue))) {
                 continue;
             }
             LinkedHashMap<String, Object> item = new LinkedHashMap<>();
@@ -975,8 +850,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         return result;
     }
 
-    private Map<String, Object> buildSnapshotCounts(SnapshotBundle bundle, String feeCode)
-    {
+    private Map<String, Object> buildSnapshotCounts(SnapshotBundle bundle, String feeCode) {
         bundle = normalizeBundle(bundle);
         LinkedHashMap<String, Object> counts = new LinkedHashMap<>();
         counts.put("scene", bundle.sceneSnapshot.isEmpty() ? 0 : 1);
@@ -989,8 +863,7 @@ public class CostPublishServiceImpl implements ICostPublishService
         return counts;
     }
 
-    private Map<String, Object> buildSnapshotGroups(SnapshotBundle bundle, String feeCode)
-    {
+    private Map<String, Object> buildSnapshotGroups(SnapshotBundle bundle, String feeCode) {
         bundle = normalizeBundle(bundle);
         LinkedHashMap<String, Object> groups = new LinkedHashMap<>();
         groups.put("scene", bundle.sceneSnapshot);
@@ -1003,10 +876,8 @@ public class CostPublishServiceImpl implements ICostPublishService
         return groups;
     }
 
-    private Map<String, Object> buildFeeDigest(SnapshotBundle bundle, String feeCode)
-    {
-        if (bundle == null || !bundle.feesByCode.containsKey(feeCode))
-        {
+    private Map<String, Object> buildFeeDigest(SnapshotBundle bundle, String feeCode) {
+        if (bundle == null || !bundle.feesByCode.containsKey(feeCode)) {
             return null;
         }
         LinkedHashMap<String, Object> digest = new LinkedHashMap<>();
@@ -1016,10 +887,8 @@ public class CostPublishServiceImpl implements ICostPublishService
         return digest;
     }
 
-    private Map<String, Object> buildRuleComposite(SnapshotBundle bundle, String ruleCode)
-    {
-        if (bundle == null || !bundle.rulesByCode.containsKey(ruleCode))
-        {
+    private Map<String, Object> buildRuleComposite(SnapshotBundle bundle, String ruleCode) {
+        if (bundle == null || !bundle.rulesByCode.containsKey(ruleCode)) {
             return null;
         }
         LinkedHashMap<String, Object> composite = new LinkedHashMap<>();
@@ -1029,135 +898,112 @@ public class CostPublishServiceImpl implements ICostPublishService
         return composite;
     }
 
-    private List<Map<String, Object>> buildFeeRuleCompositeList(SnapshotBundle bundle, String feeCode)
-    {
+    private List<Map<String, Object>> buildFeeRuleCompositeList(SnapshotBundle bundle, String feeCode) {
         bundle = normalizeBundle(bundle);
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String ruleCode : bundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>()))
-        {
+        for (String ruleCode : bundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>())) {
             result.add(buildRuleComposite(bundle, ruleCode));
         }
         return result;
     }
 
-    private int countFeeRuleChanges(SnapshotBundle fromBundle, SnapshotBundle toBundle, String feeCode)
-    {
+    private int countFeeRuleChanges(SnapshotBundle fromBundle, SnapshotBundle toBundle, String feeCode) {
         Set<String> ruleCodes = new TreeSet<>();
         if (fromBundle != null) ruleCodes.addAll(fromBundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>()));
         if (toBundle != null) ruleCodes.addAll(toBundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>()));
         int count = 0;
-        for (String ruleCode : ruleCodes)
-        {
-            if (!"UNCHANGED".equals(determineChangeType(buildRuleComposite(fromBundle, ruleCode), buildRuleComposite(toBundle, ruleCode))))
-            {
+        for (String ruleCode : ruleCodes) {
+            if (!"UNCHANGED".equals(determineChangeType(buildRuleComposite(fromBundle, ruleCode), buildRuleComposite(toBundle, ruleCode)))) {
                 count++;
             }
         }
         return count;
     }
 
-    private int countFeeVariableChanges(SnapshotBundle fromBundle, SnapshotBundle toBundle, String feeCode)
-    {
+    private int countFeeVariableChanges(SnapshotBundle fromBundle, SnapshotBundle toBundle, String feeCode) {
         Set<String> variableCodes = new TreeSet<>();
-        if (fromBundle != null) variableCodes.addAll(fromBundle.feeReferencedVariables.getOrDefault(feeCode, new TreeSet<>()));
-        if (toBundle != null) variableCodes.addAll(toBundle.feeReferencedVariables.getOrDefault(feeCode, new TreeSet<>()));
+        if (fromBundle != null)
+            variableCodes.addAll(fromBundle.feeReferencedVariables.getOrDefault(feeCode, new TreeSet<>()));
+        if (toBundle != null)
+            variableCodes.addAll(toBundle.feeReferencedVariables.getOrDefault(feeCode, new TreeSet<>()));
         int count = 0;
-        for (String variableCode : variableCodes)
-        {
+        for (String variableCode : variableCodes) {
             String fromJson = canonicalJson(fromBundle == null ? null : fromBundle.variablesByCode.get(variableCode));
             String toJson = canonicalJson(toBundle == null ? null : toBundle.variablesByCode.get(variableCode));
-            if (!Objects.equals(fromJson, toJson))
-            {
+            if (!Objects.equals(fromJson, toJson)) {
                 count++;
             }
         }
         return count;
     }
 
-    private int countCollectionDiff(List<Map<String, Object>> fromList, List<Map<String, Object>> toList)
-    {
+    private int countCollectionDiff(List<Map<String, Object>> fromList, List<Map<String, Object>> toList) {
         Set<String> fromSet = normalizeCollection(fromList).stream().map(this::canonicalJson).collect(Collectors.toSet());
         Set<String> toSet = normalizeCollection(toList).stream().map(this::canonicalJson).collect(Collectors.toSet());
         Set<String> merged = new LinkedHashSet<>(fromSet);
         merged.addAll(toSet);
         int sameCount = 0;
-        for (String item : merged)
-        {
-            if (fromSet.contains(item) && toSet.contains(item))
-            {
+        for (String item : merged) {
+            if (fromSet.contains(item) && toSet.contains(item)) {
                 sameCount++;
             }
         }
         return merged.size() - sameCount;
     }
 
-    private List<Map<String, Object>> buildFeeList(SnapshotBundle bundle, String feeCode)
-    {
+    private List<Map<String, Object>> buildFeeList(SnapshotBundle bundle, String feeCode) {
         bundle = normalizeBundle(bundle);
-        if (StringUtils.isNotEmpty(feeCode))
-        {
+        if (StringUtils.isNotEmpty(feeCode)) {
             return bundle.feesByCode.containsKey(feeCode) ? Collections.singletonList(bundle.feesByCode.get(feeCode)) : Collections.emptyList();
         }
         return new ArrayList<>(bundle.feesByCode.values());
     }
 
-    private List<Map<String, Object>> buildFeeVariableList(SnapshotBundle bundle, String feeCode)
-    {
+    private List<Map<String, Object>> buildFeeVariableList(SnapshotBundle bundle, String feeCode) {
         bundle = normalizeBundle(bundle);
-        if (StringUtils.isEmpty(feeCode))
-        {
+        if (StringUtils.isEmpty(feeCode)) {
             return new ArrayList<>(bundle.variablesByCode.values());
         }
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String variableCode : bundle.feeReferencedVariables.getOrDefault(feeCode, new TreeSet<>()))
-        {
+        for (String variableCode : bundle.feeReferencedVariables.getOrDefault(feeCode, new TreeSet<>())) {
             Map<String, Object> variable = bundle.variablesByCode.get(variableCode);
-            if (variable != null)
-            {
+            if (variable != null) {
                 result.add(variable);
             }
         }
         return result;
     }
 
-    private List<Map<String, Object>> buildFeeRuleList(SnapshotBundle bundle, String feeCode)
-    {
+    private List<Map<String, Object>> buildFeeRuleList(SnapshotBundle bundle, String feeCode) {
         bundle = normalizeBundle(bundle);
-        if (StringUtils.isEmpty(feeCode))
-        {
+        if (StringUtils.isEmpty(feeCode)) {
             return new ArrayList<>(bundle.rulesByCode.values());
         }
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String ruleCode : bundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>()))
-        {
+        for (String ruleCode : bundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>())) {
             Map<String, Object> rule = bundle.rulesByCode.get(ruleCode);
-            if (rule != null)
-            {
+            if (rule != null) {
                 result.add(rule);
             }
         }
         return result;
     }
 
-    private List<Map<String, Object>> buildFeeConditionList(SnapshotBundle bundle, String feeCode)
-    {
+    private List<Map<String, Object>> buildFeeConditionList(SnapshotBundle bundle, String feeCode) {
         bundle = normalizeBundle(bundle);
         Collection<String> ruleCodes = StringUtils.isEmpty(feeCode) ? bundle.rulesByCode.keySet() : bundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>());
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String ruleCode : ruleCodes)
-        {
+        for (String ruleCode : ruleCodes) {
             result.addAll(bundle.ruleConditionsByRuleCode.getOrDefault(ruleCode, Collections.emptyList()));
         }
         return result;
     }
 
-    private List<Map<String, Object>> buildFeeTierList(SnapshotBundle bundle, String feeCode)
-    {
+    private List<Map<String, Object>> buildFeeTierList(SnapshotBundle bundle, String feeCode) {
         bundle = normalizeBundle(bundle);
         Collection<String> ruleCodes = StringUtils.isEmpty(feeCode) ? bundle.rulesByCode.keySet() : bundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>());
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String ruleCode : ruleCodes)
-        {
+        for (String ruleCode : ruleCodes) {
             result.addAll(bundle.ruleTiersByRuleCode.getOrDefault(ruleCode, Collections.emptyList()));
         }
         return result;
@@ -1167,38 +1013,33 @@ public class CostPublishServiceImpl implements ICostPublishService
      * 将空快照归一化为空对象，避免发布前检查、版本详情与差异视图在“无历史版本/无快照”场景下空指针。
      *
      * @param bundle 快照包
+     *
      * @return 可安全访问的快照包
      */
-    private SnapshotBundle normalizeBundle(SnapshotBundle bundle)
-    {
+    private SnapshotBundle normalizeBundle(SnapshotBundle bundle) {
         return bundle == null ? new SnapshotBundle() : bundle;
     }
 
-    private void sortBundleCollections(SnapshotBundle bundle)
-    {
-        for (List<Map<String, Object>> items : bundle.ruleConditionsByRuleCode.values())
-        {
+    private void sortBundleCollections(SnapshotBundle bundle) {
+        for (List<Map<String, Object>> items : bundle.ruleConditionsByRuleCode.values()) {
             items.sort(Comparator.comparing((Map<String, Object> item) -> stringValue(item.get("ruleCode")))
                     .thenComparing(item -> stringValue(item.get("groupNo")))
                     .thenComparing(item -> stringValue(item.get("sortNo"))));
         }
-        for (List<Map<String, Object>> items : bundle.ruleTiersByRuleCode.values())
-        {
+        for (List<Map<String, Object>> items : bundle.ruleTiersByRuleCode.values()) {
             items.sort(Comparator.comparing((Map<String, Object> item) -> stringValue(item.get("ruleCode")))
                     .thenComparing(item -> stringValue(item.get("tierNo"))));
         }
     }
 
-    private String buildNextVersionNo(Long sceneId, Date now)
-    {
+    private String buildNextVersionNo(Long sceneId, Date now) {
         String prefix = "V" + DateUtils.parseDateToStr("yyyy.MM", now) + ".";
         Long sequence = publishVersionMapper.selectMonthlyVersionSequence(sceneId, prefix);
         long next = sequence == null ? 1L : sequence + 1L;
         return prefix + VERSION_SEQ_FORMAT.format(next);
     }
 
-    private String buildSnapshotHash(List<CostPublishSnapshot> snapshots)
-    {
+    private String buildSnapshotHash(List<CostPublishSnapshot> snapshots) {
         List<String> pieces = snapshots.stream()
                 .sorted(Comparator.comparing(CostPublishSnapshot::getSnapshotType)
                         .thenComparing(CostPublishSnapshot::getObjectCode, Comparator.nullsLast(String::compareTo)))
@@ -1207,18 +1048,15 @@ public class CostPublishServiceImpl implements ICostPublishService
         return sha256(String.join("\n", pieces));
     }
 
-    private CostPublishVersion requireVersion(Long versionId)
-    {
+    private CostPublishVersion requireVersion(Long versionId) {
         CostPublishVersion version = publishVersionMapper.selectPublishVersionDetail(versionId);
-        if (StringUtils.isNull(version))
-        {
+        if (StringUtils.isNull(version)) {
             throw new ServiceException("发布版本不存在，请刷新后重试");
         }
         return version;
     }
 
-    private CostPublishCheckItemVo createCheckItem(String level, String code, String title, String message)
-    {
+    private CostPublishCheckItemVo createCheckItem(String level, String code, String title, String message) {
         CostPublishCheckItemVo item = new CostPublishCheckItemVo();
         item.setLevel(level);
         item.setCode(code);
@@ -1227,19 +1065,15 @@ public class CostPublishServiceImpl implements ICostPublishService
         return item;
     }
 
-    private void addRefVariable(SnapshotBundle bundle, String feeCode, String variableCode)
-    {
-        if (StringUtils.isEmpty(feeCode) || StringUtils.isEmpty(variableCode))
-        {
+    private void addRefVariable(SnapshotBundle bundle, String feeCode, String variableCode) {
+        if (StringUtils.isEmpty(feeCode) || StringUtils.isEmpty(variableCode)) {
             return;
         }
         bundle.feeReferencedVariables.computeIfAbsent(feeCode, key -> new TreeSet<>()).add(variableCode);
     }
 
-    private long getLongValue(Map<String, Object> map, String key)
-    {
-        if (map == null || map.get(key) == null)
-        {
+    private long getLongValue(Map<String, Object> map, String key) {
+        if (map == null || map.get(key) == null) {
             return 0L;
         }
         return Long.parseLong(String.valueOf(map.get(key)));
@@ -1249,22 +1083,19 @@ public class CostPublishServiceImpl implements ICostPublishService
      * 解析最近一次发布校验结果编码。
      *
      * @param blockingCount 阻断数量
-     * @param warningCount 告警数量
+     * @param warningCount  告警数量
      * @param latestVersion 最近版本
+     *
      * @return 校验结果
      */
-    private String resolveCheckResult(long blockingCount, long warningCount, CostPublishVersion latestVersion)
-    {
-        if (latestVersion == null)
-        {
+    private String resolveCheckResult(long blockingCount, long warningCount, CostPublishVersion latestVersion) {
+        if (latestVersion == null) {
             return "UNAVAILABLE";
         }
-        if (blockingCount > 0)
-        {
+        if (blockingCount > 0) {
             return "BLOCK";
         }
-        if (warningCount > 0)
-        {
+        if (warningCount > 0) {
             return "WARN";
         }
         return "PASS";
@@ -1274,81 +1105,68 @@ public class CostPublishServiceImpl implements ICostPublishService
      * 解析最近一次发布校验结果文案。
      *
      * @param blockingCount 阻断数量
-     * @param warningCount 告警数量
+     * @param warningCount  告警数量
      * @param latestVersion 最近版本
+     *
      * @return 文案
      */
-    private String resolveCheckLabel(long blockingCount, long warningCount, CostPublishVersion latestVersion)
-    {
-        if (latestVersion == null)
-        {
+    private String resolveCheckLabel(long blockingCount, long warningCount, CostPublishVersion latestVersion) {
+        if (latestVersion == null) {
             return "暂无校验";
         }
-        if (blockingCount > 0)
-        {
+        if (blockingCount > 0) {
             return "存在阻断";
         }
-        if (warningCount > 0)
-        {
+        if (warningCount > 0) {
             return "存在告警";
         }
         return "校验通过";
     }
 
-    private String determineChangeType(Map<String, Object> fromObject, Map<String, Object> toObject)
-    {
-        if (fromObject == null && toObject == null)
-        {
+    private String determineChangeType(Map<String, Object> fromObject, Map<String, Object> toObject) {
+        if (fromObject == null && toObject == null) {
             return "UNCHANGED";
         }
-        if (fromObject == null)
-        {
+        if (fromObject == null) {
             return "ADDED";
         }
-        if (toObject == null)
-        {
+        if (toObject == null) {
             return "REMOVED";
         }
         return Objects.equals(canonicalJson(fromObject), canonicalJson(toObject)) ? "UNCHANGED" : "CHANGED";
     }
 
-    private List<String> compareChangedFields(Map<String, Object> fromObject, Map<String, Object> toObject)
-    {
+    private List<String> compareChangedFields(Map<String, Object> fromObject, Map<String, Object> toObject) {
         Set<String> fields = new LinkedHashSet<>();
         if (fromObject != null) fields.addAll(fromObject.keySet());
         if (toObject != null) fields.addAll(toObject.keySet());
         List<String> changed = new ArrayList<>();
-        for (String field : fields)
-        {
+        for (String field : fields) {
             Object fromValue = fromObject == null ? null : fromObject.get(field);
             Object toValue = toObject == null ? null : toObject.get(field);
-            if (!Objects.equals(canonicalJsonSingle(fromValue), canonicalJsonSingle(toValue)))
-            {
+            if (!Objects.equals(canonicalJsonSingle(fromValue), canonicalJsonSingle(toValue))) {
                 changed.add(field);
             }
         }
         return changed;
     }
 
-    private String buildFeeSummaryText(String changeType, boolean feeDirectChanged, int ruleChangeCount, int variableChangeCount)
-    {
-        if ("ADDED".equals(changeType))
-        {
+    private String buildFeeSummaryText(String changeType, boolean feeDirectChanged, int ruleChangeCount, int variableChangeCount) {
+        if ("ADDED".equals(changeType)) {
             return "该费用首次进入当前版本快照。";
         }
-        if ("REMOVED".equals(changeType))
-        {
+        if ("REMOVED".equals(changeType)) {
             return "该费用未再进入当前版本快照。";
         }
         List<String> parts = new ArrayList<>();
         if (feeDirectChanged) parts.add("费用主数据有变更");
         if (ruleChangeCount > 0) parts.add(String.format(Locale.ROOT, "%d条规则发生变化", ruleChangeCount));
-        if (variableChangeCount > 0) parts.add(String.format(Locale.ROOT, "%d个引用变量口径发生变化", variableChangeCount));
+        if (variableChangeCount > 0)
+            parts.add(String.format(Locale.ROOT, "%d个引用变量口径发生变化", variableChangeCount));
         return parts.isEmpty() ? "费用快照有变化。" : String.join("，", parts) + "。";
     }
 
-    private String resolveSceneFieldLabel(String field)
-    {
+    private String resolveSceneFieldLabel(String field) {
         LinkedHashMap<String, String> labels = new LinkedHashMap<>();
         labels.put("sceneCode", "场景编码");
         labels.put("sceneName", "场景名称");
@@ -1360,105 +1178,79 @@ public class CostPublishServiceImpl implements ICostPublishService
         return labels.getOrDefault(field, field);
     }
 
-    private Map<String, Object> parseJsonMap(String json)
-    {
-        if (StringUtils.isEmpty(json))
-        {
+    private Map<String, Object> parseJsonMap(String json) {
+        if (StringUtils.isEmpty(json)) {
             return new LinkedHashMap<>();
         }
-        try
-        {
-            return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {});
-        }
-        catch (JsonProcessingException e)
-        {
+        try {
+            return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {
+            });
+        } catch (JsonProcessingException e) {
             throw new ServiceException("快照 JSON 解析失败");
         }
     }
 
-    private String writeJson(Object value)
-    {
-        try
-        {
+    private String writeJson(Object value) {
+        try {
             return objectMapper.writeValueAsString(value);
-        }
-        catch (JsonProcessingException e)
-        {
+        } catch (JsonProcessingException e) {
             throw new ServiceException("快照 JSON 序列化失败");
         }
     }
 
-    private String canonicalJson(Map<String, Object> value)
-    {
-        if (value == null)
-        {
+    private String canonicalJson(Map<String, Object> value) {
+        if (value == null) {
             return "";
         }
         return canonicalJsonSingle(value);
     }
 
-    private String canonicalJsonSingle(Object value)
-    {
-        try
-        {
+    private String canonicalJsonSingle(Object value) {
+        try {
             return objectMapper.writeValueAsString(value);
-        }
-        catch (JsonProcessingException e)
-        {
+        } catch (JsonProcessingException e) {
             throw new ServiceException("对象序列化失败");
         }
     }
 
-    private List<Map<String, Object>> normalizeCollection(List<Map<String, Object>> items)
-    {
-        if (items == null || items.isEmpty())
-        {
+    private List<Map<String, Object>> normalizeCollection(List<Map<String, Object>> items) {
+        if (items == null || items.isEmpty()) {
             return Collections.emptyList();
         }
         return items.stream().sorted(Comparator.comparing(this::canonicalJson)).collect(Collectors.toList());
     }
 
-    private String sha256(String text)
-    {
-        try
-        {
+    private String sha256(String text) {
+        try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(text.getBytes(StandardCharsets.UTF_8));
             StringBuilder builder = new StringBuilder();
-            for (byte item : hash)
-            {
+            for (byte item : hash) {
                 builder.append(String.format("%02x", item));
             }
             return builder.toString();
-        }
-        catch (NoSuchAlgorithmException e)
-        {
+        } catch (NoSuchAlgorithmException e) {
             throw new ServiceException("系统不支持 SHA-256 摘要算法");
         }
     }
 
-    private Object firstNonNull(Object first, Object second)
-    {
+    private Object firstNonNull(Object first, Object second) {
         return first != null ? first : second;
     }
 
-    private String firstNonBlank(String first, String second)
-    {
+    private String firstNonBlank(String first, String second) {
         return StringUtils.isNotEmpty(first) ? first : second;
     }
 
-    private String buildAssetLabel(Map<String, Object> row, String nameKey, String codeKey)
-    {
+    private String buildAssetLabel(Map<String, Object> row, String nameKey, String codeKey) {
         return String.format("%1$s(%2$s)", stringValue(row.get(nameKey)), stringValue(row.get(codeKey)));
     }
 
-    private String stringValue(Object value)
-    {
+    private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
     }
 
-    private static class SnapshotBundle
-    {
+    private static class SnapshotBundle {
         private Long sceneId;
         private String sceneCode;
         private String sceneName;

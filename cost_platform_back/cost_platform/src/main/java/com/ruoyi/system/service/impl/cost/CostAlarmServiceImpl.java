@@ -1,12 +1,12 @@
 package com.ruoyi.system.service.impl.cost;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruoyi.system.domain.cost.CostAlarmRecord;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.mapper.cost.CostAlarmRecordMapper;
@@ -26,14 +26,7 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -46,8 +39,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @Slf4j
-public class CostAlarmServiceImpl implements ICostAlarmService
-{
+public class CostAlarmServiceImpl implements ICostAlarmService {
     private static final String ALARM_STATUS_OPEN = "OPEN";
     private static final String ALARM_STATUS_ACKED = "ACKED";
     private static final String ALARM_STATUS_RESOLVED = "RESOLVED";
@@ -73,8 +65,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     private RestTemplate costAccessRestTemplate;
 
     @Override
-    public void createAlarm(CostAlarmRecord alarmRecord)
-    {
+    public void createAlarm(CostAlarmRecord alarmRecord) {
         Date triggerTime = alarmRecord.getTriggerTime() == null ? DateUtils.getNowDate() : alarmRecord.getTriggerTime();
         String operator = firstNonBlank(alarmRecord.getCreateBy(), resolveOperator());
         alarmRecord.setAlarmStatus(firstNonBlank(alarmRecord.getAlarmStatus(), ALARM_STATUS_OPEN));
@@ -88,8 +79,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
         alarmRecord.setUpdateBy(firstNonBlank(alarmRecord.getUpdateBy(), alarmRecord.getCreateBy()));
         alarmRecord.setUpdateTime(alarmRecord.getUpdateTime() == null ? DateUtils.getNowDate() : alarmRecord.getUpdateTime());
         CostAlarmRecord mergedAlarm = mergeOpenAlarmIfNecessary(alarmRecord);
-        if (mergedAlarm == null)
-        {
+        if (mergedAlarm == null) {
             alarmRecordMapper.insert(alarmRecord);
             mergedAlarm = alarmRecord;
         }
@@ -98,8 +88,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     }
 
     @Override
-    public List<CostAlarmRecord> selectAlarmList(CostAlarmRecord query)
-    {
+    public List<CostAlarmRecord> selectAlarmList(CostAlarmRecord query) {
         List<CostAlarmRecord> alarms = alarmRecordMapper.selectList(Wrappers.<CostAlarmRecord>lambdaQuery()
                 .eq(query.getSceneId() != null, CostAlarmRecord::getSceneId, query.getSceneId())
                 .eq(query.getTaskId() != null, CostAlarmRecord::getTaskId, query.getTaskId())
@@ -115,8 +104,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     }
 
     @Override
-    public Map<String, Object> selectAlarmStats(CostAlarmRecord query)
-    {
+    public Map<String, Object> selectAlarmStats(CostAlarmRecord query) {
         List<CostAlarmRecord> alarms = selectAlarmList(query);
         LinkedHashMap<String, Object> stats = new LinkedHashMap<>();
         stats.put("alarmCount", alarms.size());
@@ -128,8 +116,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     }
 
     @Override
-    public Map<String, Object> selectAlarmOverview(CostAlarmRecord query)
-    {
+    public Map<String, Object> selectAlarmOverview(CostAlarmRecord query) {
         List<CostAlarmRecord> alarms = selectAlarmList(query);
         LinkedHashMap<String, Object> overview = new LinkedHashMap<>();
         overview.put("recentTrend", buildRecentTrend(alarms, 7));
@@ -141,8 +128,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     }
 
     @Override
-    public int ackAlarm(Long alarmId)
-    {
+    public int ackAlarm(Long alarmId) {
         requireAlarm(alarmId);
         return alarmRecordMapper.update(null, Wrappers.<CostAlarmRecord>lambdaUpdate()
                 .eq(CostAlarmRecord::getAlarmId, alarmId)
@@ -154,8 +140,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     }
 
     @Override
-    public int resolveAlarm(Long alarmId)
-    {
+    public int resolveAlarm(Long alarmId) {
         requireAlarm(alarmId);
         return alarmRecordMapper.update(null, Wrappers.<CostAlarmRecord>lambdaUpdate()
                 .eq(CostAlarmRecord::getAlarmId, alarmId)
@@ -167,10 +152,8 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     }
 
     @Override
-    public int autoResolveBySourceKey(String sourceKey, String resolveSummary)
-    {
-        if (StringUtils.isEmpty(StringUtils.trim(sourceKey)))
-        {
+    public int autoResolveBySourceKey(String sourceKey, String resolveSummary) {
+        if (StringUtils.isEmpty(StringUtils.trim(sourceKey))) {
             return 0;
         }
         String operator = resolveOperator();
@@ -187,10 +170,8 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     }
 
     @Override
-    public int autoResolveByTask(Long taskId, String resolveSummary)
-    {
-        if (taskId == null)
-        {
+    public int autoResolveByTask(Long taskId, String resolveSummary) {
+        if (taskId == null) {
             return 0;
         }
         String operator = resolveOperator();
@@ -206,59 +187,47 @@ public class CostAlarmServiceImpl implements ICostAlarmService
                 .set(StringUtils.isNotEmpty(summary), CostAlarmRecord::getRemark, summary));
     }
 
-    private CostAlarmRecord requireAlarm(Long alarmId)
-    {
+    private CostAlarmRecord requireAlarm(Long alarmId) {
         CostAlarmRecord alarm = alarmRecordMapper.selectById(alarmId);
-        if (alarm == null)
-        {
+        if (alarm == null) {
             throw new ServiceException("告警记录不存在，请刷新后重试");
         }
         return alarm;
     }
 
-    private void enrichSceneInfo(List<CostAlarmRecord> alarms)
-    {
+    private void enrichSceneInfo(List<CostAlarmRecord> alarms) {
         Set<Long> sceneIds = alarms.stream()
                 .map(CostAlarmRecord::getSceneId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        if (sceneIds.isEmpty())
-        {
+        if (sceneIds.isEmpty()) {
             return;
         }
         Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(sceneIds).stream()
                 .collect(Collectors.toMap(CostScene::getSceneId, item -> item));
         alarms.forEach(item -> {
             CostScene scene = sceneMap.get(item.getSceneId());
-            if (scene != null)
-            {
+            if (scene != null) {
                 item.setSceneCode(scene.getSceneCode());
                 item.setSceneName(scene.getSceneName());
             }
         });
     }
 
-    private String firstNonBlank(String first, String second)
-    {
+    private String firstNonBlank(String first, String second) {
         return StringUtils.isNotEmpty(first) ? first : second;
     }
 
-    private String resolveOperator()
-    {
-        try
-        {
+    private String resolveOperator() {
+        try {
             return firstNonBlank(SecurityUtils.getUsername(), "system");
-        }
-        catch (Exception ignored)
-        {
+        } catch (Exception ignored) {
             return "system";
         }
     }
 
-    private CostAlarmRecord mergeOpenAlarmIfNecessary(CostAlarmRecord alarmRecord)
-    {
-        if (StringUtils.isEmpty(StringUtils.trim(alarmRecord.getSourceKey())))
-        {
+    private CostAlarmRecord mergeOpenAlarmIfNecessary(CostAlarmRecord alarmRecord) {
+        if (StringUtils.isEmpty(StringUtils.trim(alarmRecord.getSourceKey()))) {
             return null;
         }
         CostAlarmRecord existing = alarmRecordMapper.selectOne(Wrappers.<CostAlarmRecord>lambdaQuery()
@@ -266,8 +235,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
                 .in(CostAlarmRecord::getAlarmStatus, ALARM_STATUS_OPEN, ALARM_STATUS_ACKED)
                 .orderByDesc(CostAlarmRecord::getAlarmId)
                 .last("limit 1"));
-        if (existing == null)
-        {
+        if (existing == null) {
             return null;
         }
 
@@ -300,73 +268,59 @@ public class CostAlarmServiceImpl implements ICostAlarmService
         return alarmRecordMapper.selectById(existing.getAlarmId());
     }
 
-    private String limitAlarmContent(String content, int occurrenceCount)
-    {
+    private String limitAlarmContent(String content, int occurrenceCount) {
         String normalized = StringUtils.trimToEmpty(content);
-        if (occurrenceCount > 1)
-        {
+        if (occurrenceCount > 1) {
             normalized = firstNonBlank(normalized, "重复触发告警")
                     + "（累计触发 " + occurrenceCount + " 次）";
         }
         return normalized.length() <= 1000 ? normalized : normalized.substring(0, 1000);
     }
 
-    private int resolveOccurrenceCount(CostAlarmRecord record)
-    {
-        if (record == null || record.getOccurrenceCount() == null || record.getOccurrenceCount() <= 0)
-        {
+    private int resolveOccurrenceCount(CostAlarmRecord record) {
+        if (record == null || record.getOccurrenceCount() == null || record.getOccurrenceCount() <= 0) {
             return 1;
         }
         return record.getOccurrenceCount();
     }
 
-    private String resolveEscalatedLevel(String existingLevel, String incomingLevel, int occurrenceCount)
-    {
-        if ("ERROR".equalsIgnoreCase(existingLevel) || "ERROR".equalsIgnoreCase(incomingLevel))
-        {
+    private String resolveEscalatedLevel(String existingLevel, String incomingLevel, int occurrenceCount) {
+        if ("ERROR".equalsIgnoreCase(existingLevel) || "ERROR".equalsIgnoreCase(incomingLevel)) {
             return "ERROR";
         }
-        if (occurrenceCount >= ALARM_ESCALATION_THRESHOLD)
-        {
+        if (occurrenceCount >= ALARM_ESCALATION_THRESHOLD) {
             return "ERROR";
         }
         return firstNonBlank(incomingLevel, firstNonBlank(existingLevel, "WARN"));
     }
 
-    private String normalizeResolveSummary(String resolveSummary)
-    {
+    private String normalizeResolveSummary(String resolveSummary) {
         return StringUtils.isNotEmpty(StringUtils.trim(resolveSummary)) ? StringUtils.trim(resolveSummary) : "";
     }
 
-    private void notifyAlarmWebhook(CostAlarmRecord alarmRecord)
-    {
-        if (alarmRecord == null || !isAlarmWebhookEnabled())
-        {
+    private void notifyAlarmWebhook(CostAlarmRecord alarmRecord) {
+        if (alarmRecord == null || !isAlarmWebhookEnabled()) {
             return;
         }
         String webhookUrl = StringUtils.trim(configService.selectConfigByKey(ALARM_WEBHOOK_URL_KEY));
-        if (StringUtils.isEmpty(webhookUrl))
-        {
+        if (StringUtils.isEmpty(webhookUrl)) {
             return;
         }
 
-        try
-        {
+        try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setAccept(List.of(MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN));
 
             Map<String, Object> extraHeaders = parseOptionalJsonMap(configService.selectConfigByKey(ALARM_WEBHOOK_HEADERS_KEY));
             extraHeaders.forEach((key, value) -> {
-                if (StringUtils.isNotEmpty(key) && value != null)
-                {
+                if (StringUtils.isNotEmpty(key) && value != null) {
                     headers.set(String.valueOf(key), String.valueOf(value));
                 }
             });
 
             String secret = StringUtils.trim(configService.selectConfigByKey(ALARM_WEBHOOK_SECRET_KEY));
-            if (StringUtils.isNotEmpty(secret))
-            {
+            if (StringUtils.isNotEmpty(secret)) {
                 headers.set("X-Cost-Alarm-Secret", secret);
             }
 
@@ -374,21 +328,17 @@ public class CostAlarmServiceImpl implements ICostAlarmService
                     new HttpEntity<>(buildAlarmWebhookPayload(alarmRecord), headers);
             ResponseEntity<String> response =
                     costAccessRestTemplate.postForEntity(webhookUrl, requestEntity, String.class);
-            if (!response.getStatusCode().is2xxSuccessful())
-            {
+            if (!response.getStatusCode().is2xxSuccessful()) {
                 log.warn("成本告警 Webhook 返回非成功状态: alarmId={}, status={}",
                         alarmRecord.getAlarmId(), response.getStatusCode());
             }
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             log.warn("成本告警 Webhook 通知失败: alarmId={}, message={}",
                     alarmRecord.getAlarmId(), e.getMessage());
         }
     }
 
-    private Map<String, Object> buildAlarmWebhookPayload(CostAlarmRecord alarmRecord)
-    {
+    private Map<String, Object> buildAlarmWebhookPayload(CostAlarmRecord alarmRecord) {
         LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
         payload.put("alarmId", alarmRecord.getAlarmId());
         payload.put("sceneId", alarmRecord.getSceneId());
@@ -410,8 +360,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
         return payload;
     }
 
-    private Map<String, Object> buildNotificationSummary()
-    {
+    private Map<String, Object> buildNotificationSummary() {
         LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
         boolean enabled = isAlarmWebhookEnabled();
         String webhookUrl = StringUtils.trim(configService.selectConfigByKey(ALARM_WEBHOOK_URL_KEY));
@@ -426,39 +375,32 @@ public class CostAlarmServiceImpl implements ICostAlarmService
         summary.put("secretConfigured", secretConfigured);
         summary.put("description", enabled
                 ? (StringUtils.isNotEmpty(webhookUrl)
-                    ? "当前已启用 Webhook 外部通知，可转发到企业值守平台或消息网关。"
-                    : "当前已打开 Webhook 开关，但尚未配置通知地址。")
+                   ? "当前已启用 Webhook 外部通知，可转发到企业值守平台或消息网关。"
+                   : "当前已打开 Webhook 开关，但尚未配置通知地址。")
                 : "当前未启用外部通知，告警仅保留在平台台账中。");
         return summary;
     }
 
-    private boolean isAlarmWebhookEnabled()
-    {
+    private boolean isAlarmWebhookEnabled() {
         return "true".equalsIgnoreCase(StringUtils.trim(configService.selectConfigByKey(ALARM_WEBHOOK_ENABLED_KEY)));
     }
 
-    private Map<String, Object> parseOptionalJsonMap(String json)
-    {
-        if (StringUtils.isEmpty(StringUtils.trim(json)))
-        {
+    private Map<String, Object> parseOptionalJsonMap(String json) {
+        if (StringUtils.isEmpty(StringUtils.trim(json))) {
             return Map.of();
         }
-        try
-        {
-            Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {});
+        try {
+            Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {
+            });
             return parsed == null ? Map.of() : parsed;
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             log.warn("解析告警 Webhook 头配置失败: {}", e.getMessage());
         }
         return Map.of();
     }
 
-    private String maskWebhookUrl(String webhookUrl)
-    {
-        if (StringUtils.isEmpty(webhookUrl))
-        {
+    private String maskWebhookUrl(String webhookUrl) {
+        if (StringUtils.isEmpty(webhookUrl)) {
             return "";
         }
         int separatorIndex = webhookUrl.indexOf("://");
@@ -472,8 +414,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     /**
      * 构建最近 N 天告警趋势。
      */
-    private List<Map<String, Object>> buildRecentTrend(List<CostAlarmRecord> alarms, int recentDays)
-    {
+    private List<Map<String, Object>> buildRecentTrend(List<CostAlarmRecord> alarms, int recentDays) {
         ZoneId zoneId = ZoneId.systemDefault();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         Map<LocalDate, List<CostAlarmRecord>> dayGroups = alarms.stream()
@@ -483,8 +424,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
         List<Map<String, Object>> trend = new ArrayList<>();
         LocalDate end = LocalDate.now(zoneId);
         LocalDate start = end.minusDays(Math.max(recentDays - 1L, 0L));
-        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1))
-        {
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
             List<CostAlarmRecord> dayAlarms = dayGroups.getOrDefault(date, List.of());
             LinkedHashMap<String, Object> row = new LinkedHashMap<>();
             row.put("date", date.format(formatter));
@@ -505,8 +445,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     /**
      * 构建高频告警类型排行。
      */
-    private List<Map<String, Object>> buildTopAlarmTypes(List<CostAlarmRecord> alarms, int limit)
-    {
+    private List<Map<String, Object>> buildTopAlarmTypes(List<CostAlarmRecord> alarms, int limit) {
         return alarms.stream()
                 .collect(Collectors.groupingBy(item -> firstNonBlank(item.getAlarmType(), "UNKNOWN"), Collectors.toList()))
                 .entrySet()
@@ -535,8 +474,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     /**
      * 构建任务热点排行，便于定位异常集中任务。
      */
-    private List<Map<String, Object>> buildTopTasks(List<CostAlarmRecord> alarms, int limit)
-    {
+    private List<Map<String, Object>> buildTopTasks(List<CostAlarmRecord> alarms, int limit) {
         return alarms.stream()
                 .filter(item -> item.getTaskId() != null)
                 .collect(Collectors.groupingBy(CostAlarmRecord::getTaskId, Collectors.toList()))
@@ -576,8 +514,7 @@ public class CostAlarmServiceImpl implements ICostAlarmService
     /**
      * 构建告警等级分布。
      */
-    private List<Map<String, Object>> buildLevelDistribution(List<CostAlarmRecord> alarms)
-    {
+    private List<Map<String, Object>> buildLevelDistribution(List<CostAlarmRecord> alarms) {
         return alarms.stream()
                 .collect(Collectors.groupingBy(item -> firstNonBlank(item.getAlarmLevel(), "WARN"),
                         Collectors.summingLong(this::resolveOccurrenceCount)))

@@ -13,8 +13,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface ICostFormulaService
-{
+public interface ICostFormulaService {
     /**
      * 查询公式列表。
      */

@@ -8,56 +8,89 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostVariableGovernanceCheckVo
-{
-    /** 变量主键 */
+public class CostVariableGovernanceCheckVo {
+    /**
+     * 变量主键
+     */
     private Long variableId;
 
-    /** 场景主键 */
+    /**
+     * 场景主键
+     */
     private Long sceneId;
 
-    /** 场景编码 */
+    /**
+     * 场景编码
+     */
     private String sceneCode;
 
-    /** 场景名称 */
+    /**
+     * 场景名称
+     */
     private String sceneName;
 
-    /** 变量编码 */
+    /**
+     * 变量编码
+     */
     private String variableCode;
 
-    /** 变量名称 */
+    /**
+     * 变量名称
+     */
     private String variableName;
 
-    /** 状态 */
+    /**
+     * 状态
+     */
     private String status;
 
-    /** 费用关系引用数量 */
+    /**
+     * 费用关系引用数量
+     */
     private Long feeRelCount;
 
-    /** 规则条件引用数量 */
+    /**
+     * 规则条件引用数量
+     */
     private Long ruleConditionCount;
 
-    /** 规则计量引用数量 */
+    /**
+     * 规则计量引用数量
+     */
     private Long ruleQuantityCount;
 
-    /** 发布版本引用数量 */
+    /**
+     * 发布版本引用数量
+     */
     private Long publishedVersionCount;
 
-    /** 是否允许删除 */
+    /**
+     * 是否允许删除
+     */
     private Boolean canDelete;
 
-    /** 是否允许停用 */
+    /**
+     * 是否允许停用
+     */
     private Boolean canDisable;
 
-    /** 删除阻断说明 */
+    /**
+     * 删除阻断说明
+     */
     private String removeBlockingReason;
 
-    /** 停用阻断说明 */
+    /**
+     * 停用阻断说明
+     */
     private String disableBlockingReason;
 
-    /** 删除治理建议 */
+    /**
+     * 删除治理建议
+     */
     private String removeAdvice;
 
-    /** 停用治理建议 */
+    /**
+     * 停用治理建议
+     */
     private String disableAdvice;
 }

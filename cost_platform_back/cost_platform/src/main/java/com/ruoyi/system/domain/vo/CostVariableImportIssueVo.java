@@ -8,20 +8,29 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostVariableImportIssueVo
-{
-    /** Excel 行号 */
+public class CostVariableImportIssueVo {
+    /**
+     * Excel 行号
+     */
     private Integer rowNum;
 
-    /** 场景编码 */
+    /**
+     * 场景编码
+     */
     private String sceneCode;
 
-    /** 变量编码 */
+    /**
+     * 变量编码
+     */
     private String variableCode;
 
-    /** 变量名称 */
+    /**
+     * 变量名称
+     */
     private String variableName;
 
-    /** 问题描述 */
+    /**
+     * 问题描述
+     */
     private String message;
 }

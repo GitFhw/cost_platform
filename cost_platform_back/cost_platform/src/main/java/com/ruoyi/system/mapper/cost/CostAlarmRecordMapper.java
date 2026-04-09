@@ -8,6 +8,5 @@ import com.ruoyi.system.domain.cost.CostAlarmRecord;
  *
  * @author HwFan
  */
-public interface CostAlarmRecordMapper extends BaseMapper<CostAlarmRecord>
-{
+public interface CostAlarmRecordMapper extends BaseMapper<CostAlarmRecord> {
 }

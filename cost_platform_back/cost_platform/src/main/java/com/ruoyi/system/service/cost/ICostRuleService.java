@@ -15,8 +15,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface ICostRuleService
-{
+public interface ICostRuleService {
     /**
      * 查询规则列表
      */

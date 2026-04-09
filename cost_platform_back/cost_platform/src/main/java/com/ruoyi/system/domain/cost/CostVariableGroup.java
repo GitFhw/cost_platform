@@ -22,59 +22,78 @@ import lombok.ToString;
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
 @TableName("cost_variable_group")
-public class CostVariableGroup extends BaseEntity
-{
+public class CostVariableGroup extends BaseEntity {
     private static final long serialVersionUID = 1L;
 
-    /** 分组主键 */
+    /**
+     * 分组主键
+     */
     @TableId(value = "group_id", type = IdType.AUTO)
     private Long groupId;
 
-    /** 所属场景主键 */
+    /**
+     * 所属场景主键
+     */
     @Excel(name = "场景主键")
     @TableField("scene_id")
     @NotNull(message = "所属场景不能为空")
     private Long sceneId;
 
-    /** 检索关键词（分组编码/分组名称） */
+    /**
+     * 检索关键词（分组编码/分组名称）
+     */
     @TableField(exist = false)
     private String keyword;
 
-    /** 场景编码 */
+    /**
+     * 场景编码
+     */
     @Excel(name = "场景编码")
     @TableField(exist = false)
     private String sceneCode;
 
-    /** 场景名称 */
+    /**
+     * 场景名称
+     */
     @Excel(name = "场景名称")
     @TableField(exist = false)
     private String sceneName;
 
-    /** 业务域 */
+    /**
+     * 业务域
+     */
     @Excel(name = "业务域", dictType = "cost_business_domain")
     @TableField(exist = false)
     private String businessDomain;
 
-    /** 分组编码 */
+    /**
+     * 分组编码
+     */
     @Excel(name = "分组编码")
     @TableField("group_code")
     @NotBlank(message = "分组编码不能为空")
     @Size(max = 64, message = "分组编码长度不能超过64个字符")
     private String groupCode;
 
-    /** 分组名称 */
+    /**
+     * 分组名称
+     */
     @Excel(name = "分组名称")
     @TableField("group_name")
     @NotBlank(message = "分组名称不能为空")
     @Size(max = 128, message = "分组名称长度不能超过128个字符")
     private String groupName;
 
-    /** 排序号 */
+    /**
+     * 排序号
+     */
     @Excel(name = "排序号")
     @TableField("sort_no")
     private Integer sortNo;
 
-    /** 状态 */
+    /**
+     * 状态
+     */
     @Excel(name = "状态", dictType = "cost_variable_group_status")
     @TableField("status")
     @NotBlank(message = "分组状态不能为空")

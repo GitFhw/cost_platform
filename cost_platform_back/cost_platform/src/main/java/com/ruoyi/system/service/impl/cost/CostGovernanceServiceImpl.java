@@ -8,32 +8,18 @@ import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
-import com.ruoyi.system.domain.cost.CostAlarmRecord;
-import com.ruoyi.system.domain.cost.CostAuditLog;
-import com.ruoyi.system.domain.cost.CostBillPeriod;
-import com.ruoyi.system.domain.cost.CostCalcTask;
-import com.ruoyi.system.domain.cost.CostCalcTaskDetail;
-import com.ruoyi.system.domain.cost.CostPublishVersion;
-import com.ruoyi.system.domain.cost.CostRecalcOrder;
-import com.ruoyi.system.domain.cost.CostResultLedger;
-import com.ruoyi.system.domain.cost.CostScene;
+import com.ruoyi.system.domain.cost.*;
 import com.ruoyi.system.domain.cost.bo.CostBillPeriodSaveBo;
 import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
 import com.ruoyi.system.domain.cost.bo.CostRecalcApplyBo;
 import com.ruoyi.system.domain.cost.bo.CostRecalcApproveBo;
-import com.ruoyi.system.mapper.cost.CostBillPeriodMapper;
-import com.ruoyi.system.mapper.cost.CostCalcTaskDetailMapper;
-import com.ruoyi.system.mapper.cost.CostCalcTaskMapper;
-import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
-import com.ruoyi.system.mapper.cost.CostRecalcOrderMapper;
-import com.ruoyi.system.mapper.cost.CostResultLedgerMapper;
-import com.ruoyi.system.mapper.cost.CostSceneMapper;
+import com.ruoyi.system.mapper.cost.*;
 import com.ruoyi.system.service.cost.ICostAlarmService;
 import com.ruoyi.system.service.cost.ICostAuditService;
 import com.ruoyi.system.service.cost.ICostGovernanceService;
 import com.ruoyi.system.service.cost.ICostRunService;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,16 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -59,8 +36,7 @@ import java.util.stream.Collectors;
  * @author HwFan
  */
 @Service
-public class CostGovernanceServiceImpl implements ICostGovernanceService
-{
+public class CostGovernanceServiceImpl implements ICostGovernanceService {
     private static final String PERIOD_STATUS_NOT_STARTED = "NOT_STARTED";
     private static final String PERIOD_STATUS_SEALED = "SEALED";
     private static final String RECALC_STATUS_PENDING = "PENDING_APPROVAL";
@@ -103,14 +79,12 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     private CostDistributedLockSupport distributedLockSupport;
 
     @Autowired
-    public void setJdbcTemplate(@Qualifier("masterDataSource") DataSource masterDataSource)
-    {
+    public void setJdbcTemplate(@Qualifier("masterDataSource") DataSource masterDataSource) {
         this.jdbcTemplate = new JdbcTemplate(masterDataSource);
     }
 
     @Override
-    public Map<String, Object> selectPeriodStats(Long sceneId)
-    {
+    public Map<String, Object> selectPeriodStats(Long sceneId) {
         List<CostBillPeriod> periods = selectPeriodList(buildPeriodQuery(sceneId));
         LinkedHashMap<String, Object> stats = new LinkedHashMap<>();
         stats.put("periodCount", periods.size());
@@ -122,8 +96,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     }
 
     @Override
-    public List<CostBillPeriod> selectPeriodList(CostBillPeriod query)
-    {
+    public List<CostBillPeriod> selectPeriodList(CostBillPeriod query) {
         List<CostBillPeriod> periods = billPeriodMapper.selectList(Wrappers.<CostBillPeriod>lambdaQuery()
                 .eq(query.getSceneId() != null, CostBillPeriod::getSceneId, query.getSceneId())
                 .eq(StringUtils.isNotEmpty(query.getPeriodStatus()), CostBillPeriod::getPeriodStatus, query.getPeriodStatus())
@@ -135,8 +108,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     }
 
     @Override
-    public Map<String, Object> selectPeriodDetail(Long periodId)
-    {
+    public Map<String, Object> selectPeriodDetail(Long periodId) {
         CostBillPeriod period = requirePeriod(periodId);
         enrichPeriods(Collections.singletonList(period));
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
@@ -148,20 +120,17 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int createPeriod(CostBillPeriodSaveBo bo)
-    {
+    public int createPeriod(CostBillPeriodSaveBo bo) {
         CostScene scene = requireScene(bo.getSceneId());
         ensureBillMonth(bo.getBillMonth());
         if (billPeriodMapper.selectCount(Wrappers.<CostBillPeriod>lambdaQuery()
                 .eq(CostBillPeriod::getSceneId, bo.getSceneId())
-                .eq(CostBillPeriod::getBillMonth, bo.getBillMonth())) > 0)
-        {
+                .eq(CostBillPeriod::getBillMonth, bo.getBillMonth())) > 0) {
             throw new ServiceException("当前场景账期已存在，请勿重复创建");
-                    }
-        if (bo.getActiveVersionId() != null)
-        {
+        }
+        if (bo.getActiveVersionId() != null) {
             requireVersion(bo.getActiveVersionId());
-                    }
+        }
         CostBillPeriod period = new CostBillPeriod();
         period.setSceneId(scene.getSceneId());
         period.setBillMonth(bo.getBillMonth());
@@ -182,13 +151,11 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int sealPeriod(Long periodId)
-    {
+    public int sealPeriod(Long periodId) {
         CostBillPeriod before = requirePeriod(periodId);
-        if (PERIOD_STATUS_SEALED.equals(before.getPeriodStatus()))
-                    {
+        if (PERIOD_STATUS_SEALED.equals(before.getPeriodStatus())) {
             return 0;
-                    }
+        }
         Date now = DateUtils.getNowDate();
         int rows = billPeriodMapper.update(null, Wrappers.<CostBillPeriod>lambdaUpdate()
                 .eq(CostBillPeriod::getPeriodId, periodId)
@@ -204,8 +171,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     }
 
     @Override
-    public List<CostRecalcOrder> selectRecalcList(CostRecalcOrder query)
-    {
+    public List<CostRecalcOrder> selectRecalcList(CostRecalcOrder query) {
         List<CostRecalcOrder> orders = recalcOrderMapper.selectList(Wrappers.<CostRecalcOrder>lambdaQuery()
                 .eq(query.getSceneId() != null, CostRecalcOrder::getSceneId, query.getSceneId())
                 .eq(StringUtils.isNotEmpty(query.getBillMonth()), CostRecalcOrder::getBillMonth, query.getBillMonth())
@@ -218,8 +184,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     }
 
     @Override
-    public Map<String, Object> selectRecalcDetail(Long recalcId)
-    {
+    public Map<String, Object> selectRecalcDetail(Long recalcId) {
         CostRecalcOrder order = requireRecalc(recalcId);
         enrichRecalcOrders(Collections.singletonList(order));
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
@@ -230,14 +195,12 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int applyRecalc(CostRecalcApplyBo bo)
-    {
+    public int applyRecalc(CostRecalcApplyBo bo) {
         CostScene scene = requireScene(bo.getSceneId());
         CostBillPeriod period = requirePeriod(scene.getSceneId(), bo.getBillMonth());
         CostPublishVersion version = requireVersion(bo.getVersionId());
         CostCalcTask baselineTask = requireTask(bo.getBaselineTaskId());
-        if (!Objects.equals(scene.getSceneId(), baselineTask.getSceneId()) || !StringUtils.equals(bo.getBillMonth(), baselineTask.getBillMonth()))
-        {
+        if (!Objects.equals(scene.getSceneId(), baselineTask.getSceneId()) || !StringUtils.equals(bo.getBillMonth(), baselineTask.getBillMonth())) {
             throw new ServiceException("基准任务必须属于当前场景与账期");
         }
         CostRecalcOrder order = new CostRecalcOrder();
@@ -264,8 +227,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int approveRecalc(Long recalcId, CostRecalcApproveBo bo)
-    {
+    public int approveRecalc(Long recalcId, CostRecalcApproveBo bo) {
         CostRecalcOrder before = requireRecalc(recalcId);
         boolean approved = Boolean.TRUE.equals(bo.getApproved());
         String status = approved ? RECALC_STATUS_APPROVED : RECALC_STATUS_REJECTED;
@@ -287,19 +249,16 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     @Override
     @Transactional(rollbackFor = Exception.class)
     @SuppressWarnings("unchecked")
-    public int executeRecalc(Long recalcId)
-    {
+    public int executeRecalc(Long recalcId) {
         CostRecalcOrder before = requireRecalc(recalcId);
-        if (!RECALC_STATUS_APPROVED.equals(before.getRecalcStatus()))
-        {
+        if (!RECALC_STATUS_APPROVED.equals(before.getRecalcStatus())) {
             throw new ServiceException("只有审核通过的重算申请才能执行");
         }
         CostCalcTask baselineTask = requireTask(before.getBaselineTaskId());
         List<CostCalcTaskDetail> details = calcTaskDetailMapper.selectList(Wrappers.<CostCalcTaskDetail>lambdaQuery()
                 .eq(CostCalcTaskDetail::getTaskId, baselineTask.getTaskId())
                 .orderByAsc(CostCalcTaskDetail::getPartitionNo));
-        if (details.isEmpty())
-        {
+        if (details.isEmpty()) {
             throw new ServiceException("基准任务没有可重算的输入明细");
         }
         List<String> inputs = details.stream().map(CostCalcTaskDetail::getInputJson).collect(Collectors.toList());
@@ -329,60 +288,49 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     }
 
     @Override
-    public List<CostAuditLog> selectAuditList(CostAuditLog query)
-    {
+    public List<CostAuditLog> selectAuditList(CostAuditLog query) {
         return auditService.selectAuditList(query);
     }
 
     @Override
-    public Map<String, Object> selectAuditStats(CostAuditLog query)
-    {
+    public Map<String, Object> selectAuditStats(CostAuditLog query) {
         return auditService.selectAuditStats(query);
     }
 
     @Override
-    public List<CostAlarmRecord> selectAlarmList(CostAlarmRecord query)
-    {
+    public List<CostAlarmRecord> selectAlarmList(CostAlarmRecord query) {
         return alarmService.selectAlarmList(query);
     }
 
     @Override
-    public Map<String, Object> selectAlarmStats(CostAlarmRecord query)
-    {
+    public Map<String, Object> selectAlarmStats(CostAlarmRecord query) {
         return alarmService.selectAlarmStats(query);
     }
 
     @Override
-    public Map<String, Object> selectAlarmOverview(CostAlarmRecord query)
-    {
+    public Map<String, Object> selectAlarmOverview(CostAlarmRecord query) {
         return alarmService.selectAlarmOverview(query);
     }
 
     @Override
-    public int ackAlarm(Long alarmId)
-    {
+    public int ackAlarm(Long alarmId) {
         return alarmService.ackAlarm(alarmId);
     }
 
     @Override
-    public int resolveAlarm(Long alarmId)
-    {
+    public int resolveAlarm(Long alarmId) {
         return alarmService.resolveAlarm(alarmId);
     }
 
     @Override
-    public Map<String, Object> selectGoLiveReadiness()
-    {
+    public Map<String, Object> selectGoLiveReadiness() {
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         List<Map<String, Object>> checks = new ArrayList<>();
-        try
-        {
+        try {
             checks.addAll(buildMigrationChecks());
             checks.addAll(buildTableChecks());
             checks.addAll(buildMenuChecks());
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             checks.add(buildCheckItem("SYSTEM", "上线自动校验读取失败", CHECK_STATUS_FAIL,
                     "读取 Flyway 或库表信息失败：" + limitLength(ex.getMessage(), 300),
                     "先检查目标库连接、Flyway 历史表和当前账号只读权限。"));
@@ -411,15 +359,13 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     }
 
     @Override
-    public Map<String, Object> selectRuntimeCacheStats(Long sceneId, Long versionId)
-    {
+    public Map<String, Object> selectRuntimeCacheStats(Long sceneId, Long versionId) {
         Collection<String> keys = redisCache.keys(RUNTIME_CACHE_PREFIX + "*");
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("cacheCount", keys == null ? 0 : keys.size());
         result.put("sceneId", sceneId);
         result.put("versionId", versionId);
-        if (versionId != null)
-        {
+        if (versionId != null) {
             String cacheKey = RUNTIME_CACHE_PREFIX + versionId;
             result.put("cacheKey", cacheKey);
             result.put("exists", Boolean.TRUE.equals(redisCache.hasKey(cacheKey)));
@@ -430,57 +376,45 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     }
 
     @Override
-    public int refreshRuntimeCache(Long sceneId, Long versionId)
-    {
+    public int refreshRuntimeCache(Long sceneId, Long versionId) {
         return distributedLockSupport.executeRuntimeCacheLock(sceneId, versionId,
                 "当前正在刷新运行缓存，请稍后重试", () ->
                 {
-                    try
-                    {
-            List<String> keys = new ArrayList<>();
-            if (versionId != null)
-            {
-                keys.add(RUNTIME_CACHE_PREFIX + versionId);
-            }
-            else if (sceneId != null)
-            {
-                List<CostPublishVersion> versions = publishVersionMapper.selectList(Wrappers.<CostPublishVersion>lambdaQuery()
-                        .eq(CostPublishVersion::getSceneId, sceneId));
-                keys.addAll(versions.stream().map(item -> RUNTIME_CACHE_PREFIX + item.getVersionId()).collect(Collectors.toList()));
-            }
-            else
-            {
-                Collection<String> allKeys = redisCache.keys(RUNTIME_CACHE_PREFIX + "*");
-                if (allKeys != null)
-                {
-                    keys.addAll(allKeys);
-                }
-            }
-            if (!keys.isEmpty())
-            {
-                redisCache.deleteObject(keys);
-            }
-            auditService.recordAudit(sceneId, "CACHE", versionId == null ? "RUNTIME" : String.valueOf(versionId),
-                    "REFRESH", "刷新运行快照缓存", null, keys, "");
-            if (versionId != null || sceneId != null)
-            {
-                String sourceKey = "CACHE:" + (versionId == null ? String.valueOf(sceneId) : versionId);
-                alarmService.autoResolveBySourceKey(sourceKey, "缓存刷新成功，自动关闭历史缓存告警");
-            }
+                    try {
+                        List<String> keys = new ArrayList<>();
+                        if (versionId != null) {
+                            keys.add(RUNTIME_CACHE_PREFIX + versionId);
+                        } else if (sceneId != null) {
+                            List<CostPublishVersion> versions = publishVersionMapper.selectList(Wrappers.<CostPublishVersion>lambdaQuery()
+                                    .eq(CostPublishVersion::getSceneId, sceneId));
+                            keys.addAll(versions.stream().map(item -> RUNTIME_CACHE_PREFIX + item.getVersionId()).collect(Collectors.toList()));
+                        } else {
+                            Collection<String> allKeys = redisCache.keys(RUNTIME_CACHE_PREFIX + "*");
+                            if (allKeys != null) {
+                                keys.addAll(allKeys);
+                            }
+                        }
+                        if (!keys.isEmpty()) {
+                            redisCache.deleteObject(keys);
+                        }
+                        auditService.recordAudit(sceneId, "CACHE", versionId == null ? "RUNTIME" : String.valueOf(versionId),
+                                "REFRESH", "刷新运行快照缓存", null, keys, "");
+                        if (versionId != null || sceneId != null) {
+                            String sourceKey = "CACHE:" + (versionId == null ? String.valueOf(sceneId) : versionId);
+                            alarmService.autoResolveBySourceKey(sourceKey, "缓存刷新成功，自动关闭历史缓存告警");
+                        }
                         return 1;
-                    }
-                    catch (Exception e)
-                    {
-            CostAlarmRecord alarm = new CostAlarmRecord();
-            alarm.setSceneId(sceneId);
-            alarm.setVersionId(versionId);
-            alarm.setAlarmType("CACHE_REFRESH_FAILED");
-            alarm.setAlarmLevel("ERROR");
-            alarm.setAlarmTitle("运行快照缓存刷新失败");
-            alarm.setAlarmContent(limitLength(e.getMessage(), 1000));
-            alarm.setSourceKey("CACHE:" + (versionId == null ? String.valueOf(sceneId) : versionId));
-            alarmService.createAlarm(alarm);
-            throw e;
+                    } catch (Exception e) {
+                        CostAlarmRecord alarm = new CostAlarmRecord();
+                        alarm.setSceneId(sceneId);
+                        alarm.setVersionId(versionId);
+                        alarm.setAlarmType("CACHE_REFRESH_FAILED");
+                        alarm.setAlarmLevel("ERROR");
+                        alarm.setAlarmTitle("运行快照缓存刷新失败");
+                        alarm.setAlarmContent(limitLength(e.getMessage(), 1000));
+                        alarm.setSourceKey("CACHE:" + (versionId == null ? String.valueOf(sceneId) : versionId));
+                        alarmService.createAlarm(alarm);
+                        throw e;
                     }
                 });
     }
@@ -488,8 +422,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     /**
      * 构建 Flyway 迁移校验项，优先确认线程五新增脚本是否已经在目标库生效。
      */
-    private List<Map<String, Object>> buildMigrationChecks()
-    {
+    private List<Map<String, Object>> buildMigrationChecks() {
         List<Map<String, Object>> appliedVersions = jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success = 1");
         Set<String> versionSet = appliedVersions.stream()
@@ -508,8 +441,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     /**
      * 构建运行链关键表校验项，避免迁移成功但关键库表缺失。
      */
-    private List<Map<String, Object>> buildTableChecks()
-    {
+    private List<Map<String, Object>> buildTableChecks() {
         List<Map<String, Object>> checks = new ArrayList<>();
         checks.add(buildTableCheck("cost_calc_task_partition", "正式核算分片表"));
         checks.add(buildTableCheck("cost_calc_input_batch", "导入批次头表"));
@@ -520,8 +452,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     /**
      * 构建菜单校验项，帮助在目标环境快速确认 Flyway 菜单补丁是否生效。
      */
-    private List<Map<String, Object>> buildMenuChecks()
-    {
+    private List<Map<String, Object>> buildMenuChecks() {
         List<Map<String, Object>> checks = new ArrayList<>();
         checks.add(buildMenuCheck("/cost/task", "正式核算菜单"));
         checks.add(buildMenuCheck("/cost/taskBatch", "导入批次菜单"));
@@ -533,8 +464,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     /**
      * 构建仍需人工执行的校验项，将最后两项上线阻塞清晰暴露给业务和测试。
      */
-    private List<Map<String, Object>> buildManualChecks()
-    {
+    private List<Map<String, Object>> buildManualChecks() {
         List<Map<String, Object>> checks = new ArrayList<>();
         checks.add(buildCheckItem("MANUAL", "正式全链人工回归", CHECK_STATUS_PENDING,
                 "代码链路已具备，仍需按上线回归清单完成真实场景联调与证据沉淀。",
@@ -548,8 +478,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     /**
      * 构建单个库表存在性校验。
      */
-    private Map<String, Object> buildTableCheck(String tableName, String displayName)
-    {
+    private Map<String, Object> buildTableCheck(String tableName, String displayName) {
         Integer tableCount = jdbcTemplate.queryForObject(
                 "select count(1) from information_schema.tables where table_schema = (select database()) and table_name = ?",
                 Integer.class, tableName);
@@ -562,8 +491,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     /**
      * 构建菜单存在性校验。
      */
-    private Map<String, Object> buildMenuCheck(String menuPath, String displayName)
-    {
+    private Map<String, Object> buildMenuCheck(String menuPath, String displayName) {
         Integer menuCount = jdbcTemplate.queryForObject(
                 "select count(1) from sys_menu where path = ?",
                 Integer.class, menuPath);
@@ -576,14 +504,11 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     /**
      * 查询最近一次已成功执行的 Flyway 记录，方便快速观察目标环境停留在哪个版本。
      */
-    private Map<String, Object> safeLatestMigration()
-    {
-        try
-        {
+    private Map<String, Object> safeLatestMigration() {
+        try {
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                     "select version, description, installed_on from flyway_schema_history where success = 1 order by installed_rank desc limit 1");
-            if (rows.isEmpty())
-            {
+            if (rows.isEmpty()) {
                 return Collections.emptyMap();
             }
             Map<String, Object> row = rows.get(0);
@@ -592,9 +517,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
             latest.put("description", stringValue(row.get("description")));
             latest.put("installedOn", row.get("installed_on"));
             return latest;
-        }
-        catch (Exception ignored)
-        {
+        } catch (Exception ignored) {
             return Collections.emptyMap();
         }
     }
@@ -602,8 +525,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     /**
      * 构建统一校验项结构，前端可直接按状态渲染颜色与下一步动作。
      */
-    private Map<String, Object> buildCheckItem(String category, String name, String status, String detail, String nextAction)
-    {
+    private Map<String, Object> buildCheckItem(String category, String name, String status, String detail, String nextAction) {
         LinkedHashMap<String, Object> item = new LinkedHashMap<>();
         item.put("category", category);
         item.put("name", name);
@@ -613,23 +535,20 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
         return item;
     }
 
-    private CostBillPeriod buildPeriodQuery(Long sceneId)
-    {
+    private CostBillPeriod buildPeriodQuery(Long sceneId) {
         CostBillPeriod query = new CostBillPeriod();
         query.setSceneId(sceneId);
         return query;
     }
 
-    private CostRecalcOrder buildRecalcQuery(Long sceneId, String billMonth)
-    {
+    private CostRecalcOrder buildRecalcQuery(Long sceneId, String billMonth) {
         CostRecalcOrder query = new CostRecalcOrder();
         query.setSceneId(sceneId);
         query.setBillMonth(billMonth);
         return query;
     }
 
-    private void enrichPeriods(List<CostBillPeriod> periods)
-    {
+    private void enrichPeriods(List<CostBillPeriod> periods) {
         Set<Long> sceneIds = periods.stream().map(CostBillPeriod::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet());
         Set<Long> versionIds = periods.stream().map(CostBillPeriod::getActiveVersionId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, CostScene> sceneMap = sceneIds.isEmpty() ? Collections.emptyMap()
@@ -638,21 +557,18 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
                 : publishVersionMapper.selectBatchIds(versionIds).stream().collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
         periods.forEach(item -> {
             CostScene scene = sceneMap.get(item.getSceneId());
-            if (scene != null)
-            {
+            if (scene != null) {
                 item.setSceneCode(scene.getSceneCode());
                 item.setSceneName(scene.getSceneName());
             }
             CostPublishVersion version = versionMap.get(item.getActiveVersionId());
-            if (version != null)
-            {
+            if (version != null) {
                 item.setVersionNo(version.getVersionNo());
             }
         });
     }
 
-    private void enrichRecalcOrders(List<CostRecalcOrder> orders)
-    {
+    private void enrichRecalcOrders(List<CostRecalcOrder> orders) {
         Set<Long> sceneIds = orders.stream().map(CostRecalcOrder::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet());
         Set<Long> versionIds = orders.stream().map(CostRecalcOrder::getVersionId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, CostScene> sceneMap = sceneIds.isEmpty() ? Collections.emptyMap()
@@ -661,21 +577,18 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
                 : publishVersionMapper.selectBatchIds(versionIds).stream().collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
         orders.forEach(item -> {
             CostScene scene = sceneMap.get(item.getSceneId());
-            if (scene != null)
-            {
+            if (scene != null) {
                 item.setSceneCode(scene.getSceneCode());
                 item.setSceneName(scene.getSceneName());
             }
             CostPublishVersion version = versionMap.get(item.getVersionId());
-            if (version != null)
-            {
+            if (version != null) {
                 item.setVersionNo(version.getVersionNo());
             }
         });
     }
 
-    private Map<String, Object> buildResultStats(Long sceneId, String billMonth, Long taskId)
-    {
+    private Map<String, Object> buildResultStats(Long sceneId, String billMonth, Long taskId) {
         List<CostResultLedger> ledgers = resultLedgerMapper.selectList(Wrappers.<CostResultLedger>lambdaQuery()
                 .eq(sceneId != null, CostResultLedger::getSceneId, sceneId)
                 .eq(StringUtils.isNotEmpty(billMonth), CostResultLedger::getBillMonth, billMonth)
@@ -689,116 +602,92 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
         return stats;
     }
 
-    private Map<String, Object> parseJson(String text)
-    {
-        if (StringUtils.isEmpty(text))
-        {
+    private Map<String, Object> parseJson(String text) {
+        if (StringUtils.isEmpty(text)) {
             return Collections.emptyMap();
         }
-        try
-        {
-            return objectMapper.readValue(text, new TypeReference<Map<String, Object>>() {});
-        }
-        catch (Exception ignored)
-        {
+        try {
+            return objectMapper.readValue(text, new TypeReference<Map<String, Object>>() {
+            });
+        } catch (Exception ignored) {
             return Collections.emptyMap();
         }
     }
 
-    private CostScene requireScene(Long sceneId)
-    {
+    private CostScene requireScene(Long sceneId) {
         CostScene scene = sceneMapper.selectById(sceneId);
-        if (scene == null)
-        {
+        if (scene == null) {
             throw new ServiceException("所属场景不存在，请刷新后重试");
         }
         return scene;
     }
 
-    private CostPublishVersion requireVersion(Long versionId)
-    {
+    private CostPublishVersion requireVersion(Long versionId) {
         CostPublishVersion version = publishVersionMapper.selectById(versionId);
-        if (version == null)
-        {
+        if (version == null) {
             throw new ServiceException("目标版本不存在，请刷新后重试");
         }
         return version;
     }
 
-    private CostCalcTask requireTask(Long taskId)
-    {
+    private CostCalcTask requireTask(Long taskId) {
         CostCalcTask task = calcTaskMapper.selectById(taskId);
-        if (task == null)
-        {
+        if (task == null) {
             throw new ServiceException("基准任务不存在，请刷新后重试");
         }
         return task;
     }
 
-    private CostBillPeriod requirePeriod(Long periodId)
-    {
+    private CostBillPeriod requirePeriod(Long periodId) {
         CostBillPeriod period = billPeriodMapper.selectById(periodId);
-        if (period == null)
-        {
+        if (period == null) {
             throw new ServiceException("账期记录不存在，请刷新后重试");
         }
         return period;
     }
 
-    private CostBillPeriod requirePeriod(Long sceneId, String billMonth)
-    {
+    private CostBillPeriod requirePeriod(Long sceneId, String billMonth) {
         CostBillPeriod period = billPeriodMapper.selectOne(Wrappers.<CostBillPeriod>lambdaQuery()
                 .eq(CostBillPeriod::getSceneId, sceneId)
                 .eq(CostBillPeriod::getBillMonth, billMonth)
                 .last("limit 1"));
-        if (period == null)
-        {
+        if (period == null) {
             throw new ServiceException("当前场景账期不存在，请先创建账期");
         }
         return period;
     }
 
-    private CostRecalcOrder requireRecalc(Long recalcId)
-    {
+    private CostRecalcOrder requireRecalc(Long recalcId) {
         CostRecalcOrder order = recalcOrderMapper.selectById(recalcId);
-        if (order == null)
-        {
+        if (order == null) {
             throw new ServiceException("重算申请不存在，请刷新后重试");
         }
         return order;
     }
 
-    private void ensureBillMonth(String billMonth)
-    {
-        if (StringUtils.isEmpty(billMonth) || !billMonth.matches("\\d{4}-\\d{2}"))
-        {
+    private void ensureBillMonth(String billMonth) {
+        if (StringUtils.isEmpty(billMonth) || !billMonth.matches("\\d{4}-\\d{2}")) {
             throw new ServiceException("账期格式必须为 yyyy-MM");
         }
     }
 
-    private Long longValue(Object value)
-    {
-        if (value == null)
-        {
+    private Long longValue(Object value) {
+        if (value == null) {
             return null;
         }
         return Long.parseLong(String.valueOf(value));
     }
 
-    private String stringValue(Object value)
-    {
+    private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
     }
 
-    private String firstNonBlank(String first, String second)
-    {
+    private String firstNonBlank(String first, String second) {
         return StringUtils.isNotEmpty(first) ? first : second;
     }
 
-    private String limitLength(String text, int maxLength)
-    {
-        if (text == null)
-        {
+    private String limitLength(String text, int maxLength) {
+        if (text == null) {
             return "";
         }
         return text.length() <= maxLength ? text : text.substring(0, maxLength);

@@ -5,7 +5,6 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ruoyi.system.domain.cost.CostCalcTask;
 import com.ruoyi.system.domain.cost.CostPublishVersion;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.bo.CostCalcInputBatchCreateBo;
@@ -17,18 +16,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.io.StringWriter;
 import java.time.YearMonth;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -56,8 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.datasource.druid.filter.stat.log-slow-sql=false"
 })
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
-class CostRunPerformanceManualIT
-{
+class CostRunPerformanceManualIT {
     private static final String DEFAULT_SCENE_CODE = "SHOUGANG-ORE-HR-001";
 
     @Autowired
@@ -77,8 +70,7 @@ class CostRunPerformanceManualIT
 
     @Test
     @EnabledIfSystemProperty(named = "cost.perf.enabled", matches = "true")
-    void shouldProduceFormalBatchPerformanceBaseline() throws Exception
-    {
+    void shouldProduceFormalBatchPerformanceBaseline() throws Exception {
         int recordCount = Integer.getInteger("cost.perf.recordCount", 10000);
         String billMonth = System.getProperty("cost.perf.billMonth", YearMonth.now().plusMonths(6).toString());
         String scenarioLabel = System.getProperty("cost.perf.scenarioLabel", "single-" + recordCount);
@@ -162,11 +154,9 @@ class CostRunPerformanceManualIT
 
     @Test
     @EnabledIfSystemProperty(named = "cost.perf.enabled", matches = "true")
-    void shouldProduceConcurrentFormalBatchPerformanceBaseline() throws Exception
-    {
+    void shouldProduceConcurrentFormalBatchPerformanceBaseline() throws Exception {
         int concurrentTasks = Integer.getInteger("cost.perf.concurrentTasks", 1);
-        if (concurrentTasks <= 1)
-        {
+        if (concurrentTasks <= 1) {
             return;
         }
 
@@ -186,8 +176,7 @@ class CostRunPerformanceManualIT
 
         List<PerfBatchSeed> batchSeeds = new ArrayList<>();
         long createBatchStart = System.currentTimeMillis();
-        for (int i = 0; i < concurrentTasks; i++)
-        {
+        for (int i = 0; i < concurrentTasks; i++) {
             String billMonth = sameBillMonth
                     ? baseBillMonth
                     : YearMonth.parse(baseBillMonth).plusMonths(i).toString();
@@ -211,15 +200,11 @@ class CostRunPerformanceManualIT
         ExecutorService executorService = Executors.newFixedThreadPool(concurrentTasks);
         List<Future<PerfTaskSubmission>> futures = new ArrayList<>();
         long submitAndRunStart = System.currentTimeMillis();
-        try
-        {
-            for (PerfBatchSeed batchSeed : batchSeeds)
-            {
-                futures.add(executorService.submit(new Callable<>()
-                {
+        try {
+            for (PerfBatchSeed batchSeed : batchSeeds) {
+                futures.add(executorService.submit(new Callable<>() {
                     @Override
-                    public PerfTaskSubmission call()
-                    {
+                    public PerfTaskSubmission call() {
                         long submitStart = System.currentTimeMillis();
                         CostCalcTaskSubmitBo submitBo = new CostCalcTaskSubmitBo();
                         submitBo.setSceneId(sceneId);
@@ -245,8 +230,7 @@ class CostRunPerformanceManualIT
             int failedTaskCount = 0;
             long maxTaskDurationMs = 0L;
             long minTaskDurationMs = Long.MAX_VALUE;
-            for (Future<PerfTaskSubmission> future : futures)
-            {
+            for (Future<PerfTaskSubmission> future : futures) {
                 PerfTaskSubmission submission = future.get();
                 submitTaskMsTotal += submission.submitTaskMs;
                 Map<String, Object> finalDetail = waitTaskFinished(submission.taskId, recordCount);
@@ -259,8 +243,7 @@ class CostRunPerformanceManualIT
                 assertThat(taskSuccessCount + taskFailCount).isEqualTo(recordCount);
                 successCount += taskSuccessCount;
                 failCount += taskFailCount;
-                if (!"SUCCESS".equals(taskStatus))
-                {
+                if (!"SUCCESS".equals(taskStatus)) {
                     failedTaskCount++;
                 }
                 maxTaskDurationMs = Math.max(maxTaskDurationMs, taskDurationMs);
@@ -296,18 +279,14 @@ class CostRunPerformanceManualIT
             summary.put("tasks", taskSummaries);
 
             System.out.println("COST_PERF_CONCURRENT_BASELINE=" + objectMapper.writeValueAsString(summary));
-        }
-        finally
-        {
+        } finally {
             executorService.shutdownNow();
         }
     }
 
-    private Long requireSceneId()
-    {
+    private Long requireSceneId() {
         Long overrideSceneId = Long.getLong("cost.perf.sceneId");
-        if (overrideSceneId != null)
-        {
+        if (overrideSceneId != null) {
             return overrideSceneId;
         }
         String sceneCode = resolveSceneCode();
@@ -318,16 +297,13 @@ class CostRunPerformanceManualIT
         return scene.getSceneId();
     }
 
-    private Long requireVersionId(Long sceneId)
-    {
+    private Long requireVersionId(Long sceneId) {
         Long overrideVersionId = Long.getLong("cost.perf.versionId");
-        if (overrideVersionId != null)
-        {
+        if (overrideVersionId != null) {
             return overrideVersionId;
         }
         CostPublishVersion activeVersion = publishVersionMapper.selectActiveVersionByScene(sceneId);
-        if (activeVersion != null)
-        {
+        if (activeVersion != null) {
             return activeVersion.getVersionId();
         }
         CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
@@ -335,23 +311,19 @@ class CostRunPerformanceManualIT
         return latestVersion.getVersionId();
     }
 
-    private String resolveSceneCode()
-    {
+    private String resolveSceneCode() {
         return System.getProperty("cost.perf.sceneCode", DEFAULT_SCENE_CODE);
     }
 
-    private Map<String, Object> waitTaskFinished(Long taskId, int recordCount) throws Exception
-    {
+    private Map<String, Object> waitTaskFinished(Long taskId, int recordCount) throws Exception {
         long timeoutMs = Long.getLong("cost.perf.timeoutMs", resolveDefaultTimeoutMs(recordCount));
         long deadline = System.currentTimeMillis() + timeoutMs;
         Map<String, Object> detail = runService.selectTaskDetail(taskId, 1, 1);
-        while (System.currentTimeMillis() < deadline)
-        {
+        while (System.currentTimeMillis() < deadline) {
             detail = runService.selectTaskDetail(taskId, 1, 1);
             Map<String, Object> task = asMap(detail.get("task"));
             String taskStatus = String.valueOf(task.get("taskStatus"));
-            if ("SUCCESS".equals(taskStatus) || "PART_SUCCESS".equals(taskStatus) || "FAILED".equals(taskStatus))
-            {
+            if ("SUCCESS".equals(taskStatus) || "PART_SUCCESS".equals(taskStatus) || "FAILED".equals(taskStatus)) {
                 waitExecutorIdle(deadline);
                 return detail;
             }
@@ -360,42 +332,33 @@ class CostRunPerformanceManualIT
         return detail;
     }
 
-    private long resolveDefaultTimeoutMs(int recordCount)
-    {
-        if (recordCount >= 1_000_000)
-        {
+    private long resolveDefaultTimeoutMs(int recordCount) {
+        if (recordCount >= 1_000_000) {
             return 2L * 60L * 60L * 1000L;
         }
-        if (recordCount >= 500_000)
-        {
+        if (recordCount >= 500_000) {
             return 90L * 60L * 1000L;
         }
         return 30L * 60L * 1000L;
     }
 
-    private void waitExecutorIdle(long deadline) throws Exception
-    {
-        while (System.currentTimeMillis() < deadline)
-        {
+    private void waitExecutorIdle(long deadline) throws Exception {
+        while (System.currentTimeMillis() < deadline) {
             if (threadPoolTaskExecutor.getActiveCount() <= 0
                     && threadPoolTaskExecutor.getThreadPoolExecutor() != null
-                    && threadPoolTaskExecutor.getThreadPoolExecutor().getQueue().isEmpty())
-            {
+                    && threadPoolTaskExecutor.getThreadPoolExecutor().getQueue().isEmpty()) {
                 return;
             }
             Thread.sleep(200L);
         }
     }
 
-    private String buildInputJson(int recordCount) throws Exception
-    {
+    private String buildInputJson(int recordCount) throws Exception {
         StringWriter writer = new StringWriter(Math.max(recordCount * 180, 1024));
         JsonFactory factory = objectMapper.getFactory();
-        try (JsonGenerator generator = factory.createGenerator(writer))
-        {
+        try (JsonGenerator generator = factory.createGenerator(writer)) {
             generator.writeStartArray();
-            for (int i = 0; i < recordCount; i++)
-            {
+            for (int i = 0; i < recordCount; i++) {
                 generator.writeStartObject();
                 generator.writeStringField("bizNo", String.format(Locale.ROOT, "PERF-BIZ-%07d", i + 1));
                 generator.writeStringField("objectCode", String.format(Locale.ROOT, "PERF-TEAM-%07d", i + 1));
@@ -429,41 +392,34 @@ class CostRunPerformanceManualIT
         return writer.toString();
     }
 
-    private Map<String, Object> asMap(Object value)
-    {
+    private Map<String, Object> asMap(Object value) {
         return value == null
                 ? Map.of()
-                : objectMapper.convertValue(value, new TypeReference<LinkedHashMap<String, Object>>() {});
+                : objectMapper.convertValue(value, new TypeReference<LinkedHashMap<String, Object>>() {
+        });
     }
 
-    private long toLong(Object value)
-    {
-        if (value == null)
-        {
+    private long toLong(Object value) {
+        if (value == null) {
             return 0L;
         }
-        if (value instanceof Number)
-        {
+        if (value instanceof Number) {
             return ((Number) value).longValue();
         }
         return Long.parseLong(String.valueOf(value));
     }
 
-    private double round(double value)
-    {
+    private double round(double value) {
         return Math.round(value * 100D) / 100D;
     }
 
-    private record PerfBatchSeed(Long batchId, String batchNo, String billMonth, String requestNo)
-    {
+    private record PerfBatchSeed(Long batchId, String batchNo, String billMonth, String requestNo) {
     }
 
-    private record PerfTaskSubmission(PerfBatchSeed batchSeed, Long taskId, long submitTaskMs)
-    {
+    private record PerfTaskSubmission(PerfBatchSeed batchSeed, Long taskId, long submitTaskMs) {
     }
 
     private record PerfTaskSummary(PerfTaskSubmission submission, String taskStatus, long successCount, long failCount,
-                                   long taskDurationMs)
-    {
+                                   long taskDurationMs) {
     }
 }

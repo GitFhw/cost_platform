@@ -6,8 +6,7 @@ import lombok.Data;
  * 接入方案直连预演请求。
  */
 @Data
-public class CostAccessProfilePreviewFetchBo
-{
+public class CostAccessProfilePreviewFetchBo {
     /**
      * 当前预演时覆盖方案中的请求载荷样例。
      */

@@ -11,12 +11,12 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface ICostFeeService
-{
+public interface ICostFeeService {
     /**
      * 查询费用列表
      *
      * @param feeItem 查询对象
+     *
      * @return 费用集合
      */
     List<CostFeeItem> selectFeeList(CostFeeItem feeItem);
@@ -25,6 +25,7 @@ public interface ICostFeeService
      * 查询费用详情
      *
      * @param feeId 费用主键
+     *
      * @return 费用对象
      */
     CostFeeItem selectFeeById(Long feeId);
@@ -33,6 +34,7 @@ public interface ICostFeeService
      * 查询费用选择框
      *
      * @param feeItem 查询对象
+     *
      * @return 费用集合
      */
     List<CostFeeItem> selectFeeOptions(CostFeeItem feeItem);
@@ -41,6 +43,7 @@ public interface ICostFeeService
      * 查询费用统计
      *
      * @param feeItem 查询对象
+     *
      * @return 统计结果
      */
     Map<String, Object> selectFeeStats(CostFeeItem feeItem);
@@ -49,6 +52,7 @@ public interface ICostFeeService
      * 查询费用治理预检查结果
      *
      * @param feeId 费用主键
+     *
      * @return 结果
      */
     CostFeeGovernanceCheckVo selectFeeGovernanceCheck(Long feeId);
@@ -57,6 +61,7 @@ public interface ICostFeeService
      * 校验费用编码是否唯一
      *
      * @param feeItem 费用对象
+     *
      * @return 结果
      */
     boolean checkFeeCodeUnique(CostFeeItem feeItem);
@@ -65,6 +70,7 @@ public interface ICostFeeService
      * 新增费用
      *
      * @param feeItem 费用对象
+     *
      * @return 结果
      */
     int insertFee(CostFeeItem feeItem);
@@ -73,6 +79,7 @@ public interface ICostFeeService
      * 修改费用
      *
      * @param feeItem 费用对象
+     *
      * @return 结果
      */
     int updateFee(CostFeeItem feeItem);
@@ -81,6 +88,7 @@ public interface ICostFeeService
      * 批量删除费用
      *
      * @param feeIds 费用主键数组
+     *
      * @return 结果
      */
     int deleteFeeByIds(Long[] feeIds);
