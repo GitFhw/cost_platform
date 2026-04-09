@@ -25,8 +25,7 @@ import java.util.Date;
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
 @TableName("cost_recalc_order")
-public class CostRecalcOrder extends BaseEntity
-{
+public class CostRecalcOrder extends BaseEntity {
     @TableId(value = "recalc_id", type = IdType.AUTO)
     private Long recalcId;
 

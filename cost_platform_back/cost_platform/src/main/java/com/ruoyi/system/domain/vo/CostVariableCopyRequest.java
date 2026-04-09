@@ -10,20 +10,29 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostVariableCopyRequest
-{
-    /** 源变量主键 */
+public class CostVariableCopyRequest {
+    /**
+     * 源变量主键
+     */
     private Long variableId;
 
-    /** 目标场景主键，为空时沿用源场景 */
+    /**
+     * 目标场景主键，为空时沿用源场景
+     */
     private Long targetSceneId;
 
-    /** 目标分组主键，为空时沿用源分组 */
+    /**
+     * 目标分组主键，为空时沿用源分组
+     */
     private Long targetGroupId;
 
-    /** 新变量编码 */
+    /**
+     * 新变量编码
+     */
     private String variableCode;
 
-    /** 新变量名称 */
+    /**
+     * 新变量名称
+     */
     private String variableName;
 }

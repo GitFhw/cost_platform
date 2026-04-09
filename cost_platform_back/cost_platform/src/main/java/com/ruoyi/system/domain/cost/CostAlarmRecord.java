@@ -21,8 +21,7 @@ import java.util.Date;
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
 @TableName("cost_alarm_record")
-public class CostAlarmRecord extends BaseEntity
-{
+public class CostAlarmRecord extends BaseEntity {
     @TableId(value = "alarm_id", type = IdType.AUTO)
     private Long alarmId;
 

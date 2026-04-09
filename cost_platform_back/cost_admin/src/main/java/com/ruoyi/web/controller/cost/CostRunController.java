@@ -10,25 +10,14 @@ import com.ruoyi.system.domain.cost.CostCalcInputBatch;
 import com.ruoyi.system.domain.cost.CostCalcTask;
 import com.ruoyi.system.domain.cost.CostResultLedger;
 import com.ruoyi.system.domain.cost.CostSimulationRecord;
-import com.ruoyi.system.domain.cost.bo.CostCalcInputBatchCreateBo;
-import com.ruoyi.system.domain.cost.bo.CostInputBuildPreviewBo;
-import com.ruoyi.system.domain.cost.bo.CostFeeCalculateBo;
-import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
-import com.ruoyi.system.domain.cost.bo.CostSimulationExecuteBo;
+import com.ruoyi.system.domain.cost.bo.*;
 import com.ruoyi.system.service.cost.ICostRunService;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 
 /**
@@ -41,8 +30,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/cost/run")
-public class CostRunController extends BaseController
-{
+public class CostRunController extends BaseController {
     @Autowired
     private ICostRunService runService;
 
@@ -51,8 +39,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:simulation:list')")
     @GetMapping("/simulation/stats")
-    public AjaxResult simulationStats(CostSimulationRecord query)
-    {
+    public AjaxResult simulationStats(CostSimulationRecord query) {
         return success(runService.selectSimulationStats(query));
     }
 
@@ -61,8 +48,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:simulation:list')")
     @GetMapping("/simulation/list")
-    public TableDataInfo simulationList(CostSimulationRecord query)
-    {
+    public TableDataInfo simulationList(CostSimulationRecord query) {
         startPage();
         List<CostSimulationRecord> list = runService.selectSimulationList(query);
         return getDataTable(list);
@@ -74,16 +60,14 @@ public class CostRunController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:simulation:list') or @ss.hasPermi('cost:task:list')")
     @Log(title = "数据接入", businessType = BusinessType.OTHER)
     @PostMapping("/input-build/preview")
-    public AjaxResult previewInputBuild(@Validated @RequestBody CostInputBuildPreviewBo bo)
-    {
+    public AjaxResult previewInputBuild(@Validated @RequestBody CostInputBuildPreviewBo bo) {
         return success(runService.previewBuiltInput(bo));
     }
 
     @PreAuthorize("@ss.hasPermi('cost:simulation:execute')")
     @Log(title = "试算中心", businessType = BusinessType.INSERT)
     @PostMapping("/simulation/execute")
-    public AjaxResult simulationExecute(@Validated @RequestBody CostSimulationExecuteBo bo)
-    {
+    public AjaxResult simulationExecute(@Validated @RequestBody CostSimulationExecuteBo bo) {
         return success(runService.executeSimulation(bo));
     }
 
@@ -93,8 +77,7 @@ public class CostRunController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:simulation:execute')")
     @Log(title = "试算中心", businessType = BusinessType.INSERT)
     @PostMapping("/simulation/batch-execute")
-    public AjaxResult simulationBatchExecute(@Validated @RequestBody CostSimulationExecuteBo bo)
-    {
+    public AjaxResult simulationBatchExecute(@Validated @RequestBody CostSimulationExecuteBo bo) {
         return success(runService.executeSimulationBatch(bo));
     }
 
@@ -103,8 +86,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:simulation:query')")
     @GetMapping("/simulation/{simulationId}")
-    public AjaxResult simulationDetail(@PathVariable Long simulationId)
-    {
+    public AjaxResult simulationDetail(@PathVariable Long simulationId) {
         return success(runService.selectSimulationDetail(simulationId));
     }
 
@@ -113,8 +95,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:task:list')")
     @GetMapping("/task/stats")
-    public AjaxResult taskStats(CostCalcTask query)
-    {
+    public AjaxResult taskStats(CostCalcTask query) {
         return success(runService.selectTaskStats(query));
     }
 
@@ -123,8 +104,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:task:list')")
     @GetMapping("/task/overview")
-    public AjaxResult taskOverview(CostCalcTask query)
-    {
+    public AjaxResult taskOverview(CostCalcTask query) {
         return success(runService.selectTaskOverview(query));
     }
 
@@ -133,8 +113,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:task:list')")
     @GetMapping("/task/list")
-    public TableDataInfo taskList(CostCalcTask query)
-    {
+    public TableDataInfo taskList(CostCalcTask query) {
         startPage();
         List<CostCalcTask> list = runService.selectTaskList(query);
         return getDataTable(list);
@@ -146,8 +125,7 @@ public class CostRunController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:task:execute')")
     @Log(title = "正式核算", businessType = BusinessType.INSERT)
     @PostMapping("/task/submit")
-    public AjaxResult submitTask(@Validated @RequestBody CostCalcTaskSubmitBo bo)
-    {
+    public AjaxResult submitTask(@Validated @RequestBody CostCalcTaskSubmitBo bo) {
         return success(runService.submitTask(bo));
     }
 
@@ -157,8 +135,7 @@ public class CostRunController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:task:execute')")
     @Log(title = "正式核算", businessType = BusinessType.INSERT)
     @PostMapping("/task/input-batch")
-    public AjaxResult createInputBatch(@Validated @RequestBody CostCalcInputBatchCreateBo bo)
-    {
+    public AjaxResult createInputBatch(@Validated @RequestBody CostCalcInputBatchCreateBo bo) {
         return success(runService.createInputBatch(bo));
     }
 
@@ -167,8 +144,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:task:list')")
     @GetMapping("/task/input-batch/list")
-    public TableDataInfo inputBatchList(CostCalcInputBatch query)
-    {
+    public TableDataInfo inputBatchList(CostCalcInputBatch query) {
         startPage();
         List<CostCalcInputBatch> list = runService.selectInputBatchList(query);
         return getDataTable(list);
@@ -180,9 +156,8 @@ public class CostRunController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:task:query')")
     @GetMapping("/task/input-batch/{batchId}")
     public AjaxResult inputBatchDetail(@PathVariable Long batchId,
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "10") Integer pageSize)
-    {
+                                       @RequestParam(defaultValue = "1") Integer pageNum,
+                                       @RequestParam(defaultValue = "10") Integer pageSize) {
         return success(runService.selectInputBatchDetail(batchId, pageNum, pageSize));
     }
 
@@ -192,9 +167,8 @@ public class CostRunController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:task:query')")
     @GetMapping("/task/{taskId}")
     public AjaxResult taskDetail(@PathVariable Long taskId,
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "20") Integer pageSize)
-    {
+                                 @RequestParam(defaultValue = "1") Integer pageNum,
+                                 @RequestParam(defaultValue = "20") Integer pageSize) {
         return success(runService.selectTaskDetail(taskId, pageNum, pageSize));
     }
 
@@ -204,8 +178,7 @@ public class CostRunController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:task:retry')")
     @Log(title = "正式核算", businessType = BusinessType.UPDATE)
     @PutMapping("/task/retry/{detailId}")
-    public AjaxResult retryTaskDetail(@PathVariable Long detailId)
-    {
+    public AjaxResult retryTaskDetail(@PathVariable Long detailId) {
         return toAjax(runService.retryTaskDetail(detailId));
     }
 
@@ -215,8 +188,7 @@ public class CostRunController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:task:retry')")
     @Log(title = "正式核算", businessType = BusinessType.UPDATE)
     @PutMapping("/task/partition/retry/{partitionId}")
-    public AjaxResult retryTaskPartition(@PathVariable Long partitionId)
-    {
+    public AjaxResult retryTaskPartition(@PathVariable Long partitionId) {
         return toAjax(runService.retryTaskPartition(partitionId));
     }
 
@@ -226,8 +198,7 @@ public class CostRunController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:task:cancel')")
     @Log(title = "正式核算", businessType = BusinessType.UPDATE)
     @PutMapping("/task/cancel/{taskId}")
-    public AjaxResult cancelTask(@PathVariable Long taskId)
-    {
+    public AjaxResult cancelTask(@PathVariable Long taskId) {
         return toAjax(runService.cancelTask(taskId));
     }
 
@@ -236,8 +207,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:result:list')")
     @GetMapping("/result/stats")
-    public AjaxResult resultStats(CostResultLedger query)
-    {
+    public AjaxResult resultStats(CostResultLedger query) {
         return success(runService.selectResultStats(query));
     }
 
@@ -246,8 +216,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:result:list')")
     @GetMapping("/result/list")
-    public TableDataInfo resultList(CostResultLedger query)
-    {
+    public TableDataInfo resultList(CostResultLedger query) {
         startPage();
         List<CostResultLedger> list = runService.selectResultList(query);
         return getDataTable(list);
@@ -258,8 +227,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:result:list')")
     @PostMapping("/result/export")
-    public void exportResult(HttpServletResponse response, CostResultLedger query)
-    {
+    public void exportResult(HttpServletResponse response, CostResultLedger query) {
         List<CostResultLedger> list = runService.selectResultList(query);
         ExcelUtil<CostResultLedger> util = new ExcelUtil<>(CostResultLedger.class);
         util.exportExcel(response, list, "结果台账");
@@ -270,8 +238,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:result:query')")
     @GetMapping("/result/{resultId}")
-    public AjaxResult resultDetail(@PathVariable Long resultId)
-    {
+    public AjaxResult resultDetail(@PathVariable Long resultId) {
         return success(runService.selectResultDetail(resultId));
     }
 
@@ -280,8 +247,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:result:trace')")
     @GetMapping("/trace/{traceId}")
-    public AjaxResult traceDetail(@PathVariable Long traceId)
-    {
+    public AjaxResult traceDetail(@PathVariable Long traceId) {
         return success(runService.selectTraceDetail(traceId));
     }
 
@@ -290,8 +256,7 @@ public class CostRunController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:simulation:list') or @ss.hasPermi('cost:task:list') or @ss.hasPermi('cost:result:list')")
     @GetMapping("/version-options/{sceneId}")
-    public AjaxResult versionOptions(@PathVariable Long sceneId)
-    {
+    public AjaxResult versionOptions(@PathVariable Long sceneId) {
         return success(runService.selectVersionOptions(sceneId));
     }
 
@@ -302,8 +267,7 @@ public class CostRunController extends BaseController
     @GetMapping("/input-template")
     public AjaxResult inputTemplate(@RequestParam("sceneId") Long sceneId,
                                     @RequestParam(value = "versionId", required = false) Long versionId,
-                                    @RequestParam(value = "taskType", required = false) String taskType)
-    {
+                                    @RequestParam(value = "taskType", required = false) String taskType) {
         return success(runService.buildInputTemplate(sceneId, versionId, taskType));
     }
 
@@ -316,8 +280,7 @@ public class CostRunController extends BaseController
                                        @RequestParam(value = "versionId", required = false) Long versionId,
                                        @RequestParam(value = "feeId", required = false) Long feeId,
                                        @RequestParam(value = "feeCode", required = false) String feeCode,
-                                       @RequestParam(value = "taskType", required = false) String taskType)
-    {
+                                       @RequestParam(value = "taskType", required = false) String taskType) {
         return success(runService.buildFeeInputTemplate(sceneId, versionId, feeId, feeCode, taskType));
     }
 
@@ -327,8 +290,7 @@ public class CostRunController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:simulation:execute')")
     @Log(title = "费用计算", businessType = BusinessType.INSERT)
     @PostMapping("/fee/calculate")
-    public AjaxResult calculateFee(@Validated @RequestBody CostFeeCalculateBo bo)
-    {
+    public AjaxResult calculateFee(@Validated @RequestBody CostFeeCalculateBo bo) {
         return success(runService.calculateFee(bo));
     }
 }

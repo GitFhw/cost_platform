@@ -8,8 +8,7 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostFormulaGovernanceCheckVo
-{
+public class CostFormulaGovernanceCheckVo {
     private Long formulaId;
     private Long sceneId;
     private String formulaCode;

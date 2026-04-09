@@ -6,8 +6,7 @@ import lombok.Data;
  * 按接入方案直连业务接口并生成/继续导入批次。
  */
 @Data
-public class CostAccessProfileBuildBatchBo
-{
+public class CostAccessProfileBuildBatchBo {
     /**
      * 新建批次时必填；继续拉取时可留空并回退到批次账期。
      */

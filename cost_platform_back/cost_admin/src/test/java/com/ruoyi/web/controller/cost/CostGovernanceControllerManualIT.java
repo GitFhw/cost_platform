@@ -31,15 +31,12 @@ import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class CostGovernanceControllerManualIT
-{
+class CostGovernanceControllerManualIT {
     private static final DateTimeFormatter STAMP_FORMATTER = DateTimeFormatter.ofPattern("HHmmssSSS");
     private static final String SCENE_CODE = "SHOUGANG-ORE-HR-001";
     private static final String MANAGEMENT_FEE_FORMULA_BASELINE =
@@ -79,8 +76,7 @@ class CostGovernanceControllerManualIT
     private CostDistributedLockSupport distributedLockSupport;
 
     @Test
-    void shouldQueryAckAndResolveTaskAlarmFromGovernanceCenter() throws Exception
-    {
+    void shouldQueryAckAndResolveTaskAlarmFromGovernanceCenter() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -90,8 +86,7 @@ class CostGovernanceControllerManualIT
         formulaMapper.updateById(formula);
         Long versionId = publishScene(sceneId, authorization, "governance-alarm-regression-" + stamp);
 
-        try
-        {
+        try {
             String billMonth = YearMonth.now().plusMonths(2).toString();
             String requestNo = "SG-ALARM-REQ-" + stamp;
 
@@ -200,17 +195,14 @@ class CostGovernanceControllerManualIT
             JsonNode resolvedAlarm = findNodeByField(resolvedAlarmList.path("rows"), "alarmId", String.valueOf(alarmId));
             assertThat(resolvedAlarm).isNotNull();
             assertThat(resolvedAlarm.path("alarmStatus").asText()).isEqualTo("RESOLVED");
-        }
-        finally
-        {
+        } finally {
             formula.setFormulaExpr(MANAGEMENT_FEE_FORMULA_BASELINE);
             formulaMapper.updateById(formula);
         }
     }
 
     @Test
-    void shouldExposeAndRefreshRuntimeCacheStats() throws Exception
-    {
+    void shouldExposeAndRefreshRuntimeCacheStats() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -269,8 +261,7 @@ class CostGovernanceControllerManualIT
     }
 
     @Test
-    void shouldBlockRuntimeCacheRefreshWhenRefreshLockExists() throws Exception
-    {
+    void shouldBlockRuntimeCacheRefreshWhenRefreshLockExists() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -279,8 +270,7 @@ class CostGovernanceControllerManualIT
         String lockKey = distributedLockSupport.buildRuntimeCacheLockKey(null, versionId);
         redisCache.setCacheObject(lockKey, "itest-lock", 30, TimeUnit.SECONDS);
 
-        try
-        {
+        try {
             JsonNode response = readBody(mockMvc.perform(put("/cost/governance/cache/refresh")
                             .header("Authorization", authorization)
                             .param("versionId", String.valueOf(versionId)))
@@ -288,16 +278,13 @@ class CostGovernanceControllerManualIT
                     .andReturn());
             assertThat(response.path("code").asInt()).isEqualTo(500);
             assertThat(response.path("msg").asText()).contains("运行缓存");
-        }
-        finally
-        {
+        } finally {
             redisCache.deleteObject(lockKey);
         }
     }
 
     @Test
-    void shouldAutoResolveCacheAlarmAfterRefreshRuntimeCache() throws Exception
-    {
+    void shouldAutoResolveCacheAlarmAfterRefreshRuntimeCache() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -346,16 +333,14 @@ class CostGovernanceControllerManualIT
         assertThat(resolvedAlarm.path("alarmStatus").asText()).isEqualTo("RESOLVED");
     }
 
-    private Long requireSceneId()
-    {
+    private Long requireSceneId() {
         CostScene scene = sceneMapper.selectOne(Wrappers.<CostScene>lambdaQuery()
                 .eq(CostScene::getSceneCode, SCENE_CODE));
         assertThat(scene).as("missing seeded real-cost scene %s", SCENE_CODE).isNotNull();
         return scene.getSceneId();
     }
 
-    private Long publishScene(Long sceneId, String authorization, String publishDesc) throws Exception
-    {
+    private Long publishScene(Long sceneId, String authorization, String publishDesc) throws Exception {
         Long previousLatestVersionId = latestVersionId(sceneId);
 
         ObjectNode publishBody = objectMapper.createObjectNode();
@@ -373,21 +358,18 @@ class CostGovernanceControllerManualIT
 
         CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
         assertThat(latestVersion).isNotNull();
-        if (previousLatestVersionId != null)
-        {
+        if (previousLatestVersionId != null) {
             assertThat(latestVersion.getVersionId()).isNotEqualTo(previousLatestVersionId);
         }
         return latestVersion.getVersionId();
     }
 
-    private Long latestVersionId(Long sceneId)
-    {
+    private Long latestVersionId(Long sceneId) {
         CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
         return latestVersion == null ? null : latestVersion.getVersionId();
     }
 
-    private CostFormula requireFormula(Long sceneId, String formulaCode)
-    {
+    private CostFormula requireFormula(Long sceneId, String formulaCode) {
         CostFormula formula = formulaMapper.selectOne(Wrappers.<CostFormula>lambdaQuery()
                 .eq(CostFormula::getSceneId, sceneId)
                 .eq(CostFormula::getFormulaCode, formulaCode));
@@ -395,17 +377,13 @@ class CostGovernanceControllerManualIT
         return formula;
     }
 
-    private ObjectNode createManagementInputItem(String bizNo, String objectCode, String objectName)
-    {
+    private ObjectNode createManagementInputItem(String bizNo, String objectCode, String objectName) {
         ObjectNode item = objectMapper.createObjectNode();
         item.put("bizNo", bizNo);
         item.put("objectCode", objectCode);
-        if (objectName == null)
-        {
+        if (objectName == null) {
             item.putNull("objectName");
-        }
-        else
-        {
+        } else {
             item.put("objectName", objectName);
         }
         item.put("ALLOCATED_THROUGHPUT_TON", 100000);
@@ -426,19 +404,16 @@ class CostGovernanceControllerManualIT
         return item;
     }
 
-    private String waitTaskFinished(long taskId, String authorization) throws Exception
-    {
+    private String waitTaskFinished(long taskId, String authorization) throws Exception {
         long deadline = System.currentTimeMillis() + 60_000L;
         String taskStatus = "";
-        while (System.currentTimeMillis() < deadline)
-        {
+        while (System.currentTimeMillis() < deadline) {
             JsonNode taskDetail = readData(mockMvc.perform(get("/cost/run/task/{taskId}", taskId)
                             .header("Authorization", authorization))
                     .andExpect(status().isOk())
                     .andReturn());
             taskStatus = taskDetail.path("task").path("taskStatus").asText();
-            if (!"INIT".equals(taskStatus) && !"RUNNING".equals(taskStatus))
-            {
+            if (!"INIT".equals(taskStatus) && !"RUNNING".equals(taskStatus)) {
                 return taskStatus;
             }
             Thread.sleep(1_000L);
@@ -446,26 +421,21 @@ class CostGovernanceControllerManualIT
         return taskStatus;
     }
 
-    private JsonNode findNodeByField(JsonNode items, String fieldName, String expectedValue)
-    {
-        if (items == null || !items.isArray())
-        {
+    private JsonNode findNodeByField(JsonNode items, String fieldName, String expectedValue) {
+        if (items == null || !items.isArray()) {
             return null;
         }
         Iterator<JsonNode> iterator = items.iterator();
-        while (iterator.hasNext())
-        {
+        while (iterator.hasNext()) {
             JsonNode item = iterator.next();
-            if (expectedValue.equals(item.path(fieldName).asText()))
-            {
+            if (expectedValue.equals(item.path(fieldName).asText())) {
                 return item;
             }
         }
         return null;
     }
 
-    private String loginAndGetToken() throws Exception
-    {
+    private String loginAndGetToken() throws Exception {
         JsonNode captcha = readBody(mockMvc.perform(get("/captchaImage"))
                 .andExpect(status().isOk())
                 .andReturn());
@@ -488,13 +458,11 @@ class CostGovernanceControllerManualIT
         return login.path("token").asText();
     }
 
-    private JsonNode readData(MvcResult result) throws Exception
-    {
+    private JsonNode readData(MvcResult result) throws Exception {
         return readBody(result).path("data");
     }
 
-    private JsonNode readBody(MvcResult result) throws Exception
-    {
+    private JsonNode readBody(MvcResult result) throws Exception {
         String content = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
         return objectMapper.readTree(content);
     }

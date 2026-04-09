@@ -8,6 +8,5 @@ import com.ruoyi.system.domain.cost.CostCalcInputBatch;
  *
  * @author HwFan
  */
-public interface CostCalcInputBatchMapper extends BaseMapper<CostCalcInputBatch>
-{
+public interface CostCalcInputBatchMapper extends BaseMapper<CostCalcInputBatch> {
 }

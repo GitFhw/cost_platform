@@ -8,17 +8,24 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostPublishCheckItemVo
-{
-    /** 检查级别：BLOCK/WARN/PASS */
+public class CostPublishCheckItemVo {
+    /**
+     * 检查级别：BLOCK/WARN/PASS
+     */
     private String level;
 
-    /** 检查编码 */
+    /**
+     * 检查编码
+     */
     private String code;
 
-    /** 检查标题 */
+    /**
+     * 检查标题
+     */
     private String title;
 
-    /** 检查说明 */
+    /**
+     * 检查说明
+     */
     private String message;
 }

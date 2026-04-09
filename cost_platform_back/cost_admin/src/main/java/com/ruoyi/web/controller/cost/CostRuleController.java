@@ -26,20 +26,18 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/cost/rule")
-public class CostRuleController extends BaseController
-{
+public class CostRuleController extends BaseController {
     @Autowired
     private ICostRuleService ruleService;
 
     /**
      * 查询规则列表
-     *
+     * <p>
      * 页面按费用主线展开，因此列表查询默认与费用维度联动。
      */
     @PreAuthorize("@ss.hasPermi('cost:rule:list')")
     @GetMapping("/list")
-    public TableDataInfo list(CostRule rule)
-    {
+    public TableDataInfo list(CostRule rule) {
         startPage();
         List<CostRule> list = ruleService.selectRuleList(rule);
         return getDataTable(list);
@@ -50,8 +48,7 @@ public class CostRuleController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:rule:list')")
     @GetMapping("/stats")
-    public AjaxResult stats(CostRule rule)
-    {
+    public AjaxResult stats(CostRule rule) {
         return success(ruleService.selectRuleStats(rule));
     }
 
@@ -60,8 +57,7 @@ public class CostRuleController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:rule:list')")
     @GetMapping("/governance/{ruleId}")
-    public AjaxResult governance(@PathVariable Long ruleId)
-    {
+    public AjaxResult governance(@PathVariable Long ruleId) {
         return success(ruleService.selectRuleGovernanceCheck(ruleId));
     }
 
@@ -70,8 +66,7 @@ public class CostRuleController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:rule:query')")
     @GetMapping("/{ruleId}")
-    public AjaxResult getInfo(@PathVariable Long ruleId)
-    {
+    public AjaxResult getInfo(@PathVariable Long ruleId) {
         return success(ruleService.selectRuleDetail(ruleId));
     }
 
@@ -81,8 +76,7 @@ public class CostRuleController extends BaseController
     @Log(title = "规则中心", businessType = BusinessType.EXPORT)
     @PreAuthorize("@ss.hasPermi('cost:rule:export')")
     @PostMapping("/export")
-    public void export(HttpServletResponse response, CostRule rule)
-    {
+    public void export(HttpServletResponse response, CostRule rule) {
         List<CostRule> list = ruleService.selectRuleList(rule);
         ExcelUtil<CostRule> util = new ExcelUtil<>(CostRule.class);
         util.exportExcel(response, list, "规则中心");
@@ -94,10 +88,8 @@ public class CostRuleController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:rule:add')")
     @Log(title = "规则中心", businessType = BusinessType.INSERT)
     @PostMapping
-    public AjaxResult add(@Validated @RequestBody CostRuleSaveBo rule)
-    {
-        if (!ruleService.checkRuleCodeUnique(rule))
-        {
+    public AjaxResult add(@Validated @RequestBody CostRuleSaveBo rule) {
+        if (!ruleService.checkRuleCodeUnique(rule)) {
             return error("新增规则'" + rule.getRuleCode() + "'失败，同场景下规则编码已存在");
         }
         return toAjax(ruleService.insertRule(rule));
@@ -109,10 +101,8 @@ public class CostRuleController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:rule:edit')")
     @Log(title = "规则中心", businessType = BusinessType.UPDATE)
     @PutMapping
-    public AjaxResult edit(@Validated @RequestBody CostRuleSaveBo rule)
-    {
-        if (!ruleService.checkRuleCodeUnique(rule))
-        {
+    public AjaxResult edit(@Validated @RequestBody CostRuleSaveBo rule) {
+        if (!ruleService.checkRuleCodeUnique(rule)) {
             return error("修改规则'" + rule.getRuleCode() + "'失败，同场景下规则编码已存在");
         }
         return toAjax(ruleService.updateRule(rule));
@@ -124,11 +114,9 @@ public class CostRuleController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:rule:add')")
     @Log(title = "规则中心", businessType = BusinessType.INSERT)
     @PostMapping("/copy")
-    public AjaxResult copy(@Validated @RequestBody CostRuleCopyBo request)
-    {
+    public AjaxResult copy(@Validated @RequestBody CostRuleCopyBo request) {
         CostRuleSaveBo saveBo = ruleService.selectRuleDetail(request.getSourceRuleId());
-        if (saveBo == null)
-        {
+        if (saveBo == null) {
             return error("来源规则不存在，请刷新后重试");
         }
         saveBo.setRuleId(null);
@@ -138,8 +126,7 @@ public class CostRuleController extends BaseController
         saveBo.setSortNo(request.getSortNo());
         saveBo.setStatus(request.getStatus());
         saveBo.setConditions(request.getConditions());
-        if (!ruleService.checkRuleCodeUnique(saveBo))
-        {
+        if (!ruleService.checkRuleCodeUnique(saveBo)) {
             return error("复制规则'" + request.getRuleCode() + "'失败，同场景下规则编码已存在");
         }
         return toAjax(ruleService.copyRule(request));
@@ -150,8 +137,7 @@ public class CostRuleController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:rule:list')")
     @PostMapping("/tierPreview")
-    public AjaxResult tierPreview(@Validated @RequestBody CostRuleTierPreviewBo request)
-    {
+    public AjaxResult tierPreview(@Validated @RequestBody CostRuleTierPreviewBo request) {
         return success(ruleService.previewTierHit(request));
     }
 
@@ -161,8 +147,7 @@ public class CostRuleController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:rule:remove')")
     @Log(title = "规则中心", businessType = BusinessType.DELETE)
     @DeleteMapping("/{ruleIds}")
-    public AjaxResult remove(@PathVariable Long[] ruleIds)
-    {
+    public AjaxResult remove(@PathVariable Long[] ruleIds) {
         return toAjax(ruleService.deleteRuleByIds(ruleIds));
     }
 }

@@ -4,8 +4,7 @@ import com.ruoyi.system.domain.cost.CostAccessProfile;
 
 import java.util.List;
 
-public interface ICostAccessProfileService
-{
+public interface ICostAccessProfileService {
     List<CostAccessProfile> selectAccessProfileList(CostAccessProfile query);
 
     List<CostAccessProfile> selectAccessProfileOptions(CostAccessProfile query);

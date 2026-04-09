@@ -10,8 +10,7 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostInputBuildPreviewBo
-{
+public class CostInputBuildPreviewBo {
     @NotNull(message = "场景不能为空")
     private Long sceneId;
 

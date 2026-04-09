@@ -14,8 +14,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface CostFormulaMapper extends BaseMapper<CostFormula>
-{
+public interface CostFormulaMapper extends BaseMapper<CostFormula> {
     /**
      * 查询公式列表。
      */

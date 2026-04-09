@@ -22,8 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class CostVariableControllerManualIT
-{
+class CostVariableControllerManualIT {
     @Autowired
     private MockMvc mockMvc;
 
@@ -34,8 +33,7 @@ class CostVariableControllerManualIT
     private RedisCache redisCache;
 
     @Test
-    void shouldExposeSharedTemplateGovernanceSummary() throws Exception
-    {
+    void shouldExposeSharedTemplateGovernanceSummary() throws Exception {
         String token = loginAndGetToken();
         JsonNode templates = readData(mockMvc.perform(get("/cost/variable/sharedTemplates")
                         .header("Authorization", "Bearer " + token))
@@ -54,14 +52,12 @@ class CostVariableControllerManualIT
         assertThat(sgTemplate.path("matchedVariableCount").asInt()).isGreaterThanOrEqualTo(0);
         assertThat(sgTemplate.path("recentSceneNames").isArray()).isTrue();
         assertThat(sgTemplate.path("sceneSummaries").isArray()).isTrue();
-        if (sgTemplate.path("recentSceneNames").size() > 0)
-        {
+        if (sgTemplate.path("recentSceneNames").size() > 0) {
             assertThat(sgTemplate.path("latestSceneName").asText()).isNotBlank();
         }
     }
 
-    private String loginAndGetToken() throws Exception
-    {
+    private String loginAndGetToken() throws Exception {
         JsonNode captcha = readBody(mockMvc.perform(get("/captchaImage"))
                 .andExpect(status().isOk())
                 .andReturn());
@@ -85,28 +81,22 @@ class CostVariableControllerManualIT
         return login.path("token").asText();
     }
 
-    private JsonNode readData(MvcResult result) throws Exception
-    {
+    private JsonNode readData(MvcResult result) throws Exception {
         JsonNode root = readBody(result);
         assertThat(root.path("code").asInt()).isEqualTo(200);
         return root.path("data");
     }
 
-    private JsonNode readBody(MvcResult result) throws Exception
-    {
+    private JsonNode readBody(MvcResult result) throws Exception {
         return objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8));
     }
 
-    private JsonNode findNodeByField(JsonNode array, String fieldName, String expectedValue)
-    {
-        if (array == null || !array.isArray())
-        {
+    private JsonNode findNodeByField(JsonNode array, String fieldName, String expectedValue) {
+        if (array == null || !array.isArray()) {
             return null;
         }
-        for (JsonNode node : array)
-        {
-            if (expectedValue.equals(node.path(fieldName).asText()))
-            {
+        for (JsonNode node : array) {
+            if (expectedValue.equals(node.path(fieldName).asText())) {
                 return node;
             }
         }

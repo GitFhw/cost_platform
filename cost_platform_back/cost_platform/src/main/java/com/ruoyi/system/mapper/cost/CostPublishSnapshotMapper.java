@@ -8,6 +8,5 @@ import com.ruoyi.system.domain.cost.CostPublishSnapshot;
  *
  * @author HwFan
  */
-public interface CostPublishSnapshotMapper extends BaseMapper<CostPublishSnapshot>
-{
+public interface CostPublishSnapshotMapper extends BaseMapper<CostPublishSnapshot> {
 }

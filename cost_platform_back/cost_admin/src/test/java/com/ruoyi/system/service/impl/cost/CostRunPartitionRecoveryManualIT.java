@@ -37,8 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class CostRunPartitionRecoveryManualIT
-{
+class CostRunPartitionRecoveryManualIT {
     private static final DateTimeFormatter STAMP_FORMATTER = DateTimeFormatter.ofPattern("HHmmssSSS");
     private static final String SCENE_CODE = "SHOUGANG-ORE-HR-001";
 
@@ -61,14 +60,12 @@ class CostRunPartitionRecoveryManualIT
     private CostRunServiceImpl costRunService;
 
     @AfterEach
-    void tearDown()
-    {
+    void tearDown() {
         reset(costRunService);
     }
 
     @Test
-    void shouldFallbackToSinglePersistAndExposeRecoveryHint() throws Exception
-    {
+    void shouldFallbackToSinglePersistAndExposeRecoveryHint() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -116,16 +113,14 @@ class CostRunPartitionRecoveryManualIT
         assertThat(partition.path("failCount").asInt()).isEqualTo(0);
     }
 
-    private Long requireSceneId()
-    {
+    private Long requireSceneId() {
         CostScene scene = sceneMapper.selectOne(Wrappers.<CostScene>lambdaQuery()
                 .eq(CostScene::getSceneCode, SCENE_CODE));
         assertThat(scene).isNotNull();
         return scene.getSceneId();
     }
 
-    private Long publishScene(Long sceneId, String authorization, String publishDesc) throws Exception
-    {
+    private Long publishScene(Long sceneId, String authorization, String publishDesc) throws Exception {
         ObjectNode publishBody = objectMapper.createObjectNode();
         publishBody.put("sceneId", sceneId);
         publishBody.put("publishDesc", publishDesc);
@@ -145,8 +140,7 @@ class CostRunPartitionRecoveryManualIT
     }
 
     private ObjectNode createFemaleInputItem(String bizNo, String objectCode, String objectName,
-                                             int teamHeadcount, int actualAttendance, int requiredAttendance)
-    {
+                                             int teamHeadcount, int actualAttendance, int requiredAttendance) {
         ObjectNode item = objectMapper.createObjectNode();
         item.put("bizNo", bizNo);
         item.put("objectCode", objectCode);
@@ -157,19 +151,16 @@ class CostRunPartitionRecoveryManualIT
         return item;
     }
 
-    private String waitTaskFinished(long taskId, String authorization) throws Exception
-    {
+    private String waitTaskFinished(long taskId, String authorization) throws Exception {
         long deadline = System.currentTimeMillis() + 60_000L;
         String taskStatus = "";
-        while (System.currentTimeMillis() < deadline)
-        {
+        while (System.currentTimeMillis() < deadline) {
             JsonNode taskDetail = readData(mockMvc.perform(get("/cost/run/task/{taskId}", taskId)
                             .header("Authorization", authorization))
                     .andExpect(status().isOk())
                     .andReturn());
             taskStatus = taskDetail.path("task").path("taskStatus").asText();
-            if (!"INIT".equals(taskStatus) && !"RUNNING".equals(taskStatus))
-            {
+            if (!"INIT".equals(taskStatus) && !"RUNNING".equals(taskStatus)) {
                 return taskStatus;
             }
             Thread.sleep(1_000L);
@@ -177,8 +168,7 @@ class CostRunPartitionRecoveryManualIT
         return taskStatus;
     }
 
-    private String loginAndGetToken() throws Exception
-    {
+    private String loginAndGetToken() throws Exception {
         JsonNode captcha = readBody(mockMvc.perform(get("/captchaImage"))
                 .andExpect(status().isOk())
                 .andReturn());
@@ -202,15 +192,13 @@ class CostRunPartitionRecoveryManualIT
         return login.path("token").asText();
     }
 
-    private JsonNode readData(MvcResult result) throws Exception
-    {
+    private JsonNode readData(MvcResult result) throws Exception {
         JsonNode root = readBody(result);
         assertThat(root.path("code").asInt()).isEqualTo(200);
         return root.path("data");
     }
 
-    private JsonNode readBody(MvcResult result) throws Exception
-    {
+    private JsonNode readBody(MvcResult result) throws Exception {
         return objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8));
     }
 }

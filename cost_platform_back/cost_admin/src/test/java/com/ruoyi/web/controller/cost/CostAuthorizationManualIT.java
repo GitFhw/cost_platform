@@ -16,15 +16,12 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class CostAuthorizationManualIT
-{
+class CostAuthorizationManualIT {
     @Autowired
     private MockMvc mockMvc;
 
@@ -35,8 +32,7 @@ class CostAuthorizationManualIT
     private RedisCache redisCache;
 
     @Test
-    void shouldRejectCostTaskAndGovernanceEndpointsForRegularUser() throws Exception
-    {
+    void shouldRejectCostTaskAndGovernanceEndpointsForRegularUser() throws Exception {
         String token = loginAndGetToken("ry", "admin123");
         String authorization = "Bearer " + token;
 
@@ -72,8 +68,7 @@ class CostAuthorizationManualIT
         assertThat(rollbackFormula.path("code").asInt()).isEqualTo(403);
     }
 
-    private String loginAndGetToken(String username, String password) throws Exception
-    {
+    private String loginAndGetToken(String username, String password) throws Exception {
         JsonNode captcha = readBody(mockMvc.perform(get("/captchaImage"))
                 .andExpect(status().isOk())
                 .andReturn());
@@ -96,8 +91,7 @@ class CostAuthorizationManualIT
         return login.path("token").asText();
     }
 
-    private JsonNode readBody(MvcResult result) throws Exception
-    {
+    private JsonNode readBody(MvcResult result) throws Exception {
         String content = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
         return objectMapper.readTree(content);
     }

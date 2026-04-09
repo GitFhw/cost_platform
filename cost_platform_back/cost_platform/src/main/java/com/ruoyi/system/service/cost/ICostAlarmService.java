@@ -8,8 +8,7 @@ import java.util.Map;
 /**
  * 运行告警服务接口。
  */
-public interface ICostAlarmService
-{
+public interface ICostAlarmService {
     void createAlarm(CostAlarmRecord alarmRecord);
 
     List<CostAlarmRecord> selectAlarmList(CostAlarmRecord query);
@@ -22,6 +21,7 @@ public interface ICostAlarmService
      * <p>用于告警中心展示近 7 天趋势、高频类型、任务热点和通知摘要。</p>
      *
      * @param query 查询条件
+     *
      * @return 告警运营概览
      */
     Map<String, Object> selectAlarmOverview(CostAlarmRecord query);

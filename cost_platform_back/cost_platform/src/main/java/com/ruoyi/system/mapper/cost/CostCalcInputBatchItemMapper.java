@@ -11,8 +11,7 @@ import java.util.List;
  *
  * @author HwFan
  */
-public interface CostCalcInputBatchItemMapper extends BaseMapper<CostCalcInputBatchItem>
-{
+public interface CostCalcInputBatchItemMapper extends BaseMapper<CostCalcInputBatchItem> {
     /**
      * 批量写入导入批次明细。
      */

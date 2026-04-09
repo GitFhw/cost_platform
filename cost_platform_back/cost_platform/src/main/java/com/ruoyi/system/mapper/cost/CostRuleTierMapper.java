@@ -8,6 +8,5 @@ import com.ruoyi.system.domain.cost.CostRuleTier;
  *
  * @author HwFan
  */
-public interface CostRuleTierMapper extends BaseMapper<CostRuleTier>
-{
+public interface CostRuleTierMapper extends BaseMapper<CostRuleTier> {
 }

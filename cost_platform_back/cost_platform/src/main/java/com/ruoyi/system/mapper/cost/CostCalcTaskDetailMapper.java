@@ -12,8 +12,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface CostCalcTaskDetailMapper extends BaseMapper<CostCalcTaskDetail>
-{
+public interface CostCalcTaskDetailMapper extends BaseMapper<CostCalcTaskDetail> {
     /**
      * 批量写入任务明细。
      */

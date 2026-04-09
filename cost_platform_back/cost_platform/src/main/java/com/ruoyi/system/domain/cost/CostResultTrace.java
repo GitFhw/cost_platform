@@ -19,48 +19,67 @@ import java.util.Date;
  */
 @Data
 @TableName("cost_result_trace")
-public class CostResultTrace implements Serializable
-{
+public class CostResultTrace implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    /** 追溯主键 */
+    /**
+     * 追溯主键
+     */
     @TableId(value = "trace_id", type = IdType.AUTO)
     private Long traceId;
 
-    /** 场景主键 */
+    /**
+     * 场景主键
+     */
     @TableField("scene_id")
     private Long sceneId;
 
-    /** 发布版本主键 */
+    /**
+     * 发布版本主键
+     */
     @TableField("version_id")
     private Long versionId;
 
-    /** 命中规则主键 */
+    /**
+     * 命中规则主键
+     */
     @TableField("rule_id")
     private Long ruleId;
 
-    /** 命中阶梯主键 */
+    /**
+     * 命中阶梯主键
+     */
     @TableField("tier_id")
     private Long tierId;
 
-    /** 变量解释 */
+    /**
+     * 变量解释
+     */
     @TableField("variable_json")
     private String variableJson;
 
-    /** 条件解释 */
+    /**
+     * 条件解释
+     */
     @TableField("condition_json")
     private String conditionJson;
 
-    /** 定价解释 */
+    /**
+     * 定价解释
+     */
     @TableField("pricing_json")
     private String pricingJson;
 
-    /** 时间线解释 */
+    /**
+     * 时间线解释
+     */
     @TableField("timeline_json")
     private String timelineJson;
 
-    /** 创建时间 */
+    /**
+     * 创建时间
+     */
     @TableField("create_time")
     private Date createTime;
 }

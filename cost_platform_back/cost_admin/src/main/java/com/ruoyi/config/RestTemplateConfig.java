@@ -9,14 +9,12 @@ import org.springframework.web.client.RestTemplate;
  * 成本平台 HTTP 客户端基础配置。
  */
 @Configuration
-public class RestTemplateConfig
-{
+public class RestTemplateConfig {
     private static final int CONNECT_TIMEOUT_MS = 5000;
     private static final int READ_TIMEOUT_MS = 15000;
 
     @Bean
-    public RestTemplate costAccessRestTemplate()
-    {
+    public RestTemplate costAccessRestTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(CONNECT_TIMEOUT_MS);
         factory.setReadTimeout(READ_TIMEOUT_MS);

@@ -9,24 +9,8 @@ import com.ruoyi.common.constant.CacheConstants;
 import com.ruoyi.common.core.redis.RedisCache;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.system.config.cost.CostDispatchProperties;
-import com.ruoyi.system.domain.cost.CostCalcTask;
-import com.ruoyi.system.domain.cost.CostCalcTaskDetail;
-import com.ruoyi.system.domain.cost.CostCalcTaskPartition;
-import com.ruoyi.system.domain.cost.CostFeeItem;
-import com.ruoyi.system.domain.cost.CostFormula;
-import com.ruoyi.system.domain.cost.CostPublishVersion;
-import com.ruoyi.system.domain.cost.CostRule;
-import com.ruoyi.system.domain.cost.CostScene;
-import com.ruoyi.system.domain.cost.CostVariable;
-import com.ruoyi.system.mapper.cost.CostCalcTaskDetailMapper;
-import com.ruoyi.system.mapper.cost.CostCalcTaskMapper;
-import com.ruoyi.system.mapper.cost.CostCalcTaskPartitionMapper;
-import com.ruoyi.system.mapper.cost.CostFeeMapper;
-import com.ruoyi.system.mapper.cost.CostFormulaMapper;
-import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
-import com.ruoyi.system.mapper.cost.CostRuleMapper;
-import com.ruoyi.system.mapper.cost.CostSceneMapper;
-import com.ruoyi.system.mapper.cost.CostVariableMapper;
+import com.ruoyi.system.domain.cost.*;
+import com.ruoyi.system.mapper.cost.*;
 import com.ruoyi.system.service.impl.cost.CostDistributedLockSupport;
 import com.ruoyi.system.service.impl.cost.CostRunServiceImpl;
 import org.junit.jupiter.api.Test;
@@ -35,43 +19,27 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.env.MockEnvironment;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
-import java.util.Date;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class CostRunControllerManualIT
-{
+class CostRunControllerManualIT {
     private static final DateTimeFormatter STAMP_FORMATTER = DateTimeFormatter.ofPattern("HHmmssSSS");
     private static final String SCENE_CODE = "SHOUGANG-ORE-HR-001";
     private static final String FEMALE_FEE_CODE = "SG_FEMALE_SHIFT_LABOR";
@@ -135,8 +103,7 @@ class CostRunControllerManualIT
     private CostDispatchProperties costDispatchProperties;
 
     @Test
-    void shouldUseDraftConfigWhenSimulationVersionIsNotSpecified() throws Exception
-    {
+    void shouldUseDraftConfigWhenSimulationVersionIsNotSpecified() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -148,8 +115,7 @@ class CostRunControllerManualIT
                 .eq(CostScene::getSceneId, sceneId)
                 .set(CostScene::getActiveVersionId, versionId));
 
-        try
-        {
+        try {
             JsonNode template = readData(mockMvc.perform(get("/cost/run/input-template")
                             .header("Authorization", authorization)
                             .param("sceneId", String.valueOf(sceneId))
@@ -178,9 +144,7 @@ class CostRunControllerManualIT
             assertThat(simulation.path("record").path("versionNo").asText()).isEqualTo("\u8349\u7a3f\u914d\u7f6e");
             assertThat(simulation.path("result").path("versionNo").asText()).isEqualTo("\u8349\u7a3f\u914d\u7f6e");
             assertThat(simulation.path("result").path("snapshotSource").asText()).isEqualTo("DRAFT");
-        }
-        finally
-        {
+        } finally {
             sceneMapper.update(null, Wrappers.<CostScene>lambdaUpdate()
                     .eq(CostScene::getSceneId, sceneId)
                     .set(CostScene::getActiveVersionId, previousActiveVersionId));
@@ -188,8 +152,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldKeepPublishedSnapshotStableAfterDraftRuleChanges() throws Exception
-    {
+    void shouldKeepPublishedSnapshotStableAfterDraftRuleChanges() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -204,8 +167,7 @@ class CostRunControllerManualIT
         femaleRule.setPricingJson("{\"mode\":\"FIXED_RATE\",\"basis\":\"FEMALE_ATTENDANCE_EQUIV\",\"unit\":\"UNIT\",\"rateValue\":4000,\"summary\":\"draft regression price\"}");
         ruleMapper.updateById(femaleRule);
 
-        try
-        {
+        try {
             ObjectNode input = createManagementInputItem("SG-SNAPSHOT-BIZ-" + stamp, "SG-SNAPSHOT-" + stamp, "snapshot-regression");
 
             ObjectNode publishedBody = objectMapper.createObjectNode();
@@ -273,17 +235,14 @@ class CostRunControllerManualIT
             JsonNode femaleLedger = findNodeByField(resultList.path("rows"), "feeCode", FEMALE_FEE_CODE);
             assertThat(femaleLedger).isNotNull();
             assertThat(femaleLedger.path("amountValue").decimalValue()).isEqualByComparingTo("7233.33");
-        }
-        finally
-        {
+        } finally {
             femaleRule.setPricingJson(previousPricingJson);
             ruleMapper.updateById(femaleRule);
         }
     }
 
     @Test
-    void shouldSubmitFormalTaskFromInputBatch() throws Exception
-    {
+    void shouldSubmitFormalTaskFromInputBatch() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -377,8 +336,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldBlockFormalTaskSubmitWhenSubmitLockExists() throws Exception
-    {
+    void shouldBlockFormalTaskSubmitWhenSubmitLockExists() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -390,8 +348,7 @@ class CostRunControllerManualIT
                 "FORMAL_BATCH", requestNo, "");
         redisCache.setCacheObject(lockKey, "itest-lock", 30, TimeUnit.SECONDS);
 
-        try
-        {
+        try {
             ObjectNode taskBody = objectMapper.createObjectNode();
             taskBody.put("sceneId", sceneId);
             taskBody.put("versionId", versionId);
@@ -409,16 +366,13 @@ class CostRunControllerManualIT
                     .andReturn());
             assertThat(taskResponse.path("code").asInt()).isEqualTo(500);
             assertThat(taskResponse.path("msg").asText()).contains("核算任务");
-        }
-        finally
-        {
+        } finally {
             redisCache.deleteObject(lockKey);
         }
     }
 
     @Test
-    void shouldCreateLargeInputBatchWithChunkedInsertAndPagedPreview() throws Exception
-    {
+    void shouldCreateLargeInputBatchWithChunkedInsertAndPagedPreview() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -427,8 +381,7 @@ class CostRunControllerManualIT
         String billMonth = YearMonth.now().plusMonths(2).toString();
 
         ArrayNode inputItems = objectMapper.createArrayNode();
-        for (int i = 1; i <= 520; i++)
-        {
+        for (int i = 1; i <= 520; i++) {
             inputItems.add(createFemaleInputItem(
                     String.format("SG-LARGE-BATCH-BIZ-%s-%03d", stamp, i),
                     String.format("SG-LARGE-BATCH-%s-%03d", stamp, i),
@@ -478,8 +431,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldCreateMultiplePartitionsForLargeFormalBatch() throws Exception
-    {
+    void shouldCreateMultiplePartitionsForLargeFormalBatch() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -489,8 +441,7 @@ class CostRunControllerManualIT
         String billMonth = YearMonth.now().plusMonths(2).toString();
 
         ArrayNode inputItems = objectMapper.createArrayNode();
-        for (int i = 1; i <= 501; i++)
-        {
+        for (int i = 1; i <= 501; i++) {
             inputItems.add(createFemaleInputItem(
                     String.format("SG-MULTI-BIZ-%s-%03d", stamp, i),
                     String.format("SG-MULTI-%s-%03d", stamp, i),
@@ -565,8 +516,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldRetryFailedTaskDetailAndRefreshTaskSummary() throws Exception
-    {
+    void shouldRetryFailedTaskDetailAndRefreshTaskSummary() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -576,8 +526,7 @@ class CostRunControllerManualIT
         formulaMapper.updateById(formula);
         Long versionId = publishScene(sceneId, authorization, "detail-retry-regression-" + stamp);
 
-        try
-        {
+        try {
             ObjectNode validInput = createManagementInputItem("SG-DETAIL-BIZ-" + stamp + "-001",
                     "SG-DETAIL-" + stamp + "-A", "VALID-MGMT");
             ObjectNode failedInput = createManagementInputItem("SG-DETAIL-BIZ-" + stamp + "-002",
@@ -656,17 +605,14 @@ class CostRunControllerManualIT
             assertThat(retriedLedger).isNotNull();
             assertThat(validLedger.path("amountValue").decimalValue()).isEqualByComparingTo("10.00");
             assertThat(retriedLedger.path("amountValue").decimalValue()).isEqualByComparingTo("12.00");
-        }
-        finally
-        {
+        } finally {
             formula.setFormulaExpr(MANAGEMENT_FEE_FORMULA_BASELINE);
             formulaMapper.updateById(formula);
         }
     }
 
     @Test
-    void shouldRetryFailedPartitionAndRefreshPartitionSummary() throws Exception
-    {
+    void shouldRetryFailedPartitionAndRefreshPartitionSummary() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -676,8 +622,7 @@ class CostRunControllerManualIT
         formulaMapper.updateById(formula);
         Long versionId = publishScene(sceneId, authorization, "partition-retry-regression-" + stamp);
 
-        try
-        {
+        try {
             ObjectNode validInput = createManagementInputItem("SG-PART-BIZ-" + stamp + "-001",
                     "SG-PART-" + stamp + "-A", "VALID-PART");
             ObjectNode failedInput = createManagementInputItem("SG-PART-BIZ-" + stamp + "-002",
@@ -759,17 +704,14 @@ class CostRunControllerManualIT
             assertThat(retriedLedger).isNotNull();
             assertThat(validLedger.path("amountValue").decimalValue()).isEqualByComparingTo("10.00");
             assertThat(retriedLedger.path("amountValue").decimalValue()).isEqualByComparingTo("15.00");
-        }
-        finally
-        {
+        } finally {
             formula.setFormulaExpr(MANAGEMENT_FEE_FORMULA_BASELINE);
             formulaMapper.updateById(formula);
         }
     }
 
     @Test
-    void shouldCancelRunningFormalTask() throws Exception
-    {
+    void shouldCancelRunningFormalTask() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -779,8 +721,7 @@ class CostRunControllerManualIT
         String billMonth = YearMonth.now().plusMonths(2).toString();
 
         ArrayNode inputItems = objectMapper.createArrayNode();
-        for (int i = 1; i <= 1501; i++)
-        {
+        for (int i = 1; i <= 1501; i++) {
             inputItems.add(createFemaleInputItem(
                     String.format("SG-CANCEL-BIZ-%s-%04d", stamp, i),
                     String.format("SG-CANCEL-%s-%04d", stamp, i),
@@ -841,8 +782,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldRecoverStaleRunningTaskByDispatchCoordinator() throws Exception
-    {
+    void shouldRecoverStaleRunningTaskByDispatchCoordinator() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -916,26 +856,21 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldSkipDuplicateTaskDispatchWhenDispatchLockIsOccupied() throws Exception
-    {
+    void shouldSkipDuplicateTaskDispatchWhenDispatchLockIsOccupied() throws Exception {
         Long taskId = -1L;
         CountDownLatch firstEntered = new CountDownLatch(1);
         CountDownLatch releaseFirst = new CountDownLatch(1);
         AtomicBoolean secondExecuted = new AtomicBoolean(false);
         ExecutorService executorService = Executors.newSingleThreadExecutor();
 
-        try
-        {
+        try {
             Future<Boolean> firstDispatch = executorService.submit(() ->
                     distributedLockSupport.executeTaskDispatchLockOrSkip(taskId, () ->
                     {
                         firstEntered.countDown();
-                        try
-                        {
+                        try {
                             releaseFirst.await(5, TimeUnit.SECONDS);
-                        }
-                        catch (InterruptedException e)
-                        {
+                        } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                             throw new RuntimeException(e);
                         }
@@ -951,34 +886,27 @@ class CostRunControllerManualIT
 
             releaseFirst.countDown();
             assertThat(firstDispatch.get(5, TimeUnit.SECONDS)).isTrue();
-        }
-        finally
-        {
+        } finally {
             releaseFirst.countDown();
             executorService.shutdownNow();
         }
     }
 
     @Test
-    void shouldSkipDuplicateRecoveryDispatchCoordinatorWhenLockIsOccupied() throws Exception
-    {
+    void shouldSkipDuplicateRecoveryDispatchCoordinatorWhenLockIsOccupied() throws Exception {
         CountDownLatch firstEntered = new CountDownLatch(1);
         CountDownLatch releaseFirst = new CountDownLatch(1);
         AtomicBoolean secondExecuted = new AtomicBoolean(false);
         ExecutorService executorService = Executors.newSingleThreadExecutor();
 
-        try
-        {
+        try {
             Future<Boolean> firstDispatch = executorService.submit(() ->
                     distributedLockSupport.executeTaskDispatchCoordinatorLockOrSkip(() ->
                     {
                         firstEntered.countDown();
-                        try
-                        {
+                        try {
                             releaseFirst.await(5, TimeUnit.SECONDS);
-                        }
-                        catch (InterruptedException e)
-                        {
+                        } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                             throw new RuntimeException(e);
                         }
@@ -994,17 +922,14 @@ class CostRunControllerManualIT
 
             releaseFirst.countDown();
             assertThat(firstDispatch.get(5, TimeUnit.SECONDS)).isTrue();
-        }
-        finally
-        {
+        } finally {
             releaseFirst.countDown();
             executorService.shutdownNow();
         }
     }
 
     @Test
-    void shouldClaimPartitionExecutionOnlyOnceAndPersistOwnerMetadata() throws Exception
-    {
+    void shouldClaimPartitionExecutionOnlyOnceAndPersistOwnerMetadata() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -1074,8 +999,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldInvalidateOldPartitionClaimAfterPartitionIsReset() throws Exception
-    {
+    void shouldInvalidateOldPartitionClaimAfterPartitionIsReset() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -1156,8 +1080,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldSkipFinishPartitionWhenOldClaimTokenLosesOwnership() throws Exception
-    {
+    void shouldSkipFinishPartitionWhenOldClaimTokenLosesOwnership() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -1258,11 +1181,9 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldAllowNewConfiguredNodeToTakeOverPartitionAfterReset() throws Exception
-    {
+    void shouldAllowNewConfiguredNodeToTakeOverPartitionAfterReset() throws Exception {
         String originalNodeId = System.getProperty("cost.dispatch.node-id");
-        try
-        {
+        try {
             Long sceneId = requireSceneId();
             String token = loginAndGetToken();
             String authorization = "Bearer " + token;
@@ -1345,30 +1266,23 @@ class CostRunControllerManualIT
             assertThat(newOwned).isTrue();
             assertThat(takenOverPartition).isNotNull();
             assertThat(takenOverPartition.getExecuteNode()).isEqualTo("NODE-B");
-        }
-        finally
-        {
-            if (originalNodeId == null)
-            {
+        } finally {
+            if (originalNodeId == null) {
                 System.clearProperty("cost.dispatch.node-id");
-            }
-            else
-            {
+            } else {
                 System.setProperty("cost.dispatch.node-id", originalNodeId);
             }
         }
     }
 
     @Test
-    void shouldResolveExecuteNodeFromSpringPropertyBeforeSystemProperty()
-    {
+    void shouldResolveExecuteNodeFromSpringPropertyBeforeSystemProperty() {
         Object originalEnvironment = ReflectionTestUtils.getField(costRunService, "environment");
         String originalConfiguredNodeId = costDispatchProperties.getNodeId();
         Long originalDispatchIntervalSeconds = costDispatchProperties.getDispatchIntervalSeconds();
         Long originalStaleTimeoutSeconds = costDispatchProperties.getStaleTimeoutSeconds();
         String originalNodeId = System.getProperty("cost.dispatch.node-id");
-        try
-        {
+        try {
             MockEnvironment mockEnvironment = new MockEnvironment();
             mockEnvironment.setProperty("cost.dispatch.node-id", "NODE-CONFIG");
             mockEnvironment.setProperty("spring.application.name", "cost-platform-admin");
@@ -1387,27 +1301,21 @@ class CostRunControllerManualIT
             assertThat(executeNode).isEqualTo("NODE-PROPERTIES");
             assertThat(dispatchIntervalSeconds).isEqualTo(7L);
             assertThat(staleTimeoutSeconds).isEqualTo(45L);
-        }
-        finally
-        {
+        } finally {
             ReflectionTestUtils.setField(costRunService, "environment", originalEnvironment);
             costDispatchProperties.setNodeId(originalConfiguredNodeId);
             costDispatchProperties.setDispatchIntervalSeconds(originalDispatchIntervalSeconds);
             costDispatchProperties.setStaleTimeoutSeconds(originalStaleTimeoutSeconds);
-            if (originalNodeId == null)
-            {
+            if (originalNodeId == null) {
                 System.clearProperty("cost.dispatch.node-id");
-            }
-            else
-            {
+            } else {
                 System.setProperty("cost.dispatch.node-id", originalNodeId);
             }
         }
     }
 
     @Test
-    void shouldExposePartitionOwnerOverviewWithStaleAndOwnerlessRunningPartitions() throws Exception
-    {
+    void shouldExposePartitionOwnerOverviewWithStaleAndOwnerlessRunningPartitions() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -1416,8 +1324,7 @@ class CostRunControllerManualIT
         String billMonth = YearMonth.now().plusMonths(2).toString();
 
         ArrayNode inputItems = objectMapper.createArrayNode();
-        for (int index = 1; index <= 501; index++)
-        {
+        for (int index = 1; index <= 501; index++) {
             inputItems.add(createFemaleInputItem(
                     "SG-OWNER-OVERVIEW-BIZ-" + stamp + "-" + String.format("%03d", index),
                     "SG-OWNER-OVERVIEW-" + stamp + "-" + index,
@@ -1502,11 +1409,9 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldExposeMultiNodePartitionOwnershipForSameTask() throws Exception
-    {
+    void shouldExposeMultiNodePartitionOwnershipForSameTask() throws Exception {
         String originalNodeId = System.getProperty("cost.dispatch.node-id");
-        try
-        {
+        try {
             Long sceneId = requireSceneId();
             String token = loginAndGetToken();
             String authorization = "Bearer " + token;
@@ -1515,8 +1420,7 @@ class CostRunControllerManualIT
             String billMonth = YearMonth.now().plusMonths(2).toString();
 
             ArrayNode inputItems = objectMapper.createArrayNode();
-            for (int index = 1; index <= 1001; index++)
-            {
+            for (int index = 1; index <= 1001; index++) {
                 inputItems.add(createFemaleInputItem(
                         "SG-MULTI-NODE-BIZ-" + stamp + "-" + String.format("%04d", index),
                         "SG-MULTI-NODE-" + stamp + "-" + index,
@@ -1548,8 +1452,7 @@ class CostRunControllerManualIT
                     .orderByAsc(CostCalcTaskPartition::getPartitionNo));
             assertThat(partitions).hasSizeGreaterThanOrEqualTo(3);
 
-            for (int index = 0; index < 2; index++)
-            {
+            for (int index = 0; index < 2; index++) {
                 taskPartitionMapper.update(null, Wrappers.<CostCalcTaskPartition>lambdaUpdate()
                         .eq(CostCalcTaskPartition::getPartitionId, partitions.get(index).getPartitionId())
                         .set(CostCalcTaskPartition::getPartitionStatus, "INIT")
@@ -1617,26 +1520,19 @@ class CostRunControllerManualIT
             assertThat(secondPartition).isNotNull();
             assertThat(firstPartition.path("executeNode").asText()).isEqualTo("NODE-A");
             assertThat(secondPartition.path("executeNode").asText()).isEqualTo("NODE-B");
-        }
-        finally
-        {
-            if (originalNodeId == null)
-            {
+        } finally {
+            if (originalNodeId == null) {
                 System.clearProperty("cost.dispatch.node-id");
-            }
-            else
-            {
+            } else {
                 System.setProperty("cost.dispatch.node-id", originalNodeId);
             }
         }
     }
 
     @Test
-    void shouldAllowPeerNodeToAssistRemainingInitPartitionsOfRunningTask() throws Exception
-    {
+    void shouldAllowPeerNodeToAssistRemainingInitPartitionsOfRunningTask() throws Exception {
         String originalNodeId = System.getProperty("cost.dispatch.node-id");
-        try
-        {
+        try {
             Long sceneId = requireSceneId();
             String token = loginAndGetToken();
             String authorization = "Bearer " + token;
@@ -1645,8 +1541,7 @@ class CostRunControllerManualIT
             String billMonth = YearMonth.now().plusMonths(2).toString();
 
             ArrayNode inputItems = objectMapper.createArrayNode();
-            for (int index = 1; index <= 1501; index++)
-            {
+            for (int index = 1; index <= 1501; index++) {
                 inputItems.add(createFemaleInputItem(
                         "SG-ASSIST-BIZ-" + stamp + "-" + String.format("%04d", index),
                         "SG-ASSIST-" + stamp + "-" + index,
@@ -1781,23 +1676,17 @@ class CostRunControllerManualIT
             assertThat(firstPartition.path("executeNode").asText()).isEqualTo("NODE-A");
             assertThat(secondPartition.path("executeNode").asText()).isEqualTo("NODE-B");
             assertThat(thirdPartition.path("executeNode").asText()).isEqualTo("NODE-B");
-        }
-        finally
-        {
-            if (originalNodeId == null)
-            {
+        } finally {
+            if (originalNodeId == null) {
                 System.clearProperty("cost.dispatch.node-id");
-            }
-            else
-            {
+            } else {
                 System.setProperty("cost.dispatch.node-id", originalNodeId);
             }
         }
     }
 
     @Test
-    void shouldDispatchMoreThanSingleScanLimitWithinOneRecoveryCoordinatorRound() throws Exception
-    {
+    void shouldDispatchMoreThanSingleScanLimitWithinOneRecoveryCoordinatorRound() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -1806,8 +1695,7 @@ class CostRunControllerManualIT
         String billMonth = YearMonth.now().plusMonths(2).toString();
         List<Long> taskIds = new ArrayList<>();
 
-        for (int i = 1; i <= 6; i++)
-        {
+        for (int i = 1; i <= 6; i++) {
             ArrayNode inputItems = objectMapper.createArrayNode();
             inputItems.add(createFemaleInputItem(
                     "SG-DISPATCH-BIZ-" + stamp + "-" + String.format("%03d", i),
@@ -1835,14 +1723,12 @@ class CostRunControllerManualIT
             taskIds.add(taskId);
         }
 
-        for (Long taskId : taskIds)
-        {
+        for (Long taskId : taskIds) {
             assertThat(waitTaskFinished(taskId, authorization)).isEqualTo("SUCCESS");
         }
 
         Date resetTime = new Date(System.currentTimeMillis() - 2_000L);
-        for (Long taskId : taskIds)
-        {
+        for (Long taskId : taskIds) {
             taskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
                     .eq(CostCalcTask::getTaskId, taskId)
                     .set(CostCalcTask::getTaskStatus, "INIT")
@@ -1880,8 +1766,7 @@ class CostRunControllerManualIT
 
         ReflectionTestUtils.invokeMethod(costRunService, "dispatchRecoverableTasksOnce");
 
-        for (Long taskId : taskIds)
-        {
+        for (Long taskId : taskIds) {
             assertThat(waitTaskFinished(taskId, authorization)).isEqualTo("SUCCESS");
         }
 
@@ -1892,8 +1777,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldBuildFeeTemplateAndQueryFeeResultDetail() throws Exception
-    {
+    void shouldBuildFeeTemplateAndQueryFeeResultDetail() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -2009,8 +1893,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldPreviewBuiltInputFromRawPayloadMapping() throws Exception
-    {
+    void shouldPreviewBuiltInputFromRawPayloadMapping() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -2071,8 +1954,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldInheritSceneDefaultObjectDimensionWhenFeeDimensionIsBlank() throws Exception
-    {
+    void shouldInheritSceneDefaultObjectDimensionWhenFeeDimensionIsBlank() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -2096,8 +1978,7 @@ class CostRunControllerManualIT
                 .eq(CostFeeItem::getFeeId, fee.getFeeId())
                 .set(CostFeeItem::getObjectDimension, null));
 
-        try
-        {
+        try {
             Long versionId = publishScene(sceneId, authorization, "scene-default-object-dimension-" + stamp);
 
             JsonNode feeTemplate = readData(mockMvc.perform(get("/cost/run/input-template/fee")
@@ -2152,9 +2033,7 @@ class CostRunControllerManualIT
             assertThat(preview.path("fee").path("objectDimension").asText()).isEqualTo(inheritedObjectDimension);
             JsonNode mappedRecord = preview.path("mappedRecords").get(0);
             assertThat(mappedRecord.path("objectDimension").asText()).isEqualTo(inheritedObjectDimension);
-        }
-        finally
-        {
+        } finally {
             sceneMapper.update(null, Wrappers.<CostScene>lambdaUpdate()
                     .eq(CostScene::getSceneId, sceneId)
                     .set(CostScene::getDefaultObjectDimension, originalSceneDefaultObjectDimension));
@@ -2165,8 +2044,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldKeepGroupedPricingConsistentAcrossPublishFeeCalculateAndFormalRun() throws Exception
-    {
+    void shouldKeepGroupedPricingConsistentAcrossPublishFeeCalculateAndFormalRun() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -2278,8 +2156,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldCalculateFormulaFeeWithUpstreamDependenciesViaSingleFeeApi() throws Exception
-    {
+    void shouldCalculateFormulaFeeWithUpstreamDependenciesViaSingleFeeApi() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -2350,8 +2227,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldKeepShougangRealFeeSampleConsistentAcrossSimulationAndFormalRun() throws Exception
-    {
+    void shouldKeepShougangRealFeeSampleConsistentAcrossSimulationAndFormalRun() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -2429,8 +2305,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldFilterSimulationListByBillMonthAndExposePersistedBillMonth() throws Exception
-    {
+    void shouldFilterSimulationListByBillMonthAndExposePersistedBillMonth() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -2510,8 +2385,7 @@ class CostRunControllerManualIT
     }
 
     @Test
-    void shouldKeepShougangRealFeeSampleConsistentAcrossAllSingleFeeApis() throws Exception
-    {
+    void shouldKeepShougangRealFeeSampleConsistentAcrossAllSingleFeeApis() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -2528,8 +2402,7 @@ class CostRunControllerManualIT
         Map<String, Set<String>> expectedFields = expectedShougangSingleFeeTemplateFields();
         Map<String, Integer> expectedInputFieldCounts = expectedShougangSingleFeeTemplateInputFieldCounts();
 
-        for (Map.Entry<String, String> entry : expectedAmounts.entrySet())
-        {
+        for (Map.Entry<String, String> entry : expectedAmounts.entrySet()) {
             String feeCode = entry.getKey();
 
             JsonNode feeTemplate = readData(mockMvc.perform(get("/cost/run/input-template/fee")
@@ -2543,17 +2416,14 @@ class CostRunControllerManualIT
 
             assertThat(feeTemplate.path("fee").path("feeCode").asText()).isEqualTo(feeCode);
             assertThat(feeTemplate.path("inputFieldCount").asInt()).isGreaterThan(0);
-            if (expectedInputFieldCounts.containsKey(feeCode))
-            {
+            if (expectedInputFieldCounts.containsKey(feeCode)) {
                 assertThat(feeTemplate.path("inputFieldCount").asInt()).isEqualTo(expectedInputFieldCounts.get(feeCode));
             }
             Map<String, Boolean> includedFlags = readIncludedFlags(feeTemplate.path("fields"));
-            for (String fieldCode : expectedFields.getOrDefault(feeCode, linkedSet()))
-            {
+            for (String fieldCode : expectedFields.getOrDefault(feeCode, linkedSet())) {
                 assertThat(includedFlags).containsEntry(fieldCode, true);
             }
-            if (MANAGEMENT_FEE_CODE.equals(feeCode))
-            {
+            if (MANAGEMENT_FEE_CODE.equals(feeCode)) {
                 assertThat(feeTemplate.path("executionFeeCount").asInt()).isEqualTo(11);
                 assertThat(readTextSet(feeTemplate.path("dependentFeeCodes")))
                         .contains("SG_THRPT_PIECE_FEE", "SG_DUTY_SHIFT_LABOR", "SG_SEASONAL_ALLOWANCE");
@@ -2586,30 +2456,22 @@ class CostRunControllerManualIT
             assertThat(record.path("explain").path("pricing").path("amountValue").decimalValue())
                     .isEqualByComparingTo(entry.getValue());
 
-            if (COVER_FEE_CODE.equals(feeCode))
-            {
+            if (COVER_FEE_CODE.equals(feeCode)) {
                 assertGroupedPricingRecord(record, "1", entry.getValue());
-            }
-            else if ("SG_MOORING_FEE".equals(feeCode))
-            {
+            } else if ("SG_MOORING_FEE".equals(feeCode)) {
                 assertGroupedPricingRecord(record, "1", entry.getValue());
-            }
-            else if (MANAGEMENT_FEE_CODE.equals(feeCode))
-            {
+            } else if (MANAGEMENT_FEE_CODE.equals(feeCode)) {
                 assertThat(record.path("pricingSource").asText()).isEqualTo("FORMULA");
                 assertThat(record.path("explain").path("pricing").path("formulaCode").asText())
                         .isEqualTo("SG_RULE_MANAGEMENT_FEE_AMOUNT");
-            }
-            else
-            {
+            } else {
                 assertThat(record.path("pricingSource").asText()).isNotBlank();
             }
         }
     }
 
     @Test
-    void shouldResolveRemoteVariableFromPublishedSnapshotAndFallbackToLastSnapshot() throws Exception
-    {
+    void shouldResolveRemoteVariableFromPublishedSnapshotAndFallbackToLastSnapshot() throws Exception {
         Long sceneId = requireSceneId();
         CostScene scene = sceneMapper.selectById(sceneId);
         assertThat(scene).isNotNull();
@@ -2688,8 +2550,7 @@ class CostRunControllerManualIT
         rule.setFeeId(fee.getFeeId());
         ruleMapper.insert(rule);
 
-        try
-        {
+        try {
             Long versionId = publishScene(sceneId, authorization, "remote-variable-regression-" + stamp);
 
             JsonNode feeTemplate = readData(mockMvc.perform(get("/cost/run/input-template/fee")
@@ -2764,9 +2625,7 @@ class CostRunControllerManualIT
             assertThat(fallbackRecord.path("amountValue").decimalValue()).isEqualByComparingTo("70.00");
             assertThat(fallbackRecord.path("explain").path("variables").path(variableCode).decimalValue())
                     .isEqualByComparingTo("7");
-        }
-        finally
-        {
+        } finally {
             redisCache.deleteObject(cacheKey);
             ruleMapper.deleteById(rule.getRuleId());
             feeMapper.deleteById(fee.getFeeId());
@@ -2775,16 +2634,14 @@ class CostRunControllerManualIT
         }
     }
 
-    private Long requireSceneId()
-    {
+    private Long requireSceneId() {
         CostScene scene = sceneMapper.selectOne(Wrappers.<CostScene>lambdaQuery()
                 .eq(CostScene::getSceneCode, SCENE_CODE));
         assertThat(scene).as("missing seeded real-cost scene %s", SCENE_CODE).isNotNull();
         return scene.getSceneId();
     }
 
-    private Long publishScene(Long sceneId, String authorization, String publishDesc) throws Exception
-    {
+    private Long publishScene(Long sceneId, String authorization, String publishDesc) throws Exception {
         Long previousLatestVersionId = latestVersionId(sceneId);
 
         ObjectNode publishBody = objectMapper.createObjectNode();
@@ -2802,15 +2659,13 @@ class CostRunControllerManualIT
 
         CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
         assertThat(latestVersion).isNotNull();
-        if (previousLatestVersionId != null)
-        {
+        if (previousLatestVersionId != null) {
             assertThat(latestVersion.getVersionId()).isNotEqualTo(previousLatestVersionId);
         }
         return latestVersion.getVersionId();
     }
 
-    private CostFormula requireFormula(Long sceneId, String formulaCode)
-    {
+    private CostFormula requireFormula(Long sceneId, String formulaCode) {
         CostFormula formula = formulaMapper.selectOne(Wrappers.<CostFormula>lambdaQuery()
                 .eq(CostFormula::getSceneId, sceneId)
                 .eq(CostFormula::getFormulaCode, formulaCode));
@@ -2819,8 +2674,7 @@ class CostRunControllerManualIT
     }
 
     private ObjectNode createFemaleInputItem(String bizNo, String objectCode, String objectName,
-                                             int teamHeadcount, int actualAttendance, int requiredAttendance)
-    {
+                                             int teamHeadcount, int actualAttendance, int requiredAttendance) {
         ObjectNode item = objectMapper.createObjectNode();
         item.put("bizNo", bizNo);
         item.put("objectCode", objectCode);
@@ -2832,8 +2686,7 @@ class CostRunControllerManualIT
     }
 
     private ObjectNode createCoverInputItem(String bizNo, String objectCode, String objectName,
-                                            String coverAction, String cargoType, int workloadTon)
-    {
+                                            String coverAction, String cargoType, int workloadTon) {
         ObjectNode item = objectMapper.createObjectNode();
         item.put("bizNo", bizNo);
         item.put("objectCode", objectCode);
@@ -2844,17 +2697,13 @@ class CostRunControllerManualIT
         return item;
     }
 
-    private ObjectNode createManagementInputItem(String bizNo, String objectCode, String objectName)
-    {
+    private ObjectNode createManagementInputItem(String bizNo, String objectCode, String objectName) {
         ObjectNode item = objectMapper.createObjectNode();
         item.put("bizNo", bizNo);
         item.put("objectCode", objectCode);
-        if (objectName == null)
-        {
+        if (objectName == null) {
             item.putNull("objectName");
-        }
-        else
-        {
+        } else {
             item.put("objectName", objectName);
         }
         item.put("ALLOCATED_THROUGHPUT_TON", 100000);
@@ -2879,8 +2728,7 @@ class CostRunControllerManualIT
         return item;
     }
 
-    private ObjectNode createShougangFullInputItem(String bizNo, String objectCode, String objectName)
-    {
+    private ObjectNode createShougangFullInputItem(String bizNo, String objectCode, String objectName) {
         ObjectNode item = createManagementInputItem(bizNo, objectCode, objectName);
         item.put("UNIT_BEARING_AMOUNT", 3500);
         item.put("INSURANCE_TAXABLE_AMOUNT", 12000);
@@ -2888,8 +2736,7 @@ class CostRunControllerManualIT
         return item;
     }
 
-    private Map<String, Set<String>> expectedShougangSingleFeeTemplateFields()
-    {
+    private Map<String, Set<String>> expectedShougangSingleFeeTemplateFields() {
         Map<String, Set<String>> expected = new LinkedHashMap<>();
         expected.put("SG_THRPT_PIECE_FEE", linkedSet("ALLOCATED_THROUGHPUT_TON"));
         expected.put(FEMALE_FEE_CODE, linkedSet("FEMALE_TEAM_HEADCOUNT", "FEMALE_ACTUAL_ATTENDANCE", "FEMALE_REQUIRED_ATTENDANCE"));
@@ -2908,8 +2755,7 @@ class CostRunControllerManualIT
         return expected;
     }
 
-    private Map<String, Integer> expectedShougangSingleFeeTemplateInputFieldCounts()
-    {
+    private Map<String, Integer> expectedShougangSingleFeeTemplateInputFieldCounts() {
         Map<String, Integer> expected = new LinkedHashMap<>();
         expected.put("SG_THRPT_PIECE_FEE", 1);
         expected.put(FEMALE_FEE_CODE, 3);
@@ -2926,8 +2772,7 @@ class CostRunControllerManualIT
         return expected;
     }
 
-    private BigDecimal expectedManagementFeeAmount()
-    {
+    private BigDecimal expectedManagementFeeAmount() {
         BigDecimal throughputFee = money(bd("100000").multiply(bd("0.261")));
         BigDecimal femaleFee = money(bd("2.0000").multiply(bd("3616.666667")));
         BigDecimal specialFee = money(bd("1.0000").multiply(bd("8433.333333")));
@@ -2957,8 +2802,7 @@ class CostRunControllerManualIT
                 .multiply(bd("0.1677")));
     }
 
-    private Map<String, String> expectedShougangFullFeeAmounts()
-    {
+    private Map<String, String> expectedShougangFullFeeAmounts() {
         Map<String, String> expected = new LinkedHashMap<>();
         expected.put("SG_THRPT_PIECE_FEE", "26100.00");
         expected.put(FEMALE_FEE_CODE, "7233.33");
@@ -2977,37 +2821,31 @@ class CostRunControllerManualIT
         return expected;
     }
 
-    private BigDecimal expectedShougangFullAmountTotal()
-    {
+    private BigDecimal expectedShougangFullAmountTotal() {
         return expectedShougangFullFeeAmounts().values().stream()
                 .map(BigDecimal::new)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal bd(String value)
-    {
+    private BigDecimal bd(String value) {
         return new BigDecimal(value);
     }
 
-    private BigDecimal money(BigDecimal value)
-    {
+    private BigDecimal money(BigDecimal value) {
         return value.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private Set<String> linkedSet(String... values)
-    {
+    private Set<String> linkedSet(String... values) {
         return new LinkedHashSet<>(Arrays.asList(values));
     }
 
-    private Long latestVersionId(Long sceneId)
-    {
+    private Long latestVersionId(Long sceneId) {
         CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
         return latestVersion == null ? null : latestVersion.getVersionId();
     }
 
-    private void assertFixedRateRecord(JsonNode record, String amountValue)
-    {
+    private void assertFixedRateRecord(JsonNode record, String amountValue) {
         assertThat(record).isNotNull();
         assertThat(record.path("status").asText()).isEqualTo("SUCCESS");
         assertThat(record.path("pricingSource").asText()).isEqualTo("FIXED_RATE");
@@ -3018,8 +2856,7 @@ class CostRunControllerManualIT
         assertThat(record.path("explain").path("timeline").isArray()).isTrue();
     }
 
-    private void assertGroupedPricingRecord(JsonNode record, String matchedGroupNo, String amountValue)
-    {
+    private void assertGroupedPricingRecord(JsonNode record, String matchedGroupNo, String amountValue) {
         assertThat(record).isNotNull();
         assertThat(record.path("status").asText()).isEqualTo("SUCCESS");
         assertThat(record.path("matchedGroupNo").asText()).isEqualTo(matchedGroupNo);
@@ -3033,8 +2870,7 @@ class CostRunControllerManualIT
         assertThat(record.path("explain").path("timeline").isArray()).isTrue();
     }
 
-    private void assertGroupedPricingLedger(JsonNode ledger, String matchedGroupNo, String amountValue)
-    {
+    private void assertGroupedPricingLedger(JsonNode ledger, String matchedGroupNo, String amountValue) {
         assertThat(ledger).isNotNull();
         assertThat(ledger.path("matchedGroupNo").asText()).isEqualTo(matchedGroupNo);
         assertThat(ledger.path("pricingMode").asText()).isEqualTo("GROUPED");
@@ -3042,8 +2878,7 @@ class CostRunControllerManualIT
         assertThat(ledger.path("amountValue").decimalValue()).isEqualByComparingTo(amountValue);
     }
 
-    private void assertFeeAmountMatches(JsonNode items, Map<String, String> expectedAmounts)
-    {
+    private void assertFeeAmountMatches(JsonNode items, Map<String, String> expectedAmounts) {
         expectedAmounts.forEach((feeCode, amountValue) -> {
             JsonNode item = findNodeByField(items, "feeCode", feeCode);
             assertThat(item).as("missing fee %s", feeCode).isNotNull();
@@ -3051,37 +2886,30 @@ class CostRunControllerManualIT
         });
     }
 
-    private JsonNode findNodeByField(JsonNode items, String fieldName, String expectedValue)
-    {
-        if (items == null || !items.isArray())
-        {
+    private JsonNode findNodeByField(JsonNode items, String fieldName, String expectedValue) {
+        if (items == null || !items.isArray()) {
             return null;
         }
         Iterator<JsonNode> iterator = items.iterator();
-        while (iterator.hasNext())
-        {
+        while (iterator.hasNext()) {
             JsonNode item = iterator.next();
-            if (expectedValue.equals(item.path(fieldName).asText()))
-            {
+            if (expectedValue.equals(item.path(fieldName).asText())) {
                 return item;
             }
         }
         return null;
     }
 
-    private String waitTaskFinished(long taskId, String authorization) throws Exception
-    {
+    private String waitTaskFinished(long taskId, String authorization) throws Exception {
         long deadline = System.currentTimeMillis() + 60_000L;
         String taskStatus = "";
-        while (System.currentTimeMillis() < deadline)
-        {
+        while (System.currentTimeMillis() < deadline) {
             JsonNode taskDetail = readData(mockMvc.perform(get("/cost/run/task/{taskId}", taskId)
                             .header("Authorization", authorization))
                     .andExpect(status().isOk())
                     .andReturn());
             taskStatus = taskDetail.path("task").path("taskStatus").asText();
-            if (!"INIT".equals(taskStatus) && !"RUNNING".equals(taskStatus))
-            {
+            if (!"INIT".equals(taskStatus) && !"RUNNING".equals(taskStatus)) {
                 return taskStatus;
             }
             Thread.sleep(1_000L);
@@ -3089,19 +2917,16 @@ class CostRunControllerManualIT
         return taskStatus;
     }
 
-    private String waitTaskStatus(long taskId, String authorization, String expectedStatus) throws Exception
-    {
+    private String waitTaskStatus(long taskId, String authorization, String expectedStatus) throws Exception {
         long deadline = System.currentTimeMillis() + 60_000L;
         String taskStatus = "";
-        while (System.currentTimeMillis() < deadline)
-        {
+        while (System.currentTimeMillis() < deadline) {
             JsonNode taskDetail = readData(mockMvc.perform(get("/cost/run/task/{taskId}", taskId)
                             .header("Authorization", authorization))
                     .andExpect(status().isOk())
                     .andReturn());
             taskStatus = taskDetail.path("task").path("taskStatus").asText();
-            if (expectedStatus.equals(taskStatus))
-            {
+            if (expectedStatus.equals(taskStatus)) {
                 return taskStatus;
             }
             Thread.sleep(1_000L);
@@ -3110,16 +2935,13 @@ class CostRunControllerManualIT
     }
 
     private boolean waitPartitionOwnerCount(long taskId, String executeNode, int minimumCount, long timeoutMs)
-            throws InterruptedException
-    {
+            throws InterruptedException {
         long deadline = System.currentTimeMillis() + Math.max(timeoutMs, 1_000L);
-        while (System.currentTimeMillis() < deadline)
-        {
+        while (System.currentTimeMillis() < deadline) {
             long ownerCount = taskPartitionMapper.selectCount(Wrappers.<CostCalcTaskPartition>lambdaQuery()
                     .eq(CostCalcTaskPartition::getTaskId, taskId)
                     .eq(CostCalcTaskPartition::getExecuteNode, executeNode));
-            if (ownerCount >= minimumCount)
-            {
+            if (ownerCount >= minimumCount) {
                 return true;
             }
             Thread.sleep(500L);
@@ -3127,14 +2949,12 @@ class CostRunControllerManualIT
         return false;
     }
 
-    private String resolveExpectedExecuteNode()
-    {
+    private String resolveExpectedExecuteNode() {
         Object executeNode = ReflectionTestUtils.invokeMethod(costRunService, "resolveExecuteNode");
         return executeNode == null ? "LOCAL" : String.valueOf(executeNode);
     }
 
-    private String loginAndGetToken() throws Exception
-    {
+    private String loginAndGetToken() throws Exception {
         JsonNode captcha = readBody(mockMvc.perform(get("/captchaImage"))
                 .andExpect(status().isOk())
                 .andReturn());
@@ -3157,55 +2977,45 @@ class CostRunControllerManualIT
         return login.path("token").asText();
     }
 
-    private Map<String, Boolean> readIncludedFlags(JsonNode fields)
-    {
+    private Map<String, Boolean> readIncludedFlags(JsonNode fields) {
         Map<String, Boolean> result = new HashMap<>();
         Iterator<JsonNode> iterator = fields.iterator();
-        while (iterator.hasNext())
-        {
+        while (iterator.hasNext()) {
             JsonNode field = iterator.next();
             result.put(field.path("variableCode").asText(), field.path("includedInTemplate").asBoolean());
         }
         return result;
     }
 
-    private Set<String> readTextSet(JsonNode items)
-    {
+    private Set<String> readTextSet(JsonNode items) {
         Set<String> result = new LinkedHashSet<>();
-        if (items == null || !items.isArray())
-        {
+        if (items == null || !items.isArray()) {
             return result;
         }
         Iterator<JsonNode> iterator = items.iterator();
-        while (iterator.hasNext())
-        {
+        while (iterator.hasNext()) {
             result.add(iterator.next().asText());
         }
         return result;
     }
 
-    private Set<String> readFieldSet(JsonNode items, String fieldName)
-    {
+    private Set<String> readFieldSet(JsonNode items, String fieldName) {
         Set<String> result = new LinkedHashSet<>();
-        if (items == null || !items.isArray())
-        {
+        if (items == null || !items.isArray()) {
             return result;
         }
         Iterator<JsonNode> iterator = items.iterator();
-        while (iterator.hasNext())
-        {
+        while (iterator.hasNext()) {
             result.add(iterator.next().path(fieldName).asText());
         }
         return result;
     }
 
-    private JsonNode readData(MvcResult result) throws Exception
-    {
+    private JsonNode readData(MvcResult result) throws Exception {
         return readBody(result).path("data");
     }
 
-    private JsonNode readBody(MvcResult result) throws Exception
-    {
+    private JsonNode readBody(MvcResult result) throws Exception {
         String content = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
         return objectMapper.readTree(content);
     }

@@ -11,8 +11,7 @@ import java.util.List;
  *
  * @author HwFan
  */
-public interface CostResultTraceMapper extends BaseMapper<CostResultTrace>
-{
+public interface CostResultTraceMapper extends BaseMapper<CostResultTrace> {
     /**
      * 批量写入结果追溯。
      */

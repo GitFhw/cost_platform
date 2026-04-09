@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruoyi.common.constant.UserConstants;
-import com.ruoyi.common.core.domain.entity.SysDictData;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.StringUtils;
@@ -22,12 +21,7 @@ import com.ruoyi.system.service.cost.ICostFormulaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 公式实验室服务实现。
@@ -38,8 +32,7 @@ import java.util.Map;
  * @author HwFan
  */
 @Service
-public class CostFormulaServiceImpl implements ICostFormulaService
-{
+public class CostFormulaServiceImpl implements ICostFormulaService {
     private static final String STATUS_ENABLED = "0";
     private static final String ASSET_TYPE_FORMULA = "FORMULA";
     private static final String ASSET_TYPE_TEMPLATE = "TEMPLATE";
@@ -64,41 +57,35 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     private ICostExpressionService expressionService;
 
     @Override
-    public List<CostFormula> selectFormulaList(CostFormula formula)
-    {
+    public List<CostFormula> selectFormulaList(CostFormula formula) {
         return formulaMapper.selectFormulaList(formula);
     }
 
     @Override
-    public CostFormula selectFormulaById(Long formulaId)
-    {
+    public CostFormula selectFormulaById(Long formulaId) {
         return formulaMapper.selectById(formulaId);
     }
 
     @Override
-    public List<CostFormula> selectFormulaOptions(CostFormula formula)
-    {
+    public List<CostFormula> selectFormulaOptions(CostFormula formula) {
         formula.setAssetType(ASSET_TYPE_FORMULA);
         return formulaMapper.selectFormulaOptions(formula);
     }
 
     @Override
-    public List<CostFormula> selectTemplateOptions(CostFormula formula)
-    {
+    public List<CostFormula> selectTemplateOptions(CostFormula formula) {
         return formulaMapper.selectTemplateOptions(formula);
     }
 
     @Override
-    public Map<String, Object> selectFormulaStats(CostFormula formula)
-    {
+    public Map<String, Object> selectFormulaStats(CostFormula formula) {
         Map<String, Object> stats = formulaMapper.selectFormulaStats(formula);
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("formulaCount", 0);
         result.put("enabledFormulaCount", 0);
         result.put("variableRefCount", 0);
         result.put("ruleRefCount", 0);
-        if (stats == null)
-        {
+        if (stats == null) {
             return result;
         }
         stats.forEach((key, value) -> result.put(key, value == null ? 0 : value));
@@ -106,11 +93,9 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     }
 
     @Override
-    public CostFormulaGovernanceCheckVo selectFormulaGovernanceCheck(Long formulaId)
-    {
+    public CostFormulaGovernanceCheckVo selectFormulaGovernanceCheck(Long formulaId) {
         CostFormulaGovernanceCheckVo check = formulaMapper.selectFormulaGovernanceCheck(formulaId);
-        if (check == null)
-        {
+        if (check == null) {
             return null;
         }
         long variableRefCount = check.getVariableRefCount() == null ? 0 : check.getVariableRefCount();
@@ -127,8 +112,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     }
 
     @Override
-    public boolean checkFormulaCodeUnique(CostFormula formula)
-    {
+    public boolean checkFormulaCodeUnique(CostFormula formula) {
         Long formulaId = formula.getFormulaId() == null ? -1L : formula.getFormulaId();
         Long count = formulaMapper.selectCount(Wrappers.<CostFormula>lambdaQuery()
                 .eq(CostFormula::getSceneId, formula.getSceneId())
@@ -138,8 +122,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     }
 
     @Override
-    public int insertFormula(CostFormula formula)
-    {
+    public int insertFormula(CostFormula formula) {
         validateFormula(formula);
         fillDefaultFields(formula);
         int rows = formulaMapper.insert(formula);
@@ -148,19 +131,15 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     }
 
     @Override
-    public int updateFormula(CostFormula formula)
-    {
+    public int updateFormula(CostFormula formula) {
         return updateFormulaInternal(formula, "UPDATE");
     }
 
     @Override
-    public int deleteFormulaByIds(Long[] formulaIds)
-    {
-        for (Long formulaId : formulaIds)
-        {
+    public int deleteFormulaByIds(Long[] formulaIds) {
+        for (Long formulaId : formulaIds) {
             CostFormulaGovernanceCheckVo check = selectFormulaGovernanceCheck(formulaId);
-            if (check != null && !Boolean.TRUE.equals(check.getCanDelete()))
-            {
+            if (check != null && !Boolean.TRUE.equals(check.getCanDelete())) {
                 throw new ServiceException(String.format("%s 不能删除：%s", check.getFormulaName(), check.getRemoveBlockingReason()));
             }
         }
@@ -168,17 +147,14 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     }
 
     @Override
-    public List<CostFormulaVersion> selectFormulaVersionList(Long formulaId)
-    {
+    public List<CostFormulaVersion> selectFormulaVersionList(Long formulaId) {
         return formulaVersionMapper.selectFormulaVersionList(formulaId);
     }
 
     @Override
-    public CostFormula selectFormulaVersionDetail(Long versionId)
-    {
+    public CostFormula selectFormulaVersionDetail(Long versionId) {
         CostFormulaVersion version = formulaVersionMapper.selectById(versionId);
-        if (version == null)
-        {
+        if (version == null) {
             throw new ServiceException("当前版本不存在，请刷新后重试");
         }
         CostFormula formula = parseFormulaSnapshot(version.getSnapshotJson());
@@ -198,16 +174,13 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     }
 
     @Override
-    public int rollbackFormulaVersion(Long versionId, String operator)
-    {
+    public int rollbackFormulaVersion(Long versionId, String operator) {
         CostFormulaVersion version = formulaVersionMapper.selectById(versionId);
-        if (version == null)
-        {
+        if (version == null) {
             throw new ServiceException("当前版本不存在，请刷新后重试");
         }
         CostFormula current = formulaMapper.selectById(version.getFormulaId());
-        if (current == null)
-        {
+        if (current == null) {
             throw new ServiceException("当前公式不存在，无法执行版本回滚");
         }
         CostFormula rollbackFormula = parseFormulaSnapshot(version.getSnapshotJson());
@@ -221,10 +194,8 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     }
 
     @Override
-    public Map<String, Object> testFormula(CostFormulaTestBo bo, String operator)
-    {
-        if (bo == null)
-        {
+    public Map<String, Object> testFormula(CostFormulaTestBo bo, String operator) {
+        if (bo == null) {
             throw new ServiceException("测试请求不能为空");
         }
         CostFormula formula = resolveFormulaForTest(bo);
@@ -239,8 +210,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         response.put("input", input);
         response.put("result", result);
 
-        if (formula.getFormulaId() != null)
-        {
+        if (formula.getFormulaId() != null) {
             formula.setSampleResultJson(writeJson(result));
             formula.setLastTestTime(DateUtils.getNowDate());
             formula.setUpdateBy(operator);
@@ -249,8 +219,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         return response;
     }
 
-    private Map<String, Object> buildWorkbenchConfigPayload(CostFormula formula, Map<String, Object> config)
-    {
+    private Map<String, Object> buildWorkbenchConfigPayload(CostFormula formula, Map<String, Object> config) {
         LinkedHashMap<String, Object> normalized = new LinkedHashMap<>();
         normalized.put("mode", formula.getWorkbenchMode());
         normalized.put("pattern", formula.getWorkbenchPattern());
@@ -270,8 +239,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 校验公式配置。
      */
-    private void validateFormula(CostFormula formula)
-    {
+    private void validateFormula(CostFormula formula) {
         validateSceneEnabled(formula.getSceneId());
         validateDictValue(DICT_TYPE_FORMULA_STATUS, formula.getStatus(), "公式状态");
         validateDictValue(DICT_TYPE_RETURN_TYPE, formula.getReturnType(), "返回类型");
@@ -289,22 +257,17 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 停用前校验。
      */
-    private void validateDisableBeforeUpdate(CostFormula formula)
-    {
-        if (formula.getFormulaId() == null)
-        {
+    private void validateDisableBeforeUpdate(CostFormula formula) {
+        if (formula.getFormulaId() == null) {
             return;
         }
         CostFormula current = formulaMapper.selectById(formula.getFormulaId());
-        if (current == null)
-        {
+        if (current == null) {
             throw new ServiceException("当前公式不存在，请刷新后重试");
         }
-        if (STATUS_ENABLED.equals(current.getStatus()) && !STATUS_ENABLED.equals(formula.getStatus()))
-        {
+        if (STATUS_ENABLED.equals(current.getStatus()) && !STATUS_ENABLED.equals(formula.getStatus())) {
             CostFormulaGovernanceCheckVo check = selectFormulaGovernanceCheck(formula.getFormulaId());
-            if (check != null && !Boolean.TRUE.equals(check.getCanDisable()))
-            {
+            if (check != null && !Boolean.TRUE.equals(check.getCanDisable())) {
                 throw new ServiceException(check.getDisableBlockingReason());
             }
         }
@@ -313,30 +276,23 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 回填默认值。
      */
-    private void fillDefaultFields(CostFormula formula)
-    {
-        if (formula.getSortNo() == null)
-        {
+    private void fillDefaultFields(CostFormula formula) {
+        if (formula.getSortNo() == null) {
             formula.setSortNo(10);
         }
-        if (StringUtils.isEmpty(formula.getStatus()))
-        {
+        if (StringUtils.isEmpty(formula.getStatus())) {
             formula.setStatus(STATUS_ENABLED);
         }
-        if (StringUtils.isEmpty(formula.getReturnType()))
-        {
+        if (StringUtils.isEmpty(formula.getReturnType())) {
             formula.setReturnType("NUMBER");
         }
-        if (StringUtils.isEmpty(formula.getAssetType()))
-        {
+        if (StringUtils.isEmpty(formula.getAssetType())) {
             formula.setAssetType(ASSET_TYPE_FORMULA);
         }
-        if (StringUtils.isEmpty(formula.getWorkbenchMode()))
-        {
+        if (StringUtils.isEmpty(formula.getWorkbenchMode())) {
             formula.setWorkbenchMode("GUIDED");
         }
-        if (StringUtils.isEmpty(formula.getWorkbenchPattern()))
-        {
+        if (StringUtils.isEmpty(formula.getWorkbenchPattern())) {
             formula.setWorkbenchPattern("IF_ELSE");
         }
     }
@@ -344,26 +300,22 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 规范化工作台点选配置，保证工作台可以按原结构重新回填。
      */
-    private void normalizeWorkbenchConfig(CostFormula formula)
-    {
+    private void normalizeWorkbenchConfig(CostFormula formula) {
         String mode = StringUtils.defaultIfEmpty(StringUtils.trim(formula.getWorkbenchMode()), "GUIDED");
         String pattern = StringUtils.defaultIfEmpty(StringUtils.trim(formula.getWorkbenchPattern()), "IF_ELSE");
         formula.setWorkbenchMode(mode);
         formula.setWorkbenchPattern(pattern);
         formula.setTemplateCode(StringUtils.trimToEmpty(formula.getTemplateCode()));
         String configJson = StringUtils.trimToEmpty(formula.getWorkbenchConfigJson());
-        if (StringUtils.isEmpty(configJson))
-        {
+        if (StringUtils.isEmpty(configJson)) {
             formula.setWorkbenchConfigJson(writeJson(buildWorkbenchConfigPayload(formula, null)));
             return;
         }
-        try
-        {
-            Map<String, Object> config = objectMapper.readValue(configJson, new TypeReference<Map<String, Object>>() {});
+        try {
+            Map<String, Object> config = objectMapper.readValue(configJson, new TypeReference<Map<String, Object>>() {
+            });
             formula.setWorkbenchConfigJson(writeJson(buildWorkbenchConfigPayload(formula, config)));
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             throw new ServiceException("工作台配置格式不正确，请检查后重试");
         }
     }
@@ -371,15 +323,12 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 校验场景状态。
      */
-    private void validateSceneEnabled(Long sceneId)
-    {
+    private void validateSceneEnabled(Long sceneId) {
         CostScene scene = sceneMapper.selectById(sceneId);
-        if (scene == null)
-        {
+        if (scene == null) {
             throw new ServiceException("所属场景不存在，请刷新后重试");
         }
-        if (!STATUS_ENABLED.equals(scene.getStatus()))
-        {
+        if (!STATUS_ENABLED.equals(scene.getStatus())) {
             throw new ServiceException("所属场景已停用，不能维护公式");
         }
     }
@@ -387,15 +336,12 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 校验字典值合法性。
      */
-    private void validateDictValue(String dictType, String dictValue, String label)
-    {
-        if (StringUtils.isEmpty(dictValue))
-        {
+    private void validateDictValue(String dictType, String dictValue, String label) {
+        if (StringUtils.isEmpty(dictValue)) {
             throw new ServiceException(label + "不能为空");
         }
         String dictLabel = dictDataMapper.selectDictLabel(dictType, dictValue);
-        if (StringUtils.isEmpty(dictLabel))
-        {
+        if (StringUtils.isEmpty(dictLabel)) {
             throw new ServiceException(label + "不在系统字典范围内");
         }
     }
@@ -403,14 +349,11 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 校验资产类型。
      */
-    private void validateAssetType(String assetType)
-    {
-        if (StringUtils.isEmpty(assetType))
-        {
+    private void validateAssetType(String assetType) {
+        if (StringUtils.isEmpty(assetType)) {
             return;
         }
-        if (!ASSET_TYPE_FORMULA.equals(assetType) && !ASSET_TYPE_TEMPLATE.equals(assetType))
-        {
+        if (!ASSET_TYPE_FORMULA.equals(assetType) && !ASSET_TYPE_TEMPLATE.equals(assetType)) {
             throw new ServiceException("资产类型不在系统允许范围内");
         }
     }
@@ -418,18 +361,14 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 校验测试样例 JSON。
      */
-    private void validateTestCaseJson(String testCaseJson)
-    {
-        if (StringUtils.isEmpty(testCaseJson))
-        {
+    private void validateTestCaseJson(String testCaseJson) {
+        if (StringUtils.isEmpty(testCaseJson)) {
             return;
         }
-        try
-        {
-            objectMapper.readValue(testCaseJson, new TypeReference<Map<String, Object>>() {});
-        }
-        catch (Exception e)
-        {
+        try {
+            objectMapper.readValue(testCaseJson, new TypeReference<Map<String, Object>>() {
+            });
+        } catch (Exception e) {
             throw new ServiceException("公式测试样例必须是 JSON 对象");
         }
     }
@@ -437,27 +376,22 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 解析测试上下文。
      */
-    private Map<String, Object> parseInputContext(String inputJson)
-    {
-        if (StringUtils.isEmpty(inputJson))
-        {
+    private Map<String, Object> parseInputContext(String inputJson) {
+        if (StringUtils.isEmpty(inputJson)) {
             LinkedHashMap<String, Object> empty = new LinkedHashMap<>();
             empty.put("I", new LinkedHashMap<>());
             return empty;
         }
-        try
-        {
-            Map<String, Object> raw = objectMapper.readValue(inputJson, new TypeReference<Map<String, Object>>() {});
-            if (raw.containsKey("V") || raw.containsKey("C") || raw.containsKey("I") || raw.containsKey("F") || raw.containsKey("T"))
-            {
+        try {
+            Map<String, Object> raw = objectMapper.readValue(inputJson, new TypeReference<Map<String, Object>>() {
+            });
+            if (raw.containsKey("V") || raw.containsKey("C") || raw.containsKey("I") || raw.containsKey("F") || raw.containsKey("T")) {
                 return raw;
             }
             LinkedHashMap<String, Object> wrapped = new LinkedHashMap<>();
             wrapped.put("I", raw);
             return wrapped;
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             throw new ServiceException("公式测试输入必须是 JSON 对象");
         }
     }
@@ -465,30 +399,24 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 解析测试时使用的公式。
      */
-    private CostFormula resolveFormulaForTest(CostFormulaTestBo bo)
-    {
-        if (bo.getFormulaId() != null)
-        {
+    private CostFormula resolveFormulaForTest(CostFormulaTestBo bo) {
+        if (bo.getFormulaId() != null) {
             CostFormula formula = formulaMapper.selectById(bo.getFormulaId());
-            if (formula == null)
-            {
+            if (formula == null) {
                 throw new ServiceException("待测试公式不存在");
             }
             return formula;
         }
-        if (bo.getSceneId() != null && StringUtils.isNotEmpty(bo.getFormulaCode()))
-        {
+        if (bo.getSceneId() != null && StringUtils.isNotEmpty(bo.getFormulaCode())) {
             CostFormula formula = formulaMapper.selectOne(Wrappers.<CostFormula>lambdaQuery()
                     .eq(CostFormula::getSceneId, bo.getSceneId())
                     .eq(CostFormula::getFormulaCode, bo.getFormulaCode()));
-            if (formula == null)
-            {
+            if (formula == null) {
                 throw new ServiceException("公式编码不存在，请检查后重试");
             }
             return formula;
         }
-        if (StringUtils.isEmpty(bo.getFormulaExpr()))
-        {
+        if (StringUtils.isEmpty(bo.getFormulaExpr())) {
             throw new ServiceException("测试时必须提供公式编码或表达式");
         }
         CostFormula temporary = new CostFormula();
@@ -503,28 +431,22 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 删除阻断说明。
      */
-    private String buildRemoveBlockingReason(long variableRefCount, long ruleRefCount, long publishedVersionCount)
-    {
+    private String buildRemoveBlockingReason(long variableRefCount, long ruleRefCount, long publishedVersionCount) {
         StringBuilder builder = new StringBuilder("当前公式已被");
         boolean appended = false;
-        if (variableRefCount > 0)
-        {
+        if (variableRefCount > 0) {
             builder.append(variableRefCount).append("个变量引用");
             appended = true;
         }
-        if (ruleRefCount > 0)
-        {
-            if (appended)
-            {
+        if (ruleRefCount > 0) {
+            if (appended) {
                 builder.append("、");
             }
             builder.append(ruleRefCount).append("条规则引用");
             appended = true;
         }
-        if (publishedVersionCount > 0)
-        {
-            if (appended)
-            {
+        if (publishedVersionCount > 0) {
+            if (appended) {
                 builder.append("、");
             }
             builder.append(publishedVersionCount).append("个发布版本快照引用");
@@ -536,35 +458,27 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 序列化测试结果。
      */
-    private String writeJson(Object value)
-    {
-        try
-        {
+    private String writeJson(Object value) {
+        try {
             return objectMapper.writeValueAsString(value);
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             throw new ServiceException("公式测试结果序列化失败：" + e.getMessage());
         }
     }
 
-    private String stringValue(Object value)
-    {
+    private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
     }
 
-    private Object valueOf(Map<String, Object> config, String key)
-    {
+    private Object valueOf(Map<String, Object> config, String key) {
         return config == null ? null : config.get(key);
     }
 
-    private List<?> listValue(Object value)
-    {
+    private List<?> listValue(Object value) {
         return value instanceof List<?> list ? list : new ArrayList<>();
     }
 
-    private int updateFormulaInternal(CostFormula formula, String changeType)
-    {
+    private int updateFormulaInternal(CostFormula formula, String changeType) {
         validateDisableBeforeUpdate(formula);
         validateFormula(formula);
         fillDefaultFields(formula);
@@ -574,21 +488,17 @@ public class CostFormulaServiceImpl implements ICostFormulaService
         return rows;
     }
 
-    private void ensureBaselineVersionExists(Long formulaId)
-    {
-        if (formulaId == null)
-        {
+    private void ensureBaselineVersionExists(Long formulaId) {
+        if (formulaId == null) {
             return;
         }
         Long versionCount = formulaVersionMapper.selectCount(Wrappers.<CostFormulaVersion>lambdaQuery()
                 .eq(CostFormulaVersion::getFormulaId, formulaId));
-        if (versionCount != null && versionCount > 0)
-        {
+        if (versionCount != null && versionCount > 0) {
             return;
         }
         CostFormula current = formulaMapper.selectById(formulaId);
-        if (current == null)
-        {
+        if (current == null) {
             return;
         }
         CostFormulaVersion version = new CostFormulaVersion();
@@ -616,10 +526,8 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 保存公式版本快照。
      */
-    private void saveFormulaVersion(CostFormula formula, String changeType)
-    {
-        if (formula == null || formula.getFormulaId() == null)
-        {
+    private void saveFormulaVersion(CostFormula formula, String changeType) {
+        if (formula == null || formula.getFormulaId() == null) {
             return;
         }
         CostFormulaVersion latestVersion = formulaVersionMapper.selectOne(Wrappers.<CostFormulaVersion>lambdaQuery()
@@ -650,8 +558,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 构造公式快照对象。
      */
-    private Map<String, Object> buildFormulaSnapshot(CostFormula formula)
-    {
+    private Map<String, Object> buildFormulaSnapshot(CostFormula formula) {
         LinkedHashMap<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("sceneId", formula.getSceneId());
         snapshot.put("formulaCode", formula.getFormulaCode());
@@ -678,18 +585,13 @@ public class CostFormulaServiceImpl implements ICostFormulaService
     /**
      * 反序列化公式版本快照。
      */
-    private CostFormula parseFormulaSnapshot(String snapshotJson)
-    {
-        if (StringUtils.isEmpty(snapshotJson))
-        {
+    private CostFormula parseFormulaSnapshot(String snapshotJson) {
+        if (StringUtils.isEmpty(snapshotJson)) {
             return new CostFormula();
         }
-        try
-        {
+        try {
             return objectMapper.readValue(snapshotJson, CostFormula.class);
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             throw new ServiceException("公式版本快照读取失败，请检查历史数据");
         }
     }

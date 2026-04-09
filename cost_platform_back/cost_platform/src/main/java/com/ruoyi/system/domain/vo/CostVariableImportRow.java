@@ -11,8 +11,7 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostVariableImportRow
-{
+public class CostVariableImportRow {
     @Excel(name = "场景编码")
     private String sceneCode;
 

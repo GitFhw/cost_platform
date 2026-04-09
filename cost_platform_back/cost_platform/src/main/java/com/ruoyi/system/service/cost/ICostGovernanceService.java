@@ -16,8 +16,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface ICostGovernanceService
-{
+public interface ICostGovernanceService {
     Map<String, Object> selectPeriodStats(Long sceneId);
 
     List<CostBillPeriod> selectPeriodList(CostBillPeriod query);
@@ -50,6 +49,7 @@ public interface ICostGovernanceService
      * 查询告警中心运营概览。
      *
      * @param query 告警过滤条件
+     *
      * @return 趋势、热点与类型聚合结果
      */
     Map<String, Object> selectAlarmOverview(CostAlarmRecord query);

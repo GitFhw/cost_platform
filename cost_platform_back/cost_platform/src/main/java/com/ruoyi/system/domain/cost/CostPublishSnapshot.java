@@ -21,47 +21,64 @@ import java.util.Date;
  */
 @Data
 @TableName("cost_publish_snapshot")
-public class CostPublishSnapshot implements Serializable
-{
+public class CostPublishSnapshot implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    /** 快照明细主键 */
+    /**
+     * 快照明细主键
+     */
     @TableId(value = "snapshot_id", type = IdType.AUTO)
     private Long snapshotId;
 
-    /** 所属发布版本主键 */
+    /**
+     * 所属发布版本主键
+     */
     @TableField("version_id")
     private Long versionId;
 
-    /** 快照对象类型 */
+    /**
+     * 快照对象类型
+     */
     @TableField("snapshot_type")
     @Size(max = 32, message = "快照类型长度不能超过32个字符")
     private String snapshotType;
 
-    /** 对象编码 */
+    /**
+     * 对象编码
+     */
     @TableField("object_code")
     @Size(max = 64, message = "对象编码长度不能超过64个字符")
     private String objectCode;
 
-    /** 对象名称 */
+    /**
+     * 对象名称
+     */
     @TableField("object_name")
     @Size(max = 128, message = "对象名称长度不能超过128个字符")
     private String objectName;
 
-    /** 快照 JSON */
+    /**
+     * 快照 JSON
+     */
     @TableField("snapshot_json")
     private String snapshotJson;
 
-    /** 排序号 */
+    /**
+     * 排序号
+     */
     @TableField("sort_no")
     private Integer sortNo;
 
-    /** 创建人 */
+    /**
+     * 创建人
+     */
     @TableField("create_by")
     private String createBy;
 
-    /** 创建时间 */
+    /**
+     * 创建时间
+     */
     @TableField("create_time")
     private Date createTime;
 }

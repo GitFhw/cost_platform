@@ -8,6 +8,5 @@ import com.ruoyi.system.domain.cost.CostRuleCondition;
  *
  * @author HwFan
  */
-public interface CostRuleConditionMapper extends BaseMapper<CostRuleCondition>
-{
+public interface CostRuleConditionMapper extends BaseMapper<CostRuleCondition> {
 }

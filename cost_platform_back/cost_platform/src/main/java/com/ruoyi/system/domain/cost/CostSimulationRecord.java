@@ -20,72 +20,103 @@ import java.util.Date;
  */
 @Data
 @TableName("cost_simulation_record")
-public class CostSimulationRecord implements Serializable
-{
+public class CostSimulationRecord implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    /** 试算记录主键 */
+    /**
+     * 试算记录主键
+     */
     @TableId(value = "simulation_id", type = IdType.AUTO)
     private Long simulationId;
 
-    /** 场景主键 */
+    /**
+     * 场景主键
+     */
     @TableField("scene_id")
     private Long sceneId;
 
-    /** 发布版本主键 */
+    /**
+     * 发布版本主键
+     */
     @TableField("version_id")
     private Long versionId;
 
-    /** 账期 */
+    /**
+     * 账期
+     */
     @TableField("bill_month")
     private String billMonth;
 
-    /** 试算编号 */
+    /**
+     * 试算编号
+     */
     @TableField("simulation_no")
     private String simulationNo;
 
-    /** 输入业务数据 */
+    /**
+     * 输入业务数据
+     */
     @TableField("input_json")
     private String inputJson;
 
-    /** 变量计算结果 */
+    /**
+     * 变量计算结果
+     */
     @TableField("variable_json")
     private String variableJson;
 
-    /** 解释结果 */
+    /**
+     * 解释结果
+     */
     @TableField("explain_json")
     private String explainJson;
 
-    /** 试算结果 */
+    /**
+     * 试算结果
+     */
     @TableField("result_json")
     private String resultJson;
 
-    /** 试算状态 */
+    /**
+     * 试算状态
+     */
     @TableField("status")
     private String status;
 
-    /** 错误信息 */
+    /**
+     * 错误信息
+     */
     @TableField("error_message")
     private String errorMessage;
 
-    /** 创建人 */
+    /**
+     * 创建人
+     */
     @TableField("create_by")
     private String createBy;
 
-    /** 创建时间 */
+    /**
+     * 创建时间
+     */
     @TableField("create_time")
     private Date createTime;
 
-    /** 场景编码 */
+    /**
+     * 场景编码
+     */
     @TableField(exist = false)
     private String sceneCode;
 
-    /** 场景名称 */
+    /**
+     * 场景名称
+     */
     @TableField(exist = false)
     private String sceneName;
 
-    /** 版本号 */
+    /**
+     * 版本号
+     */
     @TableField(exist = false)
     private String versionNo;
 }

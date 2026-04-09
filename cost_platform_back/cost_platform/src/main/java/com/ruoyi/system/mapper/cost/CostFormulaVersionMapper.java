@@ -10,8 +10,7 @@ import java.util.List;
  *
  * @author HwFan
  */
-public interface CostFormulaVersionMapper extends BaseMapper<CostFormulaVersion>
-{
+public interface CostFormulaVersionMapper extends BaseMapper<CostFormulaVersion> {
     /**
      * 查询公式版本台账。
      */

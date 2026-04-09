@@ -10,8 +10,7 @@ import java.util.List;
  *
  * @author HwFan
  */
-public interface CostVariableGroupMapper extends BaseMapper<CostVariableGroup>
-{
+public interface CostVariableGroupMapper extends BaseMapper<CostVariableGroup> {
     /**
      * 查询变量分组列表
      */

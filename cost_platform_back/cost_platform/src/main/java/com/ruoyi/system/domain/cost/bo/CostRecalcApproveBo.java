@@ -8,8 +8,7 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostRecalcApproveBo
-{
+public class CostRecalcApproveBo {
     private Boolean approved;
 
     private String approveOpinion;

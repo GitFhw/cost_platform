@@ -10,8 +10,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface ICostExpressionService
-{
+public interface ICostExpressionService {
     /**
      * 仅校验表达式语法。
      */

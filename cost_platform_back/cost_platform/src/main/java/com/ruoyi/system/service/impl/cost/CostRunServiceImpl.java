@@ -14,63 +14,20 @@ import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.config.cost.CostDispatchProperties;
-import com.ruoyi.system.domain.cost.CostAccessProfile;
-import com.ruoyi.system.domain.cost.CostAlarmRecord;
-import com.ruoyi.system.domain.cost.CostBillPeriod;
-import com.ruoyi.system.domain.cost.CostCalcInputBatch;
-import com.ruoyi.system.domain.cost.CostCalcInputBatchItem;
-import com.ruoyi.system.domain.cost.CostCalcTask;
-import com.ruoyi.system.domain.cost.CostCalcTaskDetail;
-import com.ruoyi.system.domain.cost.CostCalcTaskPartition;
-import com.ruoyi.system.domain.cost.CostFeeItem;
-import com.ruoyi.system.domain.cost.CostFormula;
-import com.ruoyi.system.domain.cost.CostPublishSnapshot;
-import com.ruoyi.system.domain.cost.CostPublishVersion;
-import com.ruoyi.system.domain.cost.CostRecalcOrder;
-import com.ruoyi.system.domain.cost.CostResultLedger;
-import com.ruoyi.system.domain.cost.CostResultTrace;
-import com.ruoyi.system.domain.cost.CostRule;
-import com.ruoyi.system.domain.cost.CostScene;
-import com.ruoyi.system.domain.cost.CostSimulationRecord;
-import com.ruoyi.system.domain.cost.CostVariable;
-import com.ruoyi.system.domain.cost.bo.CostAccessProfileBuildBatchBo;
-import com.ruoyi.system.domain.cost.bo.CostAccessProfilePreviewFetchBo;
-import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
-import com.ruoyi.system.domain.cost.bo.CostSimulationExecuteBo;
-import com.ruoyi.system.domain.cost.bo.CostCalcInputBatchCreateBo;
-import com.ruoyi.system.domain.cost.bo.CostInputBuildPreviewBo;
-import com.ruoyi.system.domain.cost.bo.CostFeeCalculateBo;
-import com.ruoyi.system.mapper.cost.CostAccessProfileMapper;
-import com.ruoyi.system.mapper.cost.CostBillPeriodMapper;
-import com.ruoyi.system.mapper.cost.CostCalcInputBatchItemMapper;
-import com.ruoyi.system.mapper.cost.CostCalcInputBatchMapper;
-import com.ruoyi.system.mapper.cost.CostCalcTaskDetailMapper;
-import com.ruoyi.system.mapper.cost.CostCalcTaskMapper;
-import com.ruoyi.system.mapper.cost.CostCalcTaskPartitionMapper;
-import com.ruoyi.system.mapper.cost.CostFeeMapper;
-import com.ruoyi.system.mapper.cost.CostFormulaMapper;
-import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
-import com.ruoyi.system.mapper.cost.CostRecalcOrderMapper;
-import com.ruoyi.system.mapper.cost.CostResultLedgerMapper;
-import com.ruoyi.system.mapper.cost.CostResultTraceMapper;
-import com.ruoyi.system.mapper.cost.CostRuleMapper;
-import com.ruoyi.system.mapper.cost.CostSceneMapper;
-import com.ruoyi.system.mapper.cost.CostSimulationRecordMapper;
-import com.ruoyi.system.mapper.cost.CostVariableMapper;
+import com.ruoyi.system.domain.cost.*;
+import com.ruoyi.system.domain.cost.bo.*;
+import com.ruoyi.system.mapper.cost.*;
 import com.ruoyi.system.service.cost.ICostAlarmService;
 import com.ruoyi.system.service.cost.ICostAuditService;
 import com.ruoyi.system.service.cost.ICostExpressionService;
 import com.ruoyi.system.service.cost.ICostRunService;
+import jakarta.annotation.PostConstruct;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.core.env.Environment;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,7 +37,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
-import jakarta.annotation.PostConstruct;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -90,25 +46,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorCompletionService;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -122,8 +61,7 @@ import java.util.stream.Collectors;
  * @author HwFan
  */
 @Service
-public class CostRunServiceImpl implements ICostRunService
-{
+public class CostRunServiceImpl implements ICostRunService {
     private static final Logger log = LoggerFactory.getLogger(CostRunServiceImpl.class);
     private static final String STATUS_ENABLED = "0";
     private static final String SIMULATION_STATUS_SUCCESS = "SUCCESS";
@@ -223,99 +161,68 @@ public class CostRunServiceImpl implements ICostRunService
     private static final String DRAFT_VERSION_LABEL = "鑽夌閰嶇疆";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-
+    private final AtomicBoolean taskDispatchCoordinatorStarted = new AtomicBoolean(false);
+    private final Set<Long> activeTaskPartitionAssistIds = ConcurrentHashMap.newKeySet();
     @Autowired
     private CostSimulationRecordMapper simulationRecordMapper;
-
     @Autowired
     private CostAccessProfileMapper accessProfileMapper;
-
     @Autowired
     private CostCalcTaskMapper calcTaskMapper;
-
     @Autowired
     private CostCalcInputBatchMapper calcInputBatchMapper;
-
     @Autowired
     private CostCalcInputBatchItemMapper calcInputBatchItemMapper;
-
     @Autowired
     private CostCalcTaskDetailMapper calcTaskDetailMapper;
-
     @Autowired
     private CostCalcTaskPartitionMapper calcTaskPartitionMapper;
-
     @Autowired
     private CostResultLedgerMapper resultLedgerMapper;
-
     @Autowired
     private CostResultTraceMapper resultTraceMapper;
-
     @Autowired
     private CostSceneMapper sceneMapper;
-
     @Autowired
     private CostPublishVersionMapper publishVersionMapper;
-
     @Autowired
     private CostBillPeriodMapper billPeriodMapper;
-
     @Autowired
     private CostRecalcOrderMapper recalcOrderMapper;
-
     @Autowired
     private CostFeeMapper feeMapper;
-
     @Autowired
     private CostVariableMapper variableMapper;
-
     @Autowired
     private CostFormulaMapper formulaMapper;
-
     @Autowired
     private CostRuleMapper ruleMapper;
-
     @Autowired
     private ThreadPoolTaskExecutor threadPoolTaskExecutor;
-
     @Autowired
     private ScheduledExecutorService scheduledExecutorService;
-
     @Autowired
     private RedisCache redisCache;
-
     @Autowired
     private ICostAuditService auditService;
-
     @Autowired
     private ICostAlarmService alarmService;
-
     @Autowired
     private ICostExpressionService expressionService;
-
     @Autowired
     private CostDistributedLockSupport distributedLockSupport;
-
     @Autowired
     private TransactionTemplate transactionTemplate;
-
     @Autowired
     private RestTemplate costAccessRestTemplate;
-
     @Autowired
     private Environment environment;
-
     @Autowired
     private CostDispatchProperties costDispatchProperties;
 
-    private final AtomicBoolean taskDispatchCoordinatorStarted = new AtomicBoolean(false);
-    private final Set<Long> activeTaskPartitionAssistIds = ConcurrentHashMap.newKeySet();
-
     @PostConstruct
-    public void startTaskDispatchCoordinator()
-    {
-        if (!taskDispatchCoordinatorStarted.compareAndSet(false, true))
-        {
+    public void startTaskDispatchCoordinator() {
+        if (!taskDispatchCoordinatorStarted.compareAndSet(false, true)) {
             return;
         }
         long dispatchIntervalSeconds = resolveTaskDispatchIntervalSeconds();
@@ -323,38 +230,28 @@ public class CostRunServiceImpl implements ICostRunService
                 dispatchIntervalSeconds, dispatchIntervalSeconds, TimeUnit.SECONDS);
     }
 
-    private void dispatchRecoverableTasksSafely()
-    {
-        try
-        {
+    private void dispatchRecoverableTasksSafely() {
+        try {
             boolean dispatched = distributedLockSupport.executeTaskDispatchCoordinatorLockOrSkip(
                     this::dispatchRecoverableTasksOnce);
-            if (!dispatched && log.isDebugEnabled())
-            {
+            if (!dispatched && log.isDebugEnabled()) {
                 log.debug("成本任务调度扫描已由其他节点或线程执行，本轮跳过重复恢复扫描");
             }
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             log.warn("成本任务分布式调度扫描失败", ex);
         }
         dispatchRunnableTaskPartitionsSafely();
     }
 
-    private void dispatchRunnableTaskPartitionsSafely()
-    {
-        try
-        {
+    private void dispatchRunnableTaskPartitionsSafely() {
+        try {
             dispatchRunnableTaskPartitions();
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             log.warn("成本任务跨节点分片协同扫描失败", ex);
         }
     }
 
-    private void dispatchRunnableTaskPartitions()
-    {
+    private void dispatchRunnableTaskPartitions() {
         String currentNode = resolveExecuteNode();
         Date cutoff = new Date(System.currentTimeMillis() - resolveTaskStaleTimeoutMillis());
         List<CostCalcTask> runningTasks = calcTaskMapper.selectList(Wrappers.<CostCalcTask>lambdaQuery()
@@ -363,20 +260,16 @@ public class CostRunServiceImpl implements ICostRunService
                 .ge(CostCalcTask::getUpdateTime, cutoff)
                 .orderByAsc(CostCalcTask::getUpdateTime)
                 .last("limit " + TASK_DISPATCH_SCAN_LIMIT));
-        for (CostCalcTask task : runningTasks)
-        {
-            if (task == null || task.getTaskId() == null || !hasRunnableInitPartition(task.getTaskId()))
-            {
+        for (CostCalcTask task : runningTasks) {
+            if (task == null || task.getTaskId() == null || !hasRunnableInitPartition(task.getTaskId())) {
                 continue;
             }
             scheduleTaskPartitionAssist(task.getTaskId());
         }
     }
 
-    private boolean hasRunnableInitPartition(Long taskId)
-    {
-        if (taskId == null)
-        {
+    private boolean hasRunnableInitPartition(Long taskId) {
+        if (taskId == null) {
             return false;
         }
         return calcTaskPartitionMapper.selectCount(Wrappers.<CostCalcTaskPartition>lambdaQuery()
@@ -384,43 +277,34 @@ public class CostRunServiceImpl implements ICostRunService
                 .eq(CostCalcTaskPartition::getPartitionStatus, TASK_STATUS_INIT)) > 0;
     }
 
-    private void scheduleTaskPartitionAssist(Long taskId)
-    {
-        if (taskId == null || !activeTaskPartitionAssistIds.add(taskId))
-        {
+    private void scheduleTaskPartitionAssist(Long taskId) {
+        if (taskId == null || !activeTaskPartitionAssistIds.add(taskId)) {
             return;
         }
         threadPoolTaskExecutor.execute(() ->
         {
-            try
-            {
+            try {
                 assistRunningTaskPartitions(taskId);
-            }
-            finally
-            {
+            } finally {
                 activeTaskPartitionAssistIds.remove(taskId);
             }
         });
     }
 
-    void dispatchRecoverableTasksOnce()
-    {
+    void dispatchRecoverableTasksOnce() {
         Set<Long> dispatchedInitTaskIds = new LinkedHashSet<>();
         Set<Long> dispatchedStaleTaskIds = new LinkedHashSet<>();
-        for (int round = 0; round < TASK_DISPATCH_MAX_ROUNDS_PER_SCAN; round++)
-        {
+        for (int round = 0; round < TASK_DISPATCH_MAX_ROUNDS_PER_SCAN; round++) {
             int initDispatched = dispatchPendingInitTasks(dispatchedInitTaskIds);
             int staleDispatched = dispatchStaleRunningTasks(dispatchedStaleTaskIds);
-            if (initDispatched < TASK_DISPATCH_SCAN_LIMIT && staleDispatched < TASK_DISPATCH_SCAN_LIMIT)
-            {
+            if (initDispatched < TASK_DISPATCH_SCAN_LIMIT && staleDispatched < TASK_DISPATCH_SCAN_LIMIT) {
                 break;
             }
         }
     }
 
     @Override
-    public Map<String, Object> selectSimulationStats(CostSimulationRecord query)
-    {
+    public Map<String, Object> selectSimulationStats(CostSimulationRecord query) {
         List<CostSimulationRecord> records = simulationRecordMapper.selectList(Wrappers.<CostSimulationRecord>lambdaQuery()
                 .eq(query.getSceneId() != null, CostSimulationRecord::getSceneId, query.getSceneId())
                 .eq(query.getVersionId() != null, CostSimulationRecord::getVersionId, query.getVersionId())
@@ -435,8 +319,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public List<CostSimulationRecord> selectSimulationList(CostSimulationRecord query)
-    {
+    public List<CostSimulationRecord> selectSimulationList(CostSimulationRecord query) {
         List<CostSimulationRecord> records = simulationRecordMapper.selectList(Wrappers.<CostSimulationRecord>lambdaQuery()
                 .eq(query.getSceneId() != null, CostSimulationRecord::getSceneId, query.getSceneId())
                 .eq(query.getVersionId() != null, CostSimulationRecord::getVersionId, query.getVersionId())
@@ -447,35 +330,28 @@ public class CostRunServiceImpl implements ICostRunService
         return records;
     }
 
-    private void assistRunningTaskPartitions(Long taskId)
-    {
-        if (taskId == null)
-        {
+    private void assistRunningTaskPartitions(Long taskId) {
+        if (taskId == null) {
             return;
         }
         CostCalcTask task = calcTaskMapper.selectById(taskId);
-        if (task == null || !TASK_STATUS_RUNNING.equals(task.getTaskStatus()) || isTaskStale(task))
-        {
+        if (task == null || !TASK_STATUS_RUNNING.equals(task.getTaskStatus()) || isTaskStale(task)) {
             return;
         }
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(task.getSceneId(), task.getVersionId(), true);
         int dispatchedCount = 0;
-        while (dispatchedCount < TASK_DISPATCH_SCAN_LIMIT)
-        {
+        while (dispatchedCount < TASK_DISPATCH_SCAN_LIMIT) {
             Integer partitionNo = selectNextRunnablePartitionNo(taskId);
-            if (partitionNo == null)
-            {
+            if (partitionNo == null) {
                 break;
             }
-            if (assistSingleRunnablePartition(taskId, snapshot, partitionNo))
-            {
+            if (assistSingleRunnablePartition(taskId, snapshot, partitionNo)) {
                 dispatchedCount++;
             }
         }
     }
 
-    private Integer selectNextRunnablePartitionNo(Long taskId)
-    {
+    private Integer selectNextRunnablePartitionNo(Long taskId) {
         CostCalcTaskPartition partition = calcTaskPartitionMapper.selectOne(Wrappers.<CostCalcTaskPartition>lambdaQuery()
                 .eq(CostCalcTaskPartition::getTaskId, taskId)
                 .eq(CostCalcTaskPartition::getPartitionStatus, TASK_STATUS_INIT)
@@ -484,10 +360,8 @@ public class CostRunServiceImpl implements ICostRunService
         return partition == null ? null : partition.getPartitionNo();
     }
 
-    private boolean assistSingleRunnablePartition(Long taskId, RuntimeSnapshot snapshot, Integer partitionNo)
-    {
-        if (taskId == null || partitionNo == null || snapshot == null)
-        {
+    private boolean assistSingleRunnablePartition(Long taskId, RuntimeSnapshot snapshot, Integer partitionNo) {
+        if (taskId == null || partitionNo == null || snapshot == null) {
             return false;
         }
         List<CostCalcTaskDetail> partitionDetails = calcTaskDetailMapper.selectList(Wrappers.<CostCalcTaskDetail>lambdaQuery()
@@ -495,22 +369,17 @@ public class CostRunServiceImpl implements ICostRunService
                 .eq(CostCalcTaskDetail::getPartitionNo, partitionNo)
                 .in(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_INIT, DETAIL_STATUS_FAILED)
                 .orderByAsc(CostCalcTaskDetail::getDetailId));
-        if (partitionDetails.isEmpty())
-        {
+        if (partitionDetails.isEmpty()) {
             return false;
         }
         PartitionClaimToken claimToken = tryMarkPartitionRunning(taskId, partitionDetails);
-        if (claimToken == null)
-        {
+        if (claimToken == null) {
             return false;
         }
-        try
-        {
+        try {
             PartitionExecutionResult result = executeTaskPartition(taskId, snapshot, partitionDetails, claimToken);
             finishPartition(taskId, partitionDetails, claimToken, result, null);
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             Throwable cause = ex instanceof ExecutionException && ex.getCause() != null ? ex.getCause() : ex;
             PartitionExecutionResult fallbackResult = markPartitionFailed(taskId, partitionDetails, claimToken, cause);
             finishPartition(taskId, partitionDetails, claimToken, fallbackResult, cause);
@@ -520,34 +389,26 @@ public class CostRunServiceImpl implements ICostRunService
         return true;
     }
 
-    private PartitionClaimToken tryMarkPartitionRunning(Long taskId, List<CostCalcTaskDetail> partition)
-    {
-        try
-        {
+    private PartitionClaimToken tryMarkPartitionRunning(Long taskId, List<CostCalcTaskDetail> partition) {
+        try {
             return markPartitionRunning(taskId, partition);
-        }
-        catch (IllegalStateException ex)
-        {
+        } catch (IllegalStateException ex) {
             return null;
         }
     }
 
-    private void tryFinalizeTaskIfReady(Long taskId)
-    {
-        if (taskId == null)
-        {
+    private void tryFinalizeTaskIfReady(Long taskId) {
+        if (taskId == null) {
             return;
         }
         long pendingPartitions = calcTaskPartitionMapper.selectCount(Wrappers.<CostCalcTaskPartition>lambdaQuery()
                 .eq(CostCalcTaskPartition::getTaskId, taskId)
                 .in(CostCalcTaskPartition::getPartitionStatus, TASK_STATUS_INIT, TASK_STATUS_RUNNING));
-        if (pendingPartitions > 0)
-        {
+        if (pendingPartitions > 0) {
             return;
         }
         CostCalcTask task = calcTaskMapper.selectById(taskId);
-        if (task == null || TASK_STATUS_CANCELLED.equals(task.getTaskStatus()))
-        {
+        if (task == null || TASK_STATUS_CANCELLED.equals(task.getTaskStatus())) {
             return;
         }
         Date startedTime = task.getStartedTime() == null ? DateUtils.getNowDate() : task.getStartedTime();
@@ -555,12 +416,10 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> executeSimulation(CostSimulationExecuteBo bo)
-    {
+    public Map<String, Object> executeSimulation(CostSimulationExecuteBo bo) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false, true);
         String billMonth = StringUtils.isEmpty(bo.getBillMonth()) ? "" : bo.getBillMonth();
-        if (StringUtils.isNotEmpty(billMonth))
-        {
+        if (StringUtils.isNotEmpty(billMonth)) {
             validateBillMonth(billMonth);
         }
         Map<String, Object> input = parseObjectJson(bo.getInputJson(), "璇曠畻杈撳叆蹇呴』鏄?JSON 瀵硅薄");
@@ -569,23 +428,19 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> executeSimulationBatch(CostSimulationExecuteBo bo)
-    {
+    public Map<String, Object> executeSimulationBatch(CostSimulationExecuteBo bo) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false, true);
         String billMonth = StringUtils.isEmpty(bo.getBillMonth()) ? "" : bo.getBillMonth();
-        if (StringUtils.isNotEmpty(billMonth))
-        {
+        if (StringUtils.isNotEmpty(billMonth)) {
             validateBillMonth(billMonth);
         }
         List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "鎵归噺璇曠畻杈撳叆蹇呴』鏄?JSON 鏁扮粍");
-        if (inputs.isEmpty())
-        {
+        if (inputs.isEmpty()) {
             throw new ServiceException("鎵归噺璇曠畻杈撳叆涓嶈兘涓虹┖鏁扮粍");
         }
         validateDuplicateBizNo(inputs);
         List<CostSimulationRecord> records = new ArrayList<>();
-        for (int i = 0; i < inputs.size(); i++)
-        {
+        for (int i = 0; i < inputs.size(); i++) {
             Map<String, Object> input = inputs.get(i);
             String bizNo = resolveBizNo(input, i + 1);
             records.add(executeAndPersistSimulation(snapshot, input, bizNo, billMonth));
@@ -608,8 +463,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private CostSimulationRecord executeAndPersistSimulation(RuntimeSnapshot snapshot, Map<String, Object> input,
-            String bizNo, String billMonth)
-    {
+                                                             String bizNo, String billMonth) {
         Date now = DateUtils.getNowDate();
         String operator = resolveOperator();
         CostSimulationRecord record = new CostSimulationRecord();
@@ -621,8 +475,7 @@ public class CostRunServiceImpl implements ICostRunService
         record.setInputJson(writeJson(input));
         record.setCreateBy(operator);
         record.setCreateTime(now);
-        try
-        {
+        try {
             ExecutionResult executionResult = executeSingle(snapshot, "SIMULATION", billMonth, input);
             record.setVariableJson(writeJson(executionResult.variableView));
             record.setExplainJson(writeJson(executionResult.explainView));
@@ -631,25 +484,21 @@ public class CostRunServiceImpl implements ICostRunService
             record.setErrorMessage("");
             simulationRecordMapper.insert(record);
             return record;
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             record.setVariableJson(writeJson(Collections.emptyMap()));
             record.setExplainJson(writeJson(Collections.singletonMap("error", e.getMessage())));
             record.setResultJson(writeJson(Collections.emptyMap()));
             record.setStatus(SIMULATION_STATUS_FAILED);
             record.setErrorMessage(limitLength(e.getMessage(), 1000));
             simulationRecordMapper.insert(record);
-            if (StringUtils.isEmpty(bizNo))
-            {
+            if (StringUtils.isEmpty(bizNo)) {
                 throw e instanceof ServiceException ? (ServiceException) e : new ServiceException("试算执行失败：" + e.getMessage());
             }
             return record;
         }
     }
 
-    private Map<String, Object> buildSimulationBatchItem(CostSimulationRecord record)
-    {
+    private Map<String, Object> buildSimulationBatchItem(CostSimulationRecord record) {
         LinkedHashMap<String, Object> item = new LinkedHashMap<>();
         item.put("simulationId", record.getSimulationId());
         item.put("simulationNo", record.getSimulationNo());
@@ -662,11 +511,9 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> selectSimulationDetail(Long simulationId)
-    {
+    public Map<String, Object> selectSimulationDetail(Long simulationId) {
         CostSimulationRecord record = simulationRecordMapper.selectById(simulationId);
-        if (record == null)
-        {
+        if (record == null) {
             throw new ServiceException("璇曠畻璁板綍涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
         enrichSimulationRecords(Collections.singletonList(record));
@@ -680,8 +527,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> selectTaskStats(CostCalcTask query)
-    {
+    public Map<String, Object> selectTaskStats(CostCalcTask query) {
         List<CostCalcTask> tasks = selectTaskListInternal(query);
         LinkedHashMap<String, Object> stats = new LinkedHashMap<>();
         stats.put("taskCount", tasks.size());
@@ -692,8 +538,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> selectTaskOverview(CostCalcTask query)
-    {
+    public Map<String, Object> selectTaskOverview(CostCalcTask query) {
         List<CostCalcTask> tasks = selectTaskListInternal(query);
         enrichTasks(tasks);
         List<CostCalcTaskPartition> partitions = selectTaskPartitions(tasks);
@@ -710,8 +555,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public List<CostCalcTask> selectTaskList(CostCalcTask query)
-    {
+    public List<CostCalcTask> selectTaskList(CostCalcTask query) {
         List<CostCalcTask> tasks = selectTaskListInternal(query);
         enrichTasks(tasks);
         return tasks;
@@ -719,74 +563,69 @@ public class CostRunServiceImpl implements ICostRunService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> submitTask(CostCalcTaskSubmitBo bo)
-    {
+    public Map<String, Object> submitTask(CostCalcTaskSubmitBo bo) {
         return distributedLockSupport.executeTaskSubmitLock(bo.getSceneId(), bo.getVersionId(), bo.getBillMonth(),
                 bo.getTaskType(), bo.getRequestNo(), bo.getSourceBatchNo(),
                 "当前账期的核算任务正在提交处理中，请稍后重试", () ->
                 {
                     RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), true);
-        List<Map<String, Object>> inputs = parseTaskInput(bo);
-        validateBillMonth(bo.getBillMonth());
-        CostBillPeriod period = ensureBillPeriodAvailable(snapshot.sceneId, bo.getBillMonth(), snapshot.versionId);
-        if (StringUtils.isNotEmpty(bo.getRequestNo()))
-        {
-            CostCalcTask existing = calcTaskMapper.selectOne(Wrappers.<CostCalcTask>lambdaQuery()
-                    .eq(CostCalcTask::getSceneId, snapshot.sceneId)
-                    .eq(CostCalcTask::getVersionId, snapshot.versionId)
-                    .eq(CostCalcTask::getBillMonth, bo.getBillMonth())
-                    .eq(CostCalcTask::getRequestNo, bo.getRequestNo())
-                    .last("limit 1"));
-            if (existing != null)
-            {
-                return selectTaskDetail(existing.getTaskId(), 1, 10);
-            }
-        }
+                    List<Map<String, Object>> inputs = parseTaskInput(bo);
+                    validateBillMonth(bo.getBillMonth());
+                    CostBillPeriod period = ensureBillPeriodAvailable(snapshot.sceneId, bo.getBillMonth(), snapshot.versionId);
+                    if (StringUtils.isNotEmpty(bo.getRequestNo())) {
+                        CostCalcTask existing = calcTaskMapper.selectOne(Wrappers.<CostCalcTask>lambdaQuery()
+                                .eq(CostCalcTask::getSceneId, snapshot.sceneId)
+                                .eq(CostCalcTask::getVersionId, snapshot.versionId)
+                                .eq(CostCalcTask::getBillMonth, bo.getBillMonth())
+                                .eq(CostCalcTask::getRequestNo, bo.getRequestNo())
+                                .last("limit 1"));
+                        if (existing != null) {
+                            return selectTaskDetail(existing.getTaskId(), 1, 10);
+                        }
+                    }
 
-        Date now = DateUtils.getNowDate();
-        String operator = resolveOperator();
-        CostCalcTask task = new CostCalcTask();
-        task.setTaskNo(buildRunNo("TASK"));
-        task.setSceneId(snapshot.sceneId);
-        task.setVersionId(snapshot.versionId);
-        task.setTaskType(bo.getTaskType());
-        task.setBillMonth(bo.getBillMonth());
-        task.setSourceCount(inputs.size());
-        task.setSuccessCount(0);
-        task.setFailCount(0);
-        task.setTaskStatus(TASK_STATUS_INIT);
-        task.setProgressPercent(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
-        task.setRequestNo(firstNonBlank(bo.getRequestNo(), ""));
-        task.setExecuteNode(resolveExecuteNode());
-        task.setInputSourceType(resolveInputSourceType(bo));
-        task.setSourceBatchNo(firstNonBlank(bo.getSourceBatchNo(), ""));
-        task.setErrorMessage("");
-        task.setRemark(bo.getRemark());
-        task.setCreateBy(operator);
-        task.setCreateTime(now);
-        task.setUpdateBy(operator);
-        task.setUpdateTime(now);
-        calcTaskMapper.insert(task);
-        markPeriodInProgress(period, task);
+                    Date now = DateUtils.getNowDate();
+                    String operator = resolveOperator();
+                    CostCalcTask task = new CostCalcTask();
+                    task.setTaskNo(buildRunNo("TASK"));
+                    task.setSceneId(snapshot.sceneId);
+                    task.setVersionId(snapshot.versionId);
+                    task.setTaskType(bo.getTaskType());
+                    task.setBillMonth(bo.getBillMonth());
+                    task.setSourceCount(inputs.size());
+                    task.setSuccessCount(0);
+                    task.setFailCount(0);
+                    task.setTaskStatus(TASK_STATUS_INIT);
+                    task.setProgressPercent(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+                    task.setRequestNo(firstNonBlank(bo.getRequestNo(), ""));
+                    task.setExecuteNode(resolveExecuteNode());
+                    task.setInputSourceType(resolveInputSourceType(bo));
+                    task.setSourceBatchNo(firstNonBlank(bo.getSourceBatchNo(), ""));
+                    task.setErrorMessage("");
+                    task.setRemark(bo.getRemark());
+                    task.setCreateBy(operator);
+                    task.setCreateTime(now);
+                    task.setUpdateBy(operator);
+                    task.setUpdateTime(now);
+                    calcTaskMapper.insert(task);
+                    markPeriodInProgress(period, task);
 
-        List<CostCalcTaskDetail> details = buildTaskDetails(task, inputs);
-        if (!details.isEmpty())
-        {
-            insertTaskDetailsInChunks(details);
-            insertTaskPartitionsInChunks(buildTaskPartitions(task, details));
-            markInputBatchSubmitted(task.getSourceBatchNo(), operator);
-        }
-        auditService.recordAudit(snapshot.sceneId, "CALC_TASK", task.getTaskNo(),
-                "SUBMIT", "鎻愪氦姝ｅ紡鏍哥畻浠诲姟", null, task, task.getRequestNo());
-        dispatchTaskAfterCommit(task.getTaskId());
+                    List<CostCalcTaskDetail> details = buildTaskDetails(task, inputs);
+                    if (!details.isEmpty()) {
+                        insertTaskDetailsInChunks(details);
+                        insertTaskPartitionsInChunks(buildTaskPartitions(task, details));
+                        markInputBatchSubmitted(task.getSourceBatchNo(), operator);
+                    }
+                    auditService.recordAudit(snapshot.sceneId, "CALC_TASK", task.getTaskNo(),
+                            "SUBMIT", "鎻愪氦姝ｅ紡鏍哥畻浠诲姟", null, task, task.getRequestNo());
+                    dispatchTaskAfterCommit(task.getTaskId());
                     return selectTaskDetail(task.getTaskId(), 1, 10);
                 });
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> createInputBatch(CostCalcInputBatchCreateBo bo)
-    {
+    public Map<String, Object> createInputBatch(CostCalcInputBatchCreateBo bo) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), true);
         validateBillMonth(bo.getBillMonth());
         Date now = DateUtils.getNowDate();
@@ -819,8 +658,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public List<CostCalcInputBatch> selectInputBatchList(CostCalcInputBatch query)
-    {
+    public List<CostCalcInputBatch> selectInputBatchList(CostCalcInputBatch query) {
         List<CostCalcInputBatch> batches = calcInputBatchMapper.selectList(Wrappers.<CostCalcInputBatch>lambdaQuery()
                 .eq(query.getSceneId() != null, CostCalcInputBatch::getSceneId, query.getSceneId())
                 .eq(query.getVersionId() != null, CostCalcInputBatch::getVersionId, query.getVersionId())
@@ -834,12 +672,10 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> selectInputBatchDetail(Long batchId, Integer pageNum, Integer pageSize)
-    {
+    public Map<String, Object> selectInputBatchDetail(Long batchId, Integer pageNum, Integer pageSize) {
         CostCalcInputBatch batch = calcInputBatchMapper.selectById(batchId);
         enrichInputBatches(Collections.singletonList(batch));
-        if (batch == null)
-        {
+        if (batch == null) {
             throw new ServiceException("杈撳叆鎵规涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
         int normalizedPageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
@@ -865,11 +701,9 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> selectTaskDetail(Long taskId, Integer pageNum, Integer pageSize)
-    {
+    public Map<String, Object> selectTaskDetail(Long taskId, Integer pageNum, Integer pageSize) {
         CostCalcTask task = calcTaskMapper.selectById(taskId);
-        if (task == null)
-        {
+        if (task == null) {
             throw new ServiceException("鏍哥畻浠诲姟涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
         enrichTasks(Collections.singletonList(task));
@@ -927,13 +761,11 @@ public class CostRunServiceImpl implements ICostRunService
         detailPage.put("total", detailTotal);
         detailPage.put("hasMore", (long) safePageNum * safePageSize < detailTotal);
         result.put("detailPage", detailPage);
-        if (StringUtils.isNotEmpty(task.getSourceBatchNo()))
-        {
+        if (StringUtils.isNotEmpty(task.getSourceBatchNo())) {
             CostCalcInputBatch inputBatch = calcInputBatchMapper.selectOne(Wrappers.<CostCalcInputBatch>lambdaQuery()
                     .eq(CostCalcInputBatch::getBatchNo, task.getSourceBatchNo())
                     .last("limit 1"));
-            if (inputBatch != null)
-            {
+            if (inputBatch != null) {
                 LinkedHashMap<String, Object> inputBatchDetail = new LinkedHashMap<>();
                 inputBatchDetail.putAll(selectInputBatchDetail(inputBatch.getBatchId(), 1, 10));
                 result.put("inputBatch", inputBatchDetail);
@@ -943,16 +775,13 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public int retryTaskDetail(Long detailId)
-    {
+    public int retryTaskDetail(Long detailId) {
         CostCalcTaskDetail detail = calcTaskDetailMapper.selectById(detailId);
-        if (detail == null)
-        {
+        if (detail == null) {
             throw new ServiceException("浠诲姟鏄庣粏涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
         CostCalcTask task = calcTaskMapper.selectById(detail.getTaskId());
-        if (task == null)
-        {
+        if (task == null) {
             throw new ServiceException("所属核算任务不存在，请刷新后重试");
         }
         int nextRetryCount = (detail.getRetryCount() == null ? 0 : detail.getRetryCount()) + 1;
@@ -963,8 +792,7 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostCalcTaskDetail::getErrorMessage, ""));
         auditService.recordAudit(task.getSceneId(), "CALC_TASK_DETAIL", detail.getBizNo(),
                 "RETRY", "閲嶈瘯姝ｅ紡鏍哥畻鏄庣粏", detail, calcTaskDetailMapper.selectById(detailId), task.getRequestNo());
-        if (nextRetryCount >= 3)
-        {
+        if (nextRetryCount >= 3) {
             createTaskAlarm(task, detail, "TASK_DETAIL_RETRY_LIMIT", "WARN",
                     "任务明细重试次数达到阈值", "业务单号 " + detail.getBizNo() + " 的重试次数已达到 " + nextRetryCount + " 次");
         }
@@ -973,16 +801,13 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public int retryTaskPartition(Long partitionId)
-    {
+    public int retryTaskPartition(Long partitionId) {
         CostCalcTaskPartition partition = calcTaskPartitionMapper.selectById(partitionId);
-        if (partition == null)
-        {
+        if (partition == null) {
             throw new ServiceException("浠诲姟鍒嗙墖涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
         CostCalcTask task = calcTaskMapper.selectById(partition.getTaskId());
-        if (task == null)
-        {
+        if (task == null) {
             throw new ServiceException("所属核算任务不存在，请刷新后重试");
         }
         List<CostCalcTaskDetail> failedDetails = calcTaskDetailMapper.selectList(Wrappers.<CostCalcTaskDetail>lambdaQuery()
@@ -990,12 +815,10 @@ public class CostRunServiceImpl implements ICostRunService
                 .eq(CostCalcTaskDetail::getPartitionNo, partition.getPartitionNo())
                 .eq(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_FAILED)
                 .orderByAsc(CostCalcTaskDetail::getDetailId));
-        if (failedDetails.isEmpty())
-        {
+        if (failedDetails.isEmpty()) {
             return 0;
         }
-        for (CostCalcTaskDetail detail : failedDetails)
-        {
+        for (CostCalcTaskDetail detail : failedDetails) {
             int nextRetryCount = (detail.getRetryCount() == null ? 0 : detail.getRetryCount()) + 1;
             calcTaskDetailMapper.update(null, Wrappers.<CostCalcTaskDetail>lambdaUpdate()
                     .eq(CostCalcTaskDetail::getDetailId, detail.getDetailId())
@@ -1023,15 +846,12 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public int cancelTask(Long taskId)
-    {
+    public int cancelTask(Long taskId) {
         CostCalcTask task = calcTaskMapper.selectById(taskId);
-        if (task == null)
-        {
+        if (task == null) {
             throw new ServiceException("鏍哥畻浠诲姟涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
-        if (!TASK_STATUS_INIT.equals(task.getTaskStatus()) && !TASK_STATUS_RUNNING.equals(task.getTaskStatus()))
-        {
+        if (!TASK_STATUS_INIT.equals(task.getTaskStatus()) && !TASK_STATUS_RUNNING.equals(task.getTaskStatus())) {
             return 0;
         }
         int rows = calcTaskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
@@ -1057,8 +877,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> selectResultStats(CostResultLedger query)
-    {
+    public Map<String, Object> selectResultStats(CostResultLedger query) {
         List<CostResultLedger> results = selectResultListInternal(query);
         BigDecimal totalAmount = results.stream()
                 .map(CostResultLedger::getAmountValue)
@@ -1073,19 +892,16 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public List<CostResultLedger> selectResultList(CostResultLedger query)
-    {
+    public List<CostResultLedger> selectResultList(CostResultLedger query) {
         List<CostResultLedger> results = selectResultListInternal(query);
         enrichResults(results);
         return results;
     }
 
     @Override
-    public Map<String, Object> selectResultDetail(Long resultId)
-    {
+    public Map<String, Object> selectResultDetail(Long resultId) {
         CostResultLedger ledger = resultLedgerMapper.selectById(resultId);
-        if (ledger == null)
-        {
+        if (ledger == null) {
             throw new ServiceException("缁撴灉鍙拌处涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
         enrichResults(Collections.singletonList(ledger));
@@ -1097,19 +913,16 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> selectTraceDetail(Long traceId)
-    {
+    public Map<String, Object> selectTraceDetail(Long traceId) {
         CostResultTrace trace = resultTraceMapper.selectById(traceId);
-        if (trace == null)
-        {
+        if (trace == null) {
             throw new ServiceException("杩芥函璁板綍涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
         return buildTraceView(trace);
     }
 
     @Override
-    public List<Map<String, Object>> selectVersionOptions(Long sceneId)
-    {
+    public List<Map<String, Object>> selectVersionOptions(Long sceneId) {
         List<CostPublishVersion> versions = publishVersionMapper.selectList(Wrappers.<CostPublishVersion>lambdaQuery()
                 .eq(CostPublishVersion::getSceneId, sceneId)
                 .orderByDesc(CostPublishVersion::getPublishedTime)
@@ -1125,8 +938,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> buildInputTemplate(Long sceneId, Long versionId, String taskType)
-    {
+    public Map<String, Object> buildInputTemplate(Long sceneId, Long versionId, String taskType) {
         String normalizedTaskType = normalizeTemplateTaskType(taskType);
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false, isSimulationTaskType(normalizedTaskType));
 
@@ -1145,8 +957,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, Long feeId, String feeCode, String taskType)
-    {
+    public Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, Long feeId, String feeCode, String taskType) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false);
         RuntimeFee fee = resolveRuntimeFee(snapshot, feeId, feeCode);
         List<RuntimeFee> executionFees = resolveFeeExecutionChain(snapshot, fee);
@@ -1195,30 +1006,24 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> previewBuiltInput(CostInputBuildPreviewBo bo)
-    {
+    public Map<String, Object> previewBuiltInput(CostInputBuildPreviewBo bo) {
         return buildInputPreviewResult(bo.getSceneId(), bo.getVersionId(), bo.getFeeId(), bo.getFeeCode(),
                 bo.getTaskType(), bo.getRawJson(), bo.getMappingJson());
     }
 
     @Override
-    public Map<String, Object> previewBuiltInputByProfile(Long profileId, CostAccessProfilePreviewFetchBo bo)
-    {
+    public Map<String, Object> previewBuiltInputByProfile(Long profileId, CostAccessProfilePreviewFetchBo bo) {
         CostAccessProfile profile = accessProfileMapper.selectAccessProfileById(profileId);
-        if (profile == null)
-        {
+        if (profile == null) {
             throw new ServiceException("接入方案不存在，请刷新后重试");
         }
-        if (!STATUS_ENABLED.equals(profile.getStatus()))
-        {
+        if (!STATUS_ENABLED.equals(profile.getStatus())) {
             throw new ServiceException("当前接入方案已停用，无法直接拉取预演");
         }
-        if (!ACCESS_SOURCE_TYPE_HTTP_API.equalsIgnoreCase(profile.getSourceType()))
-        {
+        if (!ACCESS_SOURCE_TYPE_HTTP_API.equalsIgnoreCase(profile.getSourceType())) {
             throw new ServiceException("当前接入方案不是 HTTP 接口类型，不能执行直连预演");
         }
-        if (StringUtils.isEmpty(profile.getEndpointUrl()))
-        {
+        if (StringUtils.isEmpty(profile.getEndpointUrl())) {
             throw new ServiceException("当前接入方案未配置接口地址，无法执行直连预演");
         }
 
@@ -1237,15 +1042,12 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     @Override
-    public Map<String, Object> createInputBatchByProfile(Long profileId, CostAccessProfileBuildBatchBo bo)
-    {
-        if (bo == null)
-        {
+    public Map<String, Object> createInputBatchByProfile(Long profileId, CostAccessProfileBuildBatchBo bo) {
+        if (bo == null) {
             throw new ServiceException("按接入方案生成导入批次时，请补充账期");
         }
         CostAccessProfile profile = accessProfileMapper.selectAccessProfileById(profileId);
-        if (profile == null)
-        {
+        if (profile == null) {
             throw new ServiceException("接入方案不存在，请刷新后重试");
         }
         InputBuildContext context = buildInputBuildContext(profile.getSceneId(), profile.getVersionId(),
@@ -1253,19 +1055,14 @@ public class CostRunServiceImpl implements ICostRunService
         AccessFetchConfig fetchConfig = buildAccessFetchConfig(profile);
         String remark = firstNonBlank(StringUtils.trim(bo.getRemark()), buildProfileInputBatchRemark(profile));
         Map<String, Object> batchResult;
-        if (bo.getResumeBatchId() != null)
-        {
-            if (!fetchConfig.paged)
-            {
+        if (bo.getResumeBatchId() != null) {
+            if (!fetchConfig.paged) {
                 throw new ServiceException("当前接入方案未启用分页拉取，不支持继续装载导入批次");
             }
             batchResult = resumePagedInputBatchByProfile(profile, context, bo, remark, fetchConfig);
-        }
-        else if (!fetchConfig.paged)
-        {
+        } else if (!fetchConfig.paged) {
             String billMonth = StringUtils.trim(bo.getBillMonth());
-            if (StringUtils.isEmpty(billMonth))
-            {
+            if (StringUtils.isEmpty(billMonth)) {
                 throw new ServiceException("按接入方案生成导入批次时，请补充账期");
             }
             validateBillMonth(billMonth);
@@ -1289,12 +1086,9 @@ public class CostRunServiceImpl implements ICostRunService
             batchResult.put("mappedRecords", preview.get("mappedRecords"));
             batchResult.put("missingPaths", preview.get("missingPaths"));
             batchResult.put("fieldMappings", preview.get("fieldMappings"));
-        }
-        else
-        {
+        } else {
             String billMonth = StringUtils.trim(bo.getBillMonth());
-            if (StringUtils.isEmpty(billMonth))
-            {
+            if (StringUtils.isEmpty(billMonth)) {
                 throw new ServiceException("按接入方案生成导入批次时，请补充账期");
             }
             validateBillMonth(billMonth);
@@ -1302,28 +1096,23 @@ public class CostRunServiceImpl implements ICostRunService
         }
         batchResult.put("accessProfile", buildAccessProfileSummary(profile));
         batchResult.put("message", "已按接入方案拉取业务接口并生成导入批次，可继续发起正式核算");
-        if (Boolean.TRUE.equals(batchResult.get("resumable")))
-        {
+        if (Boolean.TRUE.equals(batchResult.get("resumable"))) {
             batchResult.put("message", "已按接入方案继续装载导入批次，当前仍有后续分页待继续拉取");
-        }
-        else
-        {
+        } else {
             batchResult.put("message", "已按接入方案拉取业务接口并生成导入批次，可继续发起正式核算");
         }
         return batchResult;
     }
 
     @Override
-    public Map<String, Object> calculateFee(CostFeeCalculateBo bo)
-    {
+    public Map<String, Object> calculateFee(CostFeeCalculateBo bo) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false);
         RuntimeFee fee = resolveRuntimeFee(snapshot, bo.getFeeId(), bo.getFeeCode());
         List<RuntimeFee> executionFees = resolveFeeExecutionChain(snapshot, fee);
         List<Map<String, Object>> inputs = parseInlineCalculationInputs(bo.getInputJson());
         String billMonth = StringUtils.isEmpty(bo.getBillMonth()) ? "" : bo.getBillMonth();
         boolean includeExplain = Boolean.TRUE.equals(bo.getIncludeExplain());
-        if (StringUtils.isNotEmpty(billMonth))
-        {
+        if (StringUtils.isNotEmpty(billMonth)) {
             validateBillMonth(billMonth);
         }
 
@@ -1332,28 +1121,21 @@ public class CostRunServiceImpl implements ICostRunService
         int noMatchCount = 0;
         int failedCount = 0;
         long startedAt = System.currentTimeMillis();
-        for (int i = 0; i < inputs.size(); i++)
-        {
+        for (int i = 0; i < inputs.size(); i++) {
             Map<String, Object> input = inputs.get(i);
             long recordStartedAt = System.currentTimeMillis();
-            try
-            {
+            try {
                 ExecutionResult executionResult = executeSingle(snapshot, "FEE_CALC", billMonth, input,
                         executionFees, includeExplain);
                 records.add(buildFeeCalculationRecord(input, fee, executionResult, i + 1, includeExplain,
                         System.currentTimeMillis() - recordStartedAt));
                 FeeExecutionResult feeResult = findFeeExecutionResult(executionResult, fee.feeCode);
-                if (feeResult == null)
-                {
+                if (feeResult == null) {
                     noMatchCount++;
-                }
-                else
-                {
+                } else {
                     successCount++;
                 }
-            }
-            catch (Exception e)
-            {
+            } catch (Exception e) {
                 records.add(buildFeeCalculationFailureRecord(input, fee, i + 1, e,
                         System.currentTimeMillis() - recordStartedAt, includeExplain));
                 failedCount++;
@@ -1396,35 +1178,28 @@ public class CostRunServiceImpl implements ICostRunService
      * 浠诲姟寮傛鎵ц涓婚摼璺€?     *
      * <p>褰撳墠闃舵鍏堥噰鐢ㄧ嚎绋嬫睜寮傛鎵ц锛屾弧瓒崇嚎绋嬩簲鈥滄寮忔牳绠椾笌鎵归噺浠诲姟寮傛鍖栤€濈殑鍩虹瑕佹眰锛?     * 鍚庣画绾跨▼鍏啀鍦ㄦ鍩虹涓婂寮哄垎鐗囧苟鍙戙€丷edis 閿佸拰鍒嗗竷寮忚妭鐐瑰崗璋冦€?/p>
      */
-    private void runTaskAsync(Long taskId)
-    {
-        if (taskId == null)
-        {
+    private void runTaskAsync(Long taskId) {
+        if (taskId == null) {
             return;
         }
         boolean dispatched = distributedLockSupport.executeTaskDispatchLockOrSkip(taskId, () -> doRunTaskAsync(taskId));
-        if (!dispatched)
-        {
+        if (!dispatched) {
             log.debug("成本任务已被其他节点或线程接管，跳过重复派发，taskId={}", taskId);
         }
     }
 
-    private void doRunTaskAsync(Long taskId)
-    {
+    private void doRunTaskAsync(Long taskId) {
         CostCalcTask task = calcTaskMapper.selectById(taskId);
-        if (task == null || TASK_STATUS_CANCELLED.equals(task.getTaskStatus()))
-        {
+        if (task == null || TASK_STATUS_CANCELLED.equals(task.getTaskStatus())) {
             return;
         }
         Date startedTime = DateUtils.getNowDate();
         TaskClaimResult claimResult = tryClaimTaskExecution(task, startedTime);
-        if (claimResult == null)
-        {
+        if (claimResult == null) {
             return;
         }
 
-        try
-        {
+        try {
             RuntimeSnapshot snapshot = loadRuntimeSnapshot(task.getSceneId(), task.getVersionId(), true);
             startedTime = claimResult.startedTime;
 
@@ -1433,8 +1208,7 @@ public class CostRunServiceImpl implements ICostRunService
                     .in(CostCalcTaskDetail::getDetailStatus, DETAIL_STATUS_INIT, DETAIL_STATUS_FAILED)
                     .orderByAsc(CostCalcTaskDetail::getPartitionNo)
                     .orderByAsc(CostCalcTaskDetail::getDetailId));
-            if (details.isEmpty())
-            {
+            if (details.isEmpty()) {
                 finishTask(taskId, startedTime);
                 return;
             }
@@ -1447,10 +1221,8 @@ public class CostRunServiceImpl implements ICostRunService
             int maxParallelism = resolveTaskParallelism(partitions.size());
             nextPartitionIndex = dispatchLocalRunnablePartitions(taskId, snapshot, partitions, nextPartitionIndex,
                     maxParallelism, completionService, futurePartitions);
-            while (completedCount < partitions.size())
-            {
-                if (futurePartitions.isEmpty())
-                {
+            while (completedCount < partitions.size()) {
+                if (futurePartitions.isEmpty()) {
                     break;
                 }
                 Future<PartitionExecutionResult> future = completionService.take();
@@ -1458,30 +1230,24 @@ public class CostRunServiceImpl implements ICostRunService
                 List<CostCalcTaskDetail> partition = dispatchContext == null ? List.of() : dispatchContext.partitionDetails;
                 PartitionClaimToken claimToken = dispatchContext == null ? null : dispatchContext.claimToken;
                 completedCount++;
-                try
-                {
+                try {
                     PartitionExecutionResult partitionResult = future.get();
                     finishPartition(taskId, partition, claimToken, partitionResult, null);
-                }
-                catch (ExecutionException e)
-                {
+                } catch (ExecutionException e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
                     PartitionExecutionResult fallbackResult = markPartitionFailed(taskId, partition, claimToken, cause);
                     finishPartition(taskId, partition, claimToken, fallbackResult, cause);
                 }
                 refreshTaskProgress(taskId);
                 CostCalcTask latestTask = calcTaskMapper.selectById(taskId);
-                if (latestTask == null || TASK_STATUS_CANCELLED.equals(latestTask.getTaskStatus()))
-                {
+                if (latestTask == null || TASK_STATUS_CANCELLED.equals(latestTask.getTaskStatus())) {
                     break;
                 }
                 nextPartitionIndex = dispatchLocalRunnablePartitions(taskId, snapshot, partitions, nextPartitionIndex,
                         maxParallelism, completionService, futurePartitions);
             }
             tryFinalizeTaskIfReady(taskId);
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             calcTaskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
                     .eq(CostCalcTask::getTaskId, taskId)
                     .set(CostCalcTask::getTaskStatus, TASK_STATUS_FAILED)
@@ -1490,8 +1256,7 @@ public class CostRunServiceImpl implements ICostRunService
                     .set(CostCalcTask::getDurationMs, DateUtils.getNowDate().getTime() - startedTime.getTime())
                     .set(CostCalcTask::getUpdateTime, DateUtils.getNowDate()));
             CostCalcTask latest = calcTaskMapper.selectById(taskId);
-            if (latest != null)
-            {
+            if (latest != null) {
                 refreshBillPeriod(latest.getSceneId(), latest.getBillMonth(), latest);
                 syncRecalcByTask(latest, TASK_STATUS_FAILED);
                 createTaskAlarm(latest, null, "TASK_FAILED", "ERROR",
@@ -1501,30 +1266,25 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     /**
-     * 鍦ㄤ簨鍔℃彁浜ゅ悗鍐嶈Е鍙戝紓姝ヤ换鍔★紝閬垮厤鏂板缓浠诲姟灏氭湭鎻愪氦鏃跺伐浣滅嚎绋嬭涓嶅埌鏁版嵁銆?     */
-    private TaskClaimResult tryClaimTaskExecution(CostCalcTask task, Date startedTime)
-    {
-        if (task == null || task.getTaskId() == null)
-        {
+     * 鍦ㄤ簨鍔℃彁浜ゅ悗鍐嶈Е鍙戝紓姝ヤ换鍔★紝閬垮厤鏂板缓浠诲姟灏氭湭鎻愪氦鏃跺伐浣滅嚎绋嬭涓嶅埌鏁版嵁銆?
+     */
+    private TaskClaimResult tryClaimTaskExecution(CostCalcTask task, Date startedTime) {
+        if (task == null || task.getTaskId() == null) {
             return null;
         }
-        if (TASK_STATUS_INIT.equals(task.getTaskStatus()))
-        {
+        if (TASK_STATUS_INIT.equals(task.getTaskStatus())) {
             return tryClaimInitTaskExecution(task.getTaskId(), startedTime);
         }
-        if (TASK_STATUS_RUNNING.equals(task.getTaskStatus()) && isTaskStale(task))
-        {
+        if (TASK_STATUS_RUNNING.equals(task.getTaskStatus()) && isTaskStale(task)) {
             boolean recovered = recoverStaleTaskForRedispatch(task, startedTime);
-            if (recovered)
-            {
+            if (recovered) {
                 return tryClaimInitTaskExecution(task.getTaskId(), DateUtils.getNowDate());
             }
         }
         return null;
     }
 
-    private TaskClaimResult tryClaimInitTaskExecution(Long taskId, Date startedTime)
-    {
+    private TaskClaimResult tryClaimInitTaskExecution(Long taskId, Date startedTime) {
         Date claimTime = startedTime == null ? DateUtils.getNowDate() : startedTime;
         int updated = calcTaskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
                 .eq(CostCalcTask::getTaskId, taskId)
@@ -1539,8 +1299,7 @@ public class CostRunServiceImpl implements ICostRunService
         return updated > 0 ? new TaskClaimResult(claimTime) : null;
     }
 
-    private boolean recoverStaleTaskForRedispatch(CostCalcTask task, Date now)
-    {
+    private boolean recoverStaleTaskForRedispatch(CostCalcTask task, Date now) {
         Date recoverTime = now == null ? DateUtils.getNowDate() : now;
         Date staleUpdateTime = task.getUpdateTime();
         return Boolean.TRUE.equals(transactionTemplate.execute(status ->
@@ -1564,8 +1323,7 @@ public class CostRunServiceImpl implements ICostRunService
                     .set(CostCalcTask::getDurationMs, 0L)
                     .set(CostCalcTask::getErrorMessage, "检测到节点心跳超时，已转入待恢复调度")
                     .set(CostCalcTask::getUpdateTime, recoverTime));
-            if (resetTask <= 0)
-            {
+            if (resetTask <= 0) {
                 return false;
             }
             calcTaskPartitionMapper.update(null, Wrappers.<CostCalcTaskPartition>lambdaUpdate()
@@ -1585,8 +1343,7 @@ public class CostRunServiceImpl implements ICostRunService
                     .set(CostCalcTaskPartition::getLastErrorStage, PARTITION_STAGE_EXECUTION)
                     .set(CostCalcTaskPartition::getLastError, "节点执行心跳超时")
                     .set(CostCalcTaskPartition::getUpdateTime, recoverTime));
-            if (!runningPartitionNos.isEmpty())
-            {
+            if (!runningPartitionNos.isEmpty()) {
                 calcTaskDetailMapper.update(null, Wrappers.<CostCalcTaskDetail>lambdaUpdate()
                         .eq(CostCalcTaskDetail::getTaskId, task.getTaskId())
                         .in(CostCalcTaskDetail::getPartitionNo, runningPartitionNos)
@@ -1598,52 +1355,42 @@ public class CostRunServiceImpl implements ICostRunService
         }));
     }
 
-    private boolean isTaskStale(CostCalcTask task)
-    {
-        if (task == null || !TASK_STATUS_RUNNING.equals(task.getTaskStatus()) || task.getFinishedTime() != null)
-        {
+    private boolean isTaskStale(CostCalcTask task) {
+        if (task == null || !TASK_STATUS_RUNNING.equals(task.getTaskStatus()) || task.getFinishedTime() != null) {
             return false;
         }
         Date heartbeatTime = task.getUpdateTime() != null ? task.getUpdateTime() : task.getStartedTime();
-        if (heartbeatTime == null)
-        {
+        if (heartbeatTime == null) {
             return true;
         }
         return heartbeatTime.getTime() <= System.currentTimeMillis() - resolveTaskStaleTimeoutMillis();
     }
 
-    private void dispatchTaskAfterCommit(Long taskId)
-    {
+    private void dispatchTaskAfterCommit(Long taskId) {
         Runnable runnable = () -> scheduleTaskExecution(taskId);
-        if (TransactionSynchronizationManager.isActualTransactionActive())
-        {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
             TransactionSynchronizationManager.registerSynchronization(new AfterCommitTaskSynchronization(runnable));
             return;
         }
         runnable.run();
     }
 
-    private void scheduleTaskExecution(Long taskId)
-    {
-        if (taskId == null)
-        {
+    private void scheduleTaskExecution(Long taskId) {
+        if (taskId == null) {
             return;
         }
         threadPoolTaskExecutor.execute(() -> runTaskAsync(taskId));
     }
 
     private int dispatchLocalRunnablePartitions(Long taskId, RuntimeSnapshot snapshot,
-            List<List<CostCalcTaskDetail>> partitions, int nextPartitionIndex, int maxParallelism,
-            ExecutorCompletionService<PartitionExecutionResult> completionService,
-            Map<Future<PartitionExecutionResult>, PartitionDispatchContext> futurePartitions)
-    {
+                                                List<List<CostCalcTaskDetail>> partitions, int nextPartitionIndex, int maxParallelism,
+                                                ExecutorCompletionService<PartitionExecutionResult> completionService,
+                                                Map<Future<PartitionExecutionResult>, PartitionDispatchContext> futurePartitions) {
         int partitionIndex = nextPartitionIndex;
-        while (partitionIndex < partitions.size() && futurePartitions.size() < maxParallelism)
-        {
+        while (partitionIndex < partitions.size() && futurePartitions.size() < maxParallelism) {
             List<CostCalcTaskDetail> partition = partitions.get(partitionIndex++);
             PartitionClaimToken claimToken = tryMarkPartitionRunning(taskId, partition);
-            if (claimToken == null)
-            {
+            if (claimToken == null) {
                 continue;
             }
             Future<PartitionExecutionResult> future =
@@ -1653,8 +1400,7 @@ public class CostRunServiceImpl implements ICostRunService
         return partitionIndex;
     }
 
-    private int dispatchPendingInitTasks(Set<Long> excludedTaskIds)
-    {
+    private int dispatchPendingInitTasks(Set<Long> excludedTaskIds) {
         List<CostCalcTask> initTasks = calcTaskMapper.selectList(Wrappers.<CostCalcTask>lambdaQuery()
                 .eq(CostCalcTask::getTaskStatus, TASK_STATUS_INIT)
                 .notIn(excludedTaskIds != null && !excludedTaskIds.isEmpty(), CostCalcTask::getTaskId, excludedTaskIds)
@@ -1664,16 +1410,14 @@ public class CostRunServiceImpl implements ICostRunService
                 .map(CostCalcTask::getTaskId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-        if (excludedTaskIds != null)
-        {
+        if (excludedTaskIds != null) {
             excludedTaskIds.addAll(taskIds);
         }
         taskIds.forEach(this::scheduleTaskExecution);
         return taskIds.size();
     }
 
-    private int dispatchStaleRunningTasks(Set<Long> excludedTaskIds)
-    {
+    private int dispatchStaleRunningTasks(Set<Long> excludedTaskIds) {
         Date cutoff = new Date(System.currentTimeMillis() - resolveTaskStaleTimeoutMillis());
         List<CostCalcTask> staleTasks = calcTaskMapper.selectList(Wrappers.<CostCalcTask>lambdaQuery()
                 .eq(CostCalcTask::getTaskStatus, TASK_STATUS_RUNNING)
@@ -1685,8 +1429,7 @@ public class CostRunServiceImpl implements ICostRunService
                 .map(CostCalcTask::getTaskId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-        if (excludedTaskIds != null)
-        {
+        if (excludedTaskIds != null) {
             excludedTaskIds.addAll(taskIds);
         }
         taskIds.forEach(this::scheduleTaskExecution);
@@ -1694,17 +1437,16 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     /**
-     * 澶勭悊鍗曟潯浠诲姟鏄庣粏锛屽苟钀界粨鏋滃彴璐︿笌杩芥函瑙ｉ噴銆?     */
+     * 澶勭悊鍗曟潯浠诲姟鏄庣粏锛屽苟钀界粨鏋滃彴璐︿笌杩芥函瑙ｉ噴銆?
+     */
     @Transactional(rollbackFor = Exception.class)
-    protected void processTaskDetail(CostCalcTask task, CostCalcTaskDetail detail, RuntimeSnapshot snapshot)
-    {
+    protected void processTaskDetail(CostCalcTask task, CostCalcTaskDetail detail, RuntimeSnapshot snapshot) {
         Map<String, Object> input = parseObjectJson(detail.getInputJson(), "浠诲姟鏄庣粏杈撳叆蹇呴』鏄?JSON 瀵硅薄");
         purgeExistingTaskResults(task.getTaskId(), detail.getBizNo());
         ExecutionResult executionResult = executeSingle(snapshot, task.getTaskNo(), task.getBillMonth(), input);
 
         List<CostResultLedger> ledgers = new ArrayList<>();
-        for (FeeExecutionResult feeResult : executionResult.feeResults)
-        {
+        for (FeeExecutionResult feeResult : executionResult.feeResults) {
             CostResultTrace trace = new CostResultTrace();
             trace.setSceneId(snapshot.sceneId);
             trace.setVersionId(snapshot.versionId);
@@ -1746,25 +1488,21 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostCalcTaskDetail::getErrorMessage, ""));
     }
 
-    private void purgeExistingTaskResults(Long taskId, String bizNo)
-    {
+    private void purgeExistingTaskResults(Long taskId, String bizNo) {
         List<CostResultLedger> existing = resultLedgerMapper.selectList(Wrappers.<CostResultLedger>lambdaQuery()
                 .eq(CostResultLedger::getTaskId, taskId)
                 .eq(CostResultLedger::getBizNo, bizNo));
-        if (existing.isEmpty())
-        {
+        if (existing.isEmpty()) {
             return;
         }
         List<Long> traceIds = existing.stream().map(CostResultLedger::getTraceId).filter(Objects::nonNull).collect(Collectors.toList());
         resultLedgerMapper.deleteBatchIds(existing.stream().map(CostResultLedger::getResultId).collect(Collectors.toList()));
-        if (!traceIds.isEmpty())
-        {
+        if (!traceIds.isEmpty()) {
             resultTraceMapper.deleteBatchIds(traceIds);
         }
     }
 
-    private void refreshTaskProgress(Long taskId)
-    {
+    private void refreshTaskProgress(Long taskId) {
         TaskExecutionSummary summary = summarizeTaskDetails(taskId);
         BigDecimal progress = summary.totalCount <= 0
                 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
@@ -1777,18 +1515,15 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostCalcTask::getUpdateTime, DateUtils.getNowDate()));
     }
 
-    private void finishTask(Long taskId, Date startedTime)
-    {
+    private void finishTask(Long taskId, Date startedTime) {
         CostCalcTask latestTask = calcTaskMapper.selectById(taskId);
-        if (latestTask != null && TASK_STATUS_CANCELLED.equals(latestTask.getTaskStatus()))
-        {
+        if (latestTask != null && TASK_STATUS_CANCELLED.equals(latestTask.getTaskStatus())) {
             return;
         }
         long pendingPartitions = calcTaskPartitionMapper.selectCount(Wrappers.<CostCalcTaskPartition>lambdaQuery()
                 .eq(CostCalcTaskPartition::getTaskId, taskId)
                 .in(CostCalcTaskPartition::getPartitionStatus, TASK_STATUS_INIT, TASK_STATUS_RUNNING));
-        if (pendingPartitions > 0)
-        {
+        if (pendingPartitions > 0) {
             return;
         }
         TaskExecutionSummary summary = summarizeTaskDetails(taskId);
@@ -1806,8 +1541,7 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostCalcTask::getDurationMs, finishedTime.getTime() - startedTime.getTime())
                 .set(CostCalcTask::getUpdateTime, finishedTime));
         CostCalcTask task = calcTaskMapper.selectById(taskId);
-        if (task != null)
-        {
+        if (task != null) {
             runTaskFinishSideEffect(task, "billPeriodRefresh",
                     () -> refreshBillPeriod(task.getSceneId(), task.getBillMonth(), task));
             runTaskFinishSideEffect(task, "recalcSync",
@@ -1815,13 +1549,11 @@ public class CostRunServiceImpl implements ICostRunService
             runTaskFinishSideEffect(task, "taskAudit",
                     () -> auditService.recordAudit(task.getSceneId(), "CALC_TASK", task.getTaskNo(),
                             "FINISH", "姝ｅ紡鏍哥畻浠诲姟瀹屾垚", null, task, task.getRequestNo()));
-            if (TASK_STATUS_SUCCESS.equals(status))
-            {
+            if (TASK_STATUS_SUCCESS.equals(status)) {
                 runTaskFinishSideEffect(task, "alarmAutoResolve",
                         () -> alarmService.autoResolveByTask(task.getTaskId(), "任务执行成功，自动关闭历史任务告警"));
             }
-            if (TASK_STATUS_FAILED.equals(status) || TASK_STATUS_PART_SUCCESS.equals(status))
-            {
+            if (TASK_STATUS_FAILED.equals(status) || TASK_STATUS_PART_SUCCESS.equals(status)) {
                 runTaskFinishSideEffect(task, "finishAlarm",
                         () -> createTaskAlarm(task, null, "TASK_FINISHED_WITH_ERROR",
                                 TASK_STATUS_FAILED.equals(status) ? "ERROR" : "WARN",
@@ -1837,20 +1569,17 @@ public class CostRunServiceImpl implements ICostRunService
      * 2. 鍐嶈绠楀彉閲忥紱
      * 3. 閫愯垂鐢ㄧ瓫閫夊懡涓鍒欏拰闃舵锛?     * 4. 浜у嚭璐圭敤缁撴灉銆佽В閲婅鍥惧拰鏃堕棿绾裤€?/p>
      */
-    private ExecutionResult executeSingle(RuntimeSnapshot snapshot, String taskNo, String billMonth, Map<String, Object> input)
-    {
+    private ExecutionResult executeSingle(RuntimeSnapshot snapshot, String taskNo, String billMonth, Map<String, Object> input) {
         return executeSingle(snapshot, taskNo, billMonth, input, snapshot.fees, false);
     }
 
     private ExecutionResult executeSingle(RuntimeSnapshot snapshot, String taskNo, String billMonth,
-            Map<String, Object> input, List<RuntimeFee> targetFees)
-    {
+                                          Map<String, Object> input, List<RuntimeFee> targetFees) {
         return executeSingle(snapshot, taskNo, billMonth, input, targetFees, false);
     }
 
     private ExecutionResult executeSingle(RuntimeSnapshot snapshot, String taskNo, String billMonth,
-            Map<String, Object> input, List<RuntimeFee> targetFees, boolean includeExplain)
-    {
+                                          Map<String, Object> input, List<RuntimeFee> targetFees, boolean includeExplain) {
         List<RuntimeFee> feesToExecute = targetFees == null || targetFees.isEmpty() ? snapshot.fees : targetFees;
         LinkedHashMap<String, Object> baseContext = new LinkedHashMap<>(input);
         baseContext.put("billMonth", billMonth);
@@ -1863,14 +1592,11 @@ public class CostRunServiceImpl implements ICostRunService
         ExecutionResult result = new ExecutionResult();
 
         LinkedHashMap<String, Object> feeResultContext = new LinkedHashMap<>();
-        for (RuntimeFee fee : feesToExecute)
-        {
+        for (RuntimeFee fee : feesToExecute) {
             List<RuntimeRule> rules = snapshot.rulesByFeeCode.getOrDefault(fee.feeCode, Collections.emptyList());
             RuleMatchResult matchResult = matchRule(rules, variableValues, baseContext, includeExplain);
-            if (matchResult == null || matchResult.rule == null)
-            {
-                if (includeExplain)
-                {
+            if (matchResult == null || matchResult.rule == null) {
+                if (includeExplain) {
                     result.skippedFeeExplains.put(fee.feeCode,
                             buildFeeNoMatchExplain(fee, rules, variableValues,
                                     matchResult == null ? Collections.emptyList() : matchResult.ruleEvaluations));
@@ -1924,108 +1650,84 @@ public class CostRunServiceImpl implements ICostRunService
         return result;
     }
 
-    private LinkedHashMap<String, Object> computeVariables(RuntimeSnapshot snapshot, Map<String, Object> baseContext)
-    {
+    private LinkedHashMap<String, Object> computeVariables(RuntimeSnapshot snapshot, Map<String, Object> baseContext) {
         return computeVariables(snapshot, baseContext, snapshot.variables);
     }
 
     private LinkedHashMap<String, Object> computeVariables(RuntimeSnapshot snapshot, Map<String, Object> baseContext,
-            List<RuntimeVariable> runtimeVariables)
-    {
+                                                           List<RuntimeVariable> runtimeVariables) {
         LinkedHashMap<String, Object> values = new LinkedHashMap<>();
         List<RuntimeVariable> variablesToCompute = runtimeVariables == null ? snapshot.variables : runtimeVariables;
         Map<String, RuntimeVariable> variableMap = snapshot == null || snapshot.variablesByCode == null
                 ? Collections.emptyMap()
                 : snapshot.variablesByCode;
         LinkedHashSet<String> dependencyStack = new LinkedHashSet<>();
-        for (RuntimeVariable variable : variablesToCompute)
-        {
+        for (RuntimeVariable variable : variablesToCompute) {
             resolveRuntimeVariableValue(snapshot, variable, baseContext, values, variableMap, dependencyStack);
         }
         return values;
     }
 
     private Object resolveRuntimeVariableValue(RuntimeSnapshot snapshot, RuntimeVariable variable,
-            Map<String, Object> baseContext, LinkedHashMap<String, Object> computedValues,
-            Map<String, RuntimeVariable> variableMap, Set<String> dependencyStack)
-    {
-        if (variable == null || StringUtils.isEmpty(variable.variableCode))
-        {
+                                               Map<String, Object> baseContext, LinkedHashMap<String, Object> computedValues,
+                                               Map<String, RuntimeVariable> variableMap, Set<String> dependencyStack) {
+        if (variable == null || StringUtils.isEmpty(variable.variableCode)) {
             return null;
         }
-        if (computedValues.containsKey(variable.variableCode))
-        {
+        if (computedValues.containsKey(variable.variableCode)) {
             return computedValues.get(variable.variableCode);
         }
-        if (!dependencyStack.add(variable.variableCode))
-        {
+        if (!dependencyStack.add(variable.variableCode)) {
             throw new ServiceException("公式变量存在循环依赖：" + String.join(" -> ", dependencyStack) + " -> " + variable.variableCode);
         }
-        try
-        {
+        try {
             Object value;
-            if (SOURCE_TYPE_FORMULA.equals(variable.sourceType))
-            {
+            if (SOURCE_TYPE_FORMULA.equals(variable.sourceType)) {
                 String formulaExpression = resolveVariableFormula(snapshot, variable);
-                for (String dependencyCode : extractExpressionVariableCodes(formulaExpression, variableMap))
-                {
-                    if (StringUtils.equals(variable.variableCode, dependencyCode))
-                    {
+                for (String dependencyCode : extractExpressionVariableCodes(formulaExpression, variableMap)) {
+                    if (StringUtils.equals(variable.variableCode, dependencyCode)) {
                         continue;
                     }
                     RuntimeVariable dependency = variableMap.get(dependencyCode);
-                    if (dependency != null)
-                    {
+                    if (dependency != null) {
                         resolveRuntimeVariableValue(snapshot, dependency, baseContext, computedValues, variableMap, dependencyStack);
                     }
                 }
                 value = evaluateExpression(formulaExpression, mergeContext(baseContext, computedValues, Collections.emptyMap()));
-            }
-            else if (SOURCE_TYPE_REMOTE.equalsIgnoreCase(variable.sourceType))
-            {
+            } else if (SOURCE_TYPE_REMOTE.equalsIgnoreCase(variable.sourceType)) {
                 value = resolveRemoteVariableValue(variable, baseContext);
-            }
-            else
-            {
+            } else {
                 value = resolveValueFromInput(baseContext, variable.dataPath, variable.variableCode, variable.defaultValue);
             }
             Object converted = convertValueByType(value, variable.dataType, variable.defaultValue);
             computedValues.put(variable.variableCode, converted);
             return converted;
-        }
-        finally
-        {
+        } finally {
             dependencyStack.remove(variable.variableCode);
         }
     }
 
     private RuleMatchResult matchRule(List<RuntimeRule> rules, Map<String, Object> variableValues,
-            Map<String, Object> baseContext, boolean includeExplain)
-    {
+                                      Map<String, Object> baseContext, boolean includeExplain) {
         Map<String, Object> conditionContext = mergeContext(baseContext, variableValues, Collections.emptyMap());
         RuleMatchResult fallbackResult = includeExplain ? new RuleMatchResult() : null;
-        for (RuntimeRule rule : rules)
-        {
+        for (RuntimeRule rule : rules) {
             List<Map<String, Object>> conditionExplain = new ArrayList<>();
             ConditionMatchResult conditionMatchResult = matchConditions(rule, variableValues, conditionContext, conditionExplain);
-            if (includeExplain)
-            {
+            if (includeExplain) {
                 fallbackResult.ruleEvaluations.add(buildRuleEvaluation(rule, conditionMatchResult, conditionExplain));
             }
-            if (conditionMatchResult.matched)
-            {
+            if (conditionMatchResult.matched) {
                 RuleMatchResult result = new RuleMatchResult();
                 result.rule = rule;
                 result.matchedGroupNo = conditionMatchResult.matchedGroupNo;
                 result.rule.matchedGroupNo = conditionMatchResult.matchedGroupNo;
                 result.conditionExplain = conditionExplain;
                 result.ruleEvaluations = includeExplain ? fallbackResult.ruleEvaluations : Collections.emptyList();
-                if (RULE_TYPE_TIER_RATE.equals(rule.ruleType))
-                {
+                if (RULE_TYPE_TIER_RATE.equals(rule.ruleType)) {
                     BigDecimal quantityValue = toBigDecimal(variableValues.get(rule.quantityVariableCode));
                     result.tier = locateTier(rule.tiers, quantityValue);
-                    if (result.tier == null)
-                    {
+                    if (result.tier == null) {
                         throw new ServiceException(String.format("规则 %s 未找到可命中的阶梯区间", rule.ruleCode));
                     }
                 }
@@ -2036,8 +1738,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> buildRuleEvaluation(RuntimeRule rule, ConditionMatchResult matchResult,
-            List<Map<String, Object>> conditionExplain)
-    {
+                                                    List<Map<String, Object>> conditionExplain) {
         LinkedHashMap<String, Object> item = new LinkedHashMap<>();
         item.put("ruleCode", rule.ruleCode);
         item.put("ruleName", rule.ruleName);
@@ -2051,21 +1752,17 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private ConditionMatchResult matchConditions(RuntimeRule rule, Map<String, Object> variableValues,
-            Map<String, Object> conditionContext, List<Map<String, Object>> explain)
-    {
+                                                 Map<String, Object> conditionContext, List<Map<String, Object>> explain) {
         ConditionMatchResult result = new ConditionMatchResult();
-        if (rule.conditionGroups == null || rule.conditionGroups.isEmpty())
-        {
+        if (rule.conditionGroups == null || rule.conditionGroups.isEmpty()) {
             result.matched = true;
             result.matchedGroupNo = 1;
             return result;
         }
         List<Boolean> groupResults = new ArrayList<>(rule.conditionGroups.size());
-        for (RuntimeConditionGroup group : rule.conditionGroups)
-        {
+        for (RuntimeConditionGroup group : rule.conditionGroups) {
             boolean groupPass = true;
-            for (RuntimeCondition condition : group.conditions)
-            {
+            for (RuntimeCondition condition : group.conditions) {
                 Object leftValue = variableValues.get(condition.variableCode);
                 boolean pass = evaluateCondition(condition, leftValue, conditionContext);
                 LinkedHashMap<String, Object> item = new LinkedHashMap<>();
@@ -2080,62 +1777,51 @@ public class CostRunServiceImpl implements ICostRunService
                 groupPass = groupPass && pass;
             }
             groupResults.add(groupPass);
-            if (groupPass && result.matchedGroupNo == null)
-            {
+            if (groupPass && result.matchedGroupNo == null) {
                 result.matchedGroupNo = group.groupNo;
             }
         }
-        if ("OR".equalsIgnoreCase(rule.conditionLogic))
-        {
+        if ("OR".equalsIgnoreCase(rule.conditionLogic)) {
             result.matched = groupResults.stream().anyMatch(Boolean::booleanValue);
-            if (!result.matched)
-            {
+            if (!result.matched) {
                 result.matchedGroupNo = null;
             }
             return result;
         }
         result.matched = groupResults.stream().allMatch(Boolean::booleanValue);
-        if (!result.matched)
-        {
+        if (!result.matched) {
             result.matchedGroupNo = null;
         }
         return result;
     }
 
-    private boolean evaluateCondition(RuntimeCondition condition, Object leftValue, Map<String, Object> context)
-    {
+    private boolean evaluateCondition(RuntimeCondition condition, Object leftValue, Map<String, Object> context) {
         String operatorCode = condition.operatorCode;
-        if (OP_EXPR.equals(operatorCode))
-        {
+        if (OP_EXPR.equals(operatorCode)) {
             Object exprResult = evaluateExpression(condition.compareValue, context);
             return Boolean.TRUE.equals(convertBoolean(exprResult));
         }
-        if (OP_IN.equals(operatorCode) || OP_NOT_IN.equals(operatorCode))
-        {
+        if (OP_IN.equals(operatorCode) || OP_NOT_IN.equals(operatorCode)) {
             List<String> values = splitValues(condition.compareValue);
             boolean contains = values.contains(String.valueOf(leftValue));
             return OP_IN.equals(operatorCode) ? contains : !contains;
         }
-        if (OP_BETWEEN.equals(operatorCode))
-        {
+        if (OP_BETWEEN.equals(operatorCode)) {
             List<String> values = splitValues(condition.compareValue);
-            if (values.size() < 2)
-            {
+            if (values.size() < 2) {
                 return false;
             }
             BigDecimal left = toBigDecimal(leftValue);
             BigDecimal start = toBigDecimal(values.get(0));
             BigDecimal end = toBigDecimal(values.get(1));
-            if (left == null || start == null || end == null)
-            {
+            if (left == null || start == null || end == null) {
                 return false;
             }
             return left.compareTo(start) >= 0 && left.compareTo(end) <= 0;
         }
         BigDecimal leftNumber = toBigDecimal(leftValue);
         BigDecimal rightNumber = toBigDecimal(condition.compareValue);
-        switch (operatorCode)
-        {
+        switch (operatorCode) {
             case OP_EQ:
                 return Objects.equals(String.valueOf(leftValue), String.valueOf(condition.compareValue));
             case OP_NE:
@@ -2153,29 +1839,22 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private RuntimeTier locateTier(List<RuntimeTier> tiers, BigDecimal quantityValue)
-    {
-        if (quantityValue == null)
-        {
+    private RuntimeTier locateTier(List<RuntimeTier> tiers, BigDecimal quantityValue) {
+        if (quantityValue == null) {
             return null;
         }
-        for (RuntimeTier tier : tiers)
-        {
+        for (RuntimeTier tier : tiers) {
             BigDecimal start = tier.startValue;
             BigDecimal end = tier.endValue;
             boolean pass;
-            if (INTERVAL_LORC.equals(tier.intervalMode))
-            {
+            if (INTERVAL_LORC.equals(tier.intervalMode)) {
                 pass = (start == null || quantityValue.compareTo(start) > 0)
                         && (end == null || quantityValue.compareTo(end) <= 0);
-            }
-            else
-            {
+            } else {
                 pass = (start == null || quantityValue.compareTo(start) >= 0)
                         && (end == null || quantityValue.compareTo(end) < 0);
             }
-            if (pass)
-            {
+            if (pass) {
                 return tier;
             }
         }
@@ -2183,11 +1862,9 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private PricingResult calculateAmount(RuntimeRule rule, RuntimeTier tier, Map<String, Object> variableValues,
-            Map<String, Object> baseContext, Map<String, Object> feeResultContext, RuntimeSnapshot snapshot)
-    {
+                                          Map<String, Object> baseContext, Map<String, Object> feeResultContext, RuntimeSnapshot snapshot) {
         BigDecimal quantityValue = toBigDecimal(variableValues.get(rule.quantityVariableCode));
-        if (quantityValue == null)
-        {
+        if (quantityValue == null) {
             quantityValue = BigDecimal.ONE;
         }
         PricingResult result = new PricingResult();
@@ -2199,22 +1876,17 @@ public class CostRunServiceImpl implements ICostRunService
         result.pricingExplain.put("quantityValue", result.quantityValue);
         result.pricingExplain.put("pricingMode", rule.pricingMode);
         result.pricingExplain.put("matchedGroupNo", rule.matchedGroupNo);
-        if (RULE_TYPE_FIXED_RATE.equals(rule.ruleType))
-        {
+        if (RULE_TYPE_FIXED_RATE.equals(rule.ruleType)) {
             BigDecimal unitPrice = resolveGroupedPricingValue(rule, "rateValue");
             result.unitPrice = defaultZero(unitPrice).setScale(6, RoundingMode.HALF_UP);
             result.amountValue = result.unitPrice.multiply(result.quantityValue).setScale(2, RoundingMode.HALF_UP);
             result.pricingExplain.put("pricingSource", "FIXED_RATE");
-        }
-        else if (RULE_TYPE_FIXED_AMOUNT.equals(rule.ruleType))
-        {
+        } else if (RULE_TYPE_FIXED_AMOUNT.equals(rule.ruleType)) {
             BigDecimal amountValue = resolveGroupedPricingValue(rule, "amountValue");
             result.unitPrice = defaultZero(amountValue).setScale(6, RoundingMode.HALF_UP);
             result.amountValue = defaultZero(amountValue).setScale(2, RoundingMode.HALF_UP);
             result.pricingExplain.put("pricingSource", "FIXED_AMOUNT");
-        }
-        else if (RULE_TYPE_FORMULA.equals(rule.ruleType))
-        {
+        } else if (RULE_TYPE_FORMULA.equals(rule.ruleType)) {
             RuntimeFormula formula = requireRuleFormula(snapshot, rule);
             String expression = formula.formulaExpr;
             Object amountValue = evaluateExpression(expression, mergeContext(baseContext, variableValues, feeResultContext));
@@ -2226,18 +1898,14 @@ public class CostRunServiceImpl implements ICostRunService
             result.pricingExplain.put("formulaCode", formula.formulaCode);
             result.pricingExplain.put("formulaName", formula.formulaName);
             result.pricingExplain.put("businessFormula", formula.businessFormula);
-        }
-        else if (RULE_TYPE_TIER_RATE.equals(rule.ruleType))
-        {
+        } else if (RULE_TYPE_TIER_RATE.equals(rule.ruleType)) {
             BigDecimal unitPrice = tier == null ? BigDecimal.ZERO : defaultZero(tier.rateValue);
             result.unitPrice = unitPrice.setScale(6, RoundingMode.HALF_UP);
             result.amountValue = result.unitPrice.multiply(result.quantityValue).setScale(2, RoundingMode.HALF_UP);
             result.pricingExplain.put("pricingSource", "TIER_RATE");
             result.pricingExplain.put("tierNo", tier == null ? null : tier.tierNo);
             result.pricingExplain.put("tierRange", tier == null ? null : tier.buildRangeSummary());
-        }
-        else
-        {
+        } else {
             throw new ServiceException("鏆備笉鏀寔鐨勮鍒欑被鍨嬶細" + rule.ruleType);
         }
         result.pricingExplain.put("unitPrice", result.unitPrice);
@@ -2245,29 +1913,22 @@ public class CostRunServiceImpl implements ICostRunService
         return result;
     }
 
-    private BigDecimal resolveGroupedPricingValue(RuntimeRule rule, String valueKey)
-    {
-        if (!PRICING_MODE_GROUPED.equalsIgnoreCase(rule.pricingMode))
-        {
+    private BigDecimal resolveGroupedPricingValue(RuntimeRule rule, String valueKey) {
+        if (!PRICING_MODE_GROUPED.equalsIgnoreCase(rule.pricingMode)) {
             return toBigDecimal(rule.pricingConfig.get(valueKey));
         }
         Object rawGroupPrices = rule.pricingConfig.get("groupPrices");
-        if (!(rawGroupPrices instanceof List<?> groupPrices))
-        {
+        if (!(rawGroupPrices instanceof List<?> groupPrices)) {
             throw new ServiceException(String.format("规则 %s 未配置组合定价明细", rule.ruleCode));
         }
-        for (Object item : groupPrices)
-        {
-            if (!(item instanceof Map<?, ?> rawMap))
-            {
+        for (Object item : groupPrices) {
+            if (!(item instanceof Map<?, ?> rawMap)) {
                 continue;
             }
             Integer groupNo = intValue(rawMap.get("groupNo"));
-            if (Objects.equals(groupNo, rule.matchedGroupNo))
-            {
+            if (Objects.equals(groupNo, rule.matchedGroupNo)) {
                 BigDecimal value = toBigDecimal(rawMap.get(valueKey));
-                if (value == null)
-                {
+                if (value == null) {
                     throw new ServiceException(String.format("规则 %s 的组合组 %s 未配置定价值", rule.ruleCode, groupNo));
                 }
                 return value;
@@ -2276,13 +1937,11 @@ public class CostRunServiceImpl implements ICostRunService
         throw new ServiceException(String.format("规则 %s 未找到命中组合组 %s 对应的定价配置", rule.ruleCode, rule.matchedGroupNo));
     }
 
-    private List<Map<String, Object>> buildFeeTimeline(RuntimeFee fee, RuleMatchResult matchResult, PricingResult pricingResult)
-    {
+    private List<Map<String, Object>> buildFeeTimeline(RuntimeFee fee, RuleMatchResult matchResult, PricingResult pricingResult) {
         List<Map<String, Object>> steps = new ArrayList<>();
         steps.add(buildStep("FEE", fee.feeCode, fee.feeName, "杩涘叆璐圭敤璁＄畻"));
         steps.add(buildStep("RULE", matchResult.rule.ruleCode, matchResult.rule.ruleName, "鍛戒腑瑙勫垯"));
-        if (matchResult.tier != null)
-        {
+        if (matchResult.tier != null) {
             steps.add(buildStep("TIER", String.valueOf(matchResult.tier.tierNo), matchResult.tier.buildRangeSummary(), "鍛戒腑闃舵鍖洪棿"));
         }
         steps.add(buildStep("PRICING", fee.feeCode, fee.feeName,
@@ -2291,16 +1950,14 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     /**
-     * 鏋勫缓甯﹁浠峰崟浣嶈涔夌殑瀹氫环鎽樿锛屼究浜庣粨鏋滆拷婧拰涓氬姟澶嶆牳銆?     */
-    private String buildPricingStepSummary(String unitCode, PricingResult pricingResult)
-    {
+     * 鏋勫缓甯﹁浠峰崟浣嶈涔夌殑瀹氫环鎽樿锛屼究浜庣粨鏋滆拷婧拰涓氬姟澶嶆牳銆?
+     */
+    private String buildPricingStepSummary(String unitCode, PricingResult pricingResult) {
         String pricingSource = pricingResult.pricingExplain == null ? "" : stringValue(pricingResult.pricingExplain.get("pricingSource"));
-        if (RULE_TYPE_FIXED_AMOUNT.equals(pricingSource) || "FIXED_AMOUNT".equals(pricingSource) || "元".equals(unitCode))
-        {
+        if (RULE_TYPE_FIXED_AMOUNT.equals(pricingSource) || "FIXED_AMOUNT".equals(pricingSource) || "元".equals(unitCode)) {
             return String.format(Locale.ROOT, "计价单位 %s，按固定金额计价，结果 %s 元", firstNonBlank(unitCode, "元"), pricingResult.amountValue);
         }
-        if (pricingResult.quantityValue == null)
-        {
+        if (pricingResult.quantityValue == null) {
             return String.format(Locale.ROOT, "计价单位 %s，单价 %s，金额 %s", firstNonBlank(unitCode, "-"), pricingResult.unitPrice, pricingResult.amountValue);
         }
         String normalizedUnit = firstNonBlank(unitCode, "-");
@@ -2313,46 +1970,37 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     /**
-     * 缁熶竴杈撳嚭璁′环鍗曚綅涓氬姟鍙ｅ緞锛屼緵杩芥函瑙ｉ噴鍜岀粨鏋滈〉鐩存帴灞曠ず銆?     */
-    private String buildUnitSemanticSummary(String unitCode)
-    {
-        if ("吨".equals(unitCode))
-        {
+     * 缁熶竴杈撳嚭璁′环鍗曚綅涓氬姟鍙ｅ緞锛屼緵杩芥函瑙ｉ噴鍜岀粨鏋滈〉鐩存帴灞曠ず銆?
+     */
+    private String buildUnitSemanticSummary(String unitCode) {
+        if ("吨".equals(unitCode)) {
             return "按重量吨数计价";
         }
-        if ("天".equals(unitCode))
-        {
+        if ("天".equals(unitCode)) {
             return "按天数计价";
         }
-        if ("次".equals(unitCode))
-        {
+        if ("次".equals(unitCode)) {
             return "按次数计价";
         }
-        if ("航次".equals(unitCode))
-        {
+        if ("航次".equals(unitCode)) {
             return "按航次计价";
         }
-        if ("人".equals(unitCode))
-        {
+        if ("人".equals(unitCode)) {
             return "按人数计价";
         }
-        if ("箱".equals(unitCode))
-        {
+        if ("箱".equals(unitCode)) {
             return "按箱量计价";
         }
-        if ("元".equals(unitCode))
-        {
+        if ("元".equals(unitCode)) {
             return "按固定金额计价";
         }
-        if ("平方米*天".equals(unitCode) || "平方米·天".equals(unitCode))
-        {
+        if ("平方米*天".equals(unitCode) || "平方米·天".equals(unitCode)) {
             return "按面积天复合量计价";
         }
         return "按当前计价单位口径计价";
     }
 
-    private Map<String, Object> buildTraceView(CostResultTrace trace)
-    {
+    private Map<String, Object> buildTraceView(CostResultTrace trace) {
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("traceId", trace.getTraceId());
         result.put("sceneId", trace.getSceneId());
@@ -2367,11 +2015,9 @@ public class CostRunServiceImpl implements ICostRunService
         return result;
     }
 
-    private List<Map<String, Object>> buildTemplateFieldItems(RuntimeSnapshot snapshot)
-    {
+    private List<Map<String, Object>> buildTemplateFieldItems(RuntimeSnapshot snapshot) {
         List<Map<String, Object>> fields = new ArrayList<>();
-        for (RuntimeVariable variable : snapshot.variables)
-        {
+        for (RuntimeVariable variable : snapshot.variables) {
             LinkedHashMap<String, Object> field = new LinkedHashMap<>();
             String path = resolveTemplatePath(variable);
             boolean formulaDerived = SOURCE_TYPE_FORMULA.equals(variable.sourceType);
@@ -2390,8 +2036,7 @@ public class CostRunServiceImpl implements ICostRunService
         return fields;
     }
 
-    private List<Map<String, Object>> buildFeeTemplateFieldItems(FeeTemplateContext templateContext)
-    {
+    private List<Map<String, Object>> buildFeeTemplateFieldItems(FeeTemplateContext templateContext) {
         return templateContext.variables.values().stream()
                 .sorted(Comparator.comparing((FeeTemplateVariable item) -> !item.includedInTemplate)
                         .thenComparingInt(item -> item.variable.sortNo == null ? 9999 : item.variable.sortNo)
@@ -2418,50 +2063,40 @@ public class CostRunServiceImpl implements ICostRunService
                 .collect(Collectors.toList());
     }
 
-    private FeeTemplateContext buildFeeTemplateContext(RuntimeSnapshot snapshot, List<RuntimeRule> rules)
-    {
+    private FeeTemplateContext buildFeeTemplateContext(RuntimeSnapshot snapshot, List<RuntimeRule> rules) {
         FeeTemplateContext context = new FeeTemplateContext();
-        if (rules == null || rules.isEmpty())
-        {
+        if (rules == null || rules.isEmpty()) {
             return context;
         }
         Map<String, RuntimeVariable> variableMap = snapshot.variablesByCode == null
                 ? Collections.emptyMap() : snapshot.variablesByCode;
-        for (RuntimeRule rule : rules)
-        {
+        for (RuntimeRule rule : rules) {
             LinkedHashSet<String> conditionVariableCodes = new LinkedHashSet<>();
             LinkedHashSet<String> expressionVariableCodes = new LinkedHashSet<>();
             LinkedHashSet<String> formulaVariableCodes = new LinkedHashSet<>();
-            if (StringUtils.isNotEmpty(rule.quantityVariableCode))
-            {
+            if (StringUtils.isNotEmpty(rule.quantityVariableCode)) {
                 collectTemplateVariable(context, snapshot, variableMap, rule.quantityVariableCode,
                         "QUANTITY_BASIS", rule.ruleCode, new LinkedHashSet<>());
             }
-            for (RuntimeCondition condition : rule.conditions)
-            {
-                if (StringUtils.isNotEmpty(condition.variableCode))
-                {
+            for (RuntimeCondition condition : rule.conditions) {
+                if (StringUtils.isNotEmpty(condition.variableCode)) {
                     conditionVariableCodes.add(condition.variableCode);
                     collectTemplateVariable(context, snapshot, variableMap, condition.variableCode,
                             "CONDITION", rule.ruleCode, new LinkedHashSet<>());
                 }
-                if (OP_EXPR.equalsIgnoreCase(condition.operatorCode))
-                {
+                if (OP_EXPR.equalsIgnoreCase(condition.operatorCode)) {
                     Set<String> referencedVariables = extractExpressionVariableCodes(condition.compareValue, variableMap);
                     expressionVariableCodes.addAll(referencedVariables);
-                    for (String variableCode : referencedVariables)
-                    {
+                    for (String variableCode : referencedVariables) {
                         collectTemplateVariable(context, snapshot, variableMap, variableCode,
                                 "EXPRESSION_INPUT", rule.ruleCode, new LinkedHashSet<>());
                     }
                 }
             }
             String ruleExpression = resolveRuleExpression(snapshot, rule);
-            if (StringUtils.isNotEmpty(ruleExpression))
-            {
+            if (StringUtils.isNotEmpty(ruleExpression)) {
                 formulaVariableCodes.addAll(extractExpressionVariableCodes(ruleExpression, variableMap));
-                for (String variableCode : formulaVariableCodes)
-                {
+                for (String variableCode : formulaVariableCodes) {
                     collectTemplateVariable(context, snapshot, variableMap, variableCode,
                             "FORMULA_INPUT", rule.ruleCode, new LinkedHashSet<>());
                 }
@@ -2472,64 +2107,50 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private void collectTemplateVariable(FeeTemplateContext context, RuntimeSnapshot snapshot, Map<String, RuntimeVariable> variableMap,
-                                         String variableCode, String templateRole, String sourceRuleCode, Set<String> dependencyStack)
-    {
-        if (StringUtils.isEmpty(variableCode) || variableMap == null)
-        {
+                                         String variableCode, String templateRole, String sourceRuleCode, Set<String> dependencyStack) {
+        if (StringUtils.isEmpty(variableCode) || variableMap == null) {
             return;
         }
         RuntimeVariable variable = variableMap.get(variableCode);
-        if (variable == null)
-        {
+        if (variable == null) {
             return;
         }
         FeeTemplateVariable templateVariable = context.variables.computeIfAbsent(variableCode,
                 key -> new FeeTemplateVariable(variable));
-        if (StringUtils.isNotEmpty(templateRole))
-        {
+        if (StringUtils.isNotEmpty(templateRole)) {
             templateVariable.templateRoles.add(templateRole);
         }
-        if (StringUtils.isNotEmpty(sourceRuleCode))
-        {
+        if (StringUtils.isNotEmpty(sourceRuleCode)) {
             templateVariable.sourceRuleCodes.add(sourceRuleCode);
         }
-        if (!SOURCE_TYPE_FORMULA.equalsIgnoreCase(variable.sourceType))
-        {
+        if (!SOURCE_TYPE_FORMULA.equalsIgnoreCase(variable.sourceType)) {
             templateVariable.includedInTemplate = true;
-            if (SOURCE_TYPE_REMOTE.equalsIgnoreCase(variable.sourceType))
-            {
+            if (SOURCE_TYPE_REMOTE.equalsIgnoreCase(variable.sourceType)) {
                 templateVariable.templateRoles.add("REMOTE_REQUIRED");
             }
             return;
         }
         templateVariable.templateRoles.add("FORMULA_DERIVED");
-        if (!dependencyStack.add(variableCode))
-        {
+        if (!dependencyStack.add(variableCode)) {
             return;
         }
-        try
-        {
+        try {
             String formulaExpression = resolveVariableFormula(snapshot, variable);
-            for (String dependencyCode : extractExpressionVariableCodes(formulaExpression, variableMap))
-            {
-                if (StringUtils.equals(variableCode, dependencyCode))
-                {
+            for (String dependencyCode : extractExpressionVariableCodes(formulaExpression, variableMap)) {
+                if (StringUtils.equals(variableCode, dependencyCode)) {
                     continue;
                 }
                 templateVariable.dependsOn.add(dependencyCode);
                 collectTemplateVariable(context, snapshot, variableMap, dependencyCode,
                         "FORMULA_INPUT", sourceRuleCode, dependencyStack);
             }
-        }
-        finally
-        {
+        } finally {
             dependencyStack.remove(variableCode);
         }
     }
 
     private Map<String, Object> buildFeeRuleSummary(RuntimeRule rule, Set<String> conditionVariableCodes,
-                                                    Set<String> expressionVariableCodes, Set<String> formulaVariableCodes)
-    {
+                                                    Set<String> expressionVariableCodes, Set<String> formulaVariableCodes) {
         LinkedHashMap<String, Object> item = new LinkedHashMap<>();
         item.put("ruleCode", rule.ruleCode);
         item.put("ruleName", rule.ruleName);
@@ -2545,10 +2166,8 @@ public class CostRunServiceImpl implements ICostRunService
         return item;
     }
 
-    private List<RuntimeFee> resolveFeeExecutionChain(RuntimeSnapshot snapshot, RuntimeFee targetFee)
-    {
-        if (snapshot == null || targetFee == null)
-        {
+    private List<RuntimeFee> resolveFeeExecutionChain(RuntimeSnapshot snapshot, RuntimeFee targetFee) {
+        if (snapshot == null || targetFee == null) {
             return Collections.emptyList();
         }
         LinkedHashMap<String, RuntimeFee> orderedFees = new LinkedHashMap<>();
@@ -2557,73 +2176,55 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private void collectFeeExecutionDependency(RuntimeSnapshot snapshot, String feeCode,
-            Map<String, RuntimeFee> orderedFees, Set<String> dependencyStack)
-    {
-        if (StringUtils.isEmpty(feeCode) || snapshot == null || snapshot.feesByCode == null)
-        {
+                                               Map<String, RuntimeFee> orderedFees, Set<String> dependencyStack) {
+        if (StringUtils.isEmpty(feeCode) || snapshot == null || snapshot.feesByCode == null) {
             return;
         }
-        if (orderedFees.containsKey(feeCode))
-        {
+        if (orderedFees.containsKey(feeCode)) {
             return;
         }
         RuntimeFee currentFee = snapshot.feesByCode.get(feeCode);
-        if (currentFee == null)
-        {
+        if (currentFee == null) {
             return;
         }
-        if (!dependencyStack.add(feeCode))
-        {
+        if (!dependencyStack.add(feeCode)) {
             throw new ServiceException("费用公式存在循环依赖：" + String.join(" -> ", dependencyStack) + " -> " + feeCode);
         }
-        try
-        {
-            for (RuntimeRule rule : snapshot.rulesByFeeCode.getOrDefault(feeCode, Collections.emptyList()))
-            {
-                for (String dependencyFeeCode : extractExpressionFeeCodes(resolveRuleExpression(snapshot, rule)))
-                {
-                    if (!StringUtils.equals(feeCode, dependencyFeeCode))
-                    {
+        try {
+            for (RuntimeRule rule : snapshot.rulesByFeeCode.getOrDefault(feeCode, Collections.emptyList())) {
+                for (String dependencyFeeCode : extractExpressionFeeCodes(resolveRuleExpression(snapshot, rule))) {
+                    if (!StringUtils.equals(feeCode, dependencyFeeCode)) {
                         collectFeeExecutionDependency(snapshot, dependencyFeeCode, orderedFees, dependencyStack);
                     }
                 }
             }
             orderedFees.put(feeCode, currentFee);
-        }
-        finally
-        {
+        } finally {
             dependencyStack.remove(feeCode);
         }
     }
 
-    private Set<String> extractExpressionFeeCodes(String expression)
-    {
+    private Set<String> extractExpressionFeeCodes(String expression) {
         LinkedHashSet<String> result = new LinkedHashSet<>();
-        if (StringUtils.isEmpty(expression))
-        {
+        if (StringUtils.isEmpty(expression)) {
             return result;
         }
         Matcher matcher = FEE_REFERENCE_PATTERN.matcher(expression);
-        while (matcher.find())
-        {
+        while (matcher.find()) {
             String feeCode = matcher.group(1);
-            if (StringUtils.isNotEmpty(feeCode))
-            {
+            if (StringUtils.isNotEmpty(feeCode)) {
                 result.add(feeCode);
             }
         }
         return result;
     }
 
-    private List<RuntimeVariable> buildExecutionVariables(RuntimeSnapshot snapshot, List<RuntimeRule> rules)
-    {
-        if (snapshot == null || rules == null || rules.isEmpty())
-        {
+    private List<RuntimeVariable> buildExecutionVariables(RuntimeSnapshot snapshot, List<RuntimeRule> rules) {
+        if (snapshot == null || rules == null || rules.isEmpty()) {
             return Collections.emptyList();
         }
         FeeTemplateContext context = buildFeeTemplateContext(snapshot, rules);
-        if (context.variables.isEmpty())
-        {
+        if (context.variables.isEmpty()) {
             return Collections.emptyList();
         }
         Set<String> variableCodes = context.variables.keySet();
@@ -2632,34 +2233,27 @@ public class CostRunServiceImpl implements ICostRunService
                 .collect(Collectors.toList());
     }
 
-    private List<RuntimeVariable> resolveExecutionVariables(RuntimeSnapshot snapshot, List<RuntimeFee> feesToExecute)
-    {
-        if (snapshot == null || feesToExecute == null || feesToExecute.isEmpty() || feesToExecute == snapshot.fees)
-        {
+    private List<RuntimeVariable> resolveExecutionVariables(RuntimeSnapshot snapshot, List<RuntimeFee> feesToExecute) {
+        if (snapshot == null || feesToExecute == null || feesToExecute.isEmpty() || feesToExecute == snapshot.fees) {
             return snapshot == null ? Collections.emptyList() : snapshot.variables;
         }
-        if (feesToExecute.size() == 1)
-        {
+        if (feesToExecute.size() == 1) {
             RuntimeFee fee = feesToExecute.get(0);
             return fee == null || snapshot.executionVariablesByFeeCode == null
                     ? Collections.emptyList()
                     : snapshot.executionVariablesByFeeCode.getOrDefault(fee.feeCode, Collections.emptyList());
         }
         LinkedHashSet<String> variableCodes = new LinkedHashSet<>();
-        for (RuntimeFee fee : feesToExecute)
-        {
-            if (fee == null || snapshot.executionVariablesByFeeCode == null)
-            {
+        for (RuntimeFee fee : feesToExecute) {
+            if (fee == null || snapshot.executionVariablesByFeeCode == null) {
                 continue;
             }
             for (RuntimeVariable variable : snapshot.executionVariablesByFeeCode
-                    .getOrDefault(fee.feeCode, Collections.emptyList()))
-            {
+                    .getOrDefault(fee.feeCode, Collections.emptyList())) {
                 variableCodes.add(variable.variableCode);
             }
         }
-        if (variableCodes.isEmpty())
-        {
+        if (variableCodes.isEmpty()) {
             return Collections.emptyList();
         }
         return snapshot.variables.stream()
@@ -2667,62 +2261,48 @@ public class CostRunServiceImpl implements ICostRunService
                 .collect(Collectors.toList());
     }
 
-    private RuntimeFee resolveRuntimeFee(RuntimeSnapshot snapshot, Long feeId, String feeCode)
-    {
-        if (feeId == null && StringUtils.isEmpty(feeCode))
-        {
+    private RuntimeFee resolveRuntimeFee(RuntimeSnapshot snapshot, Long feeId, String feeCode) {
+        if (feeId == null && StringUtils.isEmpty(feeCode)) {
             throw new ServiceException("璇锋寚瀹氳垂鐢?ID 鎴?feeCode");
         }
-        if (feeId != null)
-        {
-            for (RuntimeFee fee : snapshot.fees)
-            {
-                if (Objects.equals(fee.feeId, feeId))
-                {
+        if (feeId != null) {
+            for (RuntimeFee fee : snapshot.fees) {
+                if (Objects.equals(fee.feeId, feeId)) {
                     return fee;
                 }
             }
         }
-        if (StringUtils.isNotEmpty(feeCode) && snapshot.feesByCode != null && snapshot.feesByCode.containsKey(feeCode))
-        {
+        if (StringUtils.isNotEmpty(feeCode) && snapshot.feesByCode != null && snapshot.feesByCode.containsKey(feeCode)) {
             return snapshot.feesByCode.get(feeCode);
         }
         throw new ServiceException("指定费用在当前发布版本快照中不存在");
     }
 
-    private String resolveRuleExpression(RuntimeSnapshot snapshot, RuntimeRule rule)
-    {
-        if (RULE_TYPE_FORMULA.equals(rule.ruleType))
-        {
+    private String resolveRuleExpression(RuntimeSnapshot snapshot, RuntimeRule rule) {
+        if (RULE_TYPE_FORMULA.equals(rule.ruleType)) {
             return requireRuleFormula(snapshot, rule).formulaExpr;
         }
         return rule.amountFormula;
     }
 
-    private Set<String> extractExpressionVariableCodes(String expression, Map<String, RuntimeVariable> variableMap)
-    {
+    private Set<String> extractExpressionVariableCodes(String expression, Map<String, RuntimeVariable> variableMap) {
         LinkedHashSet<String> result = new LinkedHashSet<>();
-        if (StringUtils.isEmpty(expression) || variableMap == null || variableMap.isEmpty())
-        {
+        if (StringUtils.isEmpty(expression) || variableMap == null || variableMap.isEmpty()) {
             return result;
         }
         String sanitized = expression.replaceAll("'[^']*'", " ").replaceAll("\"[^\"]*\"", " ");
         Matcher matcher = EXPRESSION_REFERENCE_PATTERN.matcher(sanitized);
-        while (matcher.find())
-        {
+        while (matcher.find()) {
             String candidate = firstNonBlank(matcher.group(1), matcher.group(2));
-            if (StringUtils.isNotEmpty(candidate) && variableMap.containsKey(candidate))
-            {
+            if (StringUtils.isNotEmpty(candidate) && variableMap.containsKey(candidate)) {
                 result.add(candidate);
             }
         }
         return result;
     }
 
-    private String buildTemplateInputJson(List<RuntimeVariable> variables, String taskType, String objectDimension)
-    {
-        if (TASK_TYPE_FORMAL_BATCH.equals(taskType) || TASK_TYPE_SIMULATION_BATCH.equals(taskType))
-        {
+    private String buildTemplateInputJson(List<RuntimeVariable> variables, String taskType, String objectDimension) {
+        if (TASK_TYPE_FORMAL_BATCH.equals(taskType) || TASK_TYPE_SIMULATION_BATCH.equals(taskType)) {
             List<Map<String, Object>> samples = new ArrayList<>();
             samples.add(buildSelectedInputTemplate(variables, taskType, 1, objectDimension));
             samples.add(buildSelectedInputTemplate(variables, taskType, 2, objectDimension));
@@ -2731,65 +2311,50 @@ public class CostRunServiceImpl implements ICostRunService
         return writeJson(buildSelectedInputTemplate(variables, taskType, 1, objectDimension));
     }
 
-    private String normalizeTemplateTaskType(String taskType)
-    {
-        if (StringUtils.isEmpty(taskType))
-        {
+    private String normalizeTemplateTaskType(String taskType) {
+        if (StringUtils.isEmpty(taskType)) {
             return TASK_TYPE_FORMAL_SINGLE;
         }
         return taskType.trim().toUpperCase(Locale.ROOT);
     }
 
-    private RuntimeSnapshot loadRuntimeSnapshot(Long sceneId, Long versionId, boolean requireFormalVersion)
-    {
+    private RuntimeSnapshot loadRuntimeSnapshot(Long sceneId, Long versionId, boolean requireFormalVersion) {
         return loadRuntimeSnapshot(sceneId, versionId, requireFormalVersion, false);
     }
 
     private RuntimeSnapshot loadRuntimeSnapshot(Long sceneId, Long versionId, boolean requireFormalVersion,
-                                                boolean preferDraftWhenVersionMissing)
-    {
+                                                boolean preferDraftWhenVersionMissing) {
         CostScene scene = sceneMapper.selectById(sceneId);
-        if (scene == null)
-        {
+        if (scene == null) {
             throw new ServiceException("鍦烘櫙涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
-        if (!requireFormalVersion && preferDraftWhenVersionMissing && versionId == null)
-        {
+        if (!requireFormalVersion && preferDraftWhenVersionMissing && versionId == null) {
             return buildDraftRuntimeSnapshot(scene);
         }
         Long targetVersionId = versionId == null ? scene.getActiveVersionId() : versionId;
-        if (targetVersionId == null && !requireFormalVersion)
-        {
+        if (targetVersionId == null && !requireFormalVersion) {
             return buildDraftRuntimeSnapshot(scene);
         }
-        if (targetVersionId == null)
-        {
+        if (targetVersionId == null) {
             throw new ServiceException("当前场景尚未设置生效版本，无法执行运行链");
         }
         CostPublishVersion version = publishVersionMapper.selectPublishVersionDetail(targetVersionId);
-        if (version == null)
-        {
+        if (version == null) {
             throw new ServiceException("鍙戝竷鐗堟湰涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
-        if (requireFormalVersion && versionId == null && !"ACTIVE".equals(version.getVersionStatus()))
-        {
+        if (requireFormalVersion && versionId == null && !"ACTIVE".equals(version.getVersionStatus())) {
             throw new ServiceException("正式核算默认只能按当前生效版本执行");
         }
         String cacheKey = buildRuntimeCacheKey(targetVersionId);
-        try
-        {
+        try {
             String cached = redisCache.getCacheObject(cacheKey);
-            if (StringUtils.isNotEmpty(cached))
-            {
+            if (StringUtils.isNotEmpty(cached)) {
                 return hydrateRuntimeSnapshot(objectMapper.readValue(cached, RuntimeSnapshot.class));
             }
-        }
-        catch (Exception ignored)
-        {
+        } catch (Exception ignored) {
         }
         List<CostPublishSnapshot> snapshots = publishVersionMapper.selectSnapshotList(targetVersionId, null);
-        if (snapshots == null || snapshots.isEmpty())
-        {
+        if (snapshots == null || snapshots.isEmpty()) {
             throw new ServiceException("鍙戝竷蹇収涓虹┖锛屾棤娉曟墽琛岃瘯绠楁垨姝ｅ紡鏍哥畻");
         }
 
@@ -2805,16 +2370,12 @@ public class CostRunServiceImpl implements ICostRunService
                         .eq(CostFeeItem::getSceneId, sceneId))
                 .stream()
                 .collect(Collectors.toMap(CostFeeItem::getFeeCode, CostFeeItem::getFeeId, (left, right) -> left, LinkedHashMap::new));
-        for (CostPublishSnapshot item : snapshots)
-        {
+        for (CostPublishSnapshot item : snapshots) {
             Map<String, Object> json = parseJsonMap(item.getSnapshotJson());
-            if ("SCENE".equals(item.getSnapshotType()))
-            {
+            if ("SCENE".equals(item.getSnapshotType())) {
                 snapshot.defaultObjectDimension = firstNonBlank(stringValue(json.get("defaultObjectDimension")),
                         snapshot.defaultObjectDimension);
-            }
-            else if ("FEE".equals(item.getSnapshotType()))
-            {
+            } else if ("FEE".equals(item.getSnapshotType())) {
                 RuntimeFee fee = new RuntimeFee();
                 fee.feeCode = stringValue(json.get("feeCode"));
                 fee.feeId = feeIdByCode.get(fee.feeCode);
@@ -2824,9 +2385,7 @@ public class CostRunServiceImpl implements ICostRunService
                 fee.sortNo = intValue(json.get("sortNo"));
                 snapshot.fees.add(fee);
                 snapshot.feesByCode.put(fee.feeCode, fee);
-            }
-            else if ("VARIABLE".equals(item.getSnapshotType()))
-            {
+            } else if ("VARIABLE".equals(item.getSnapshotType())) {
                 RuntimeVariable variable = new RuntimeVariable();
                 variable.variableCode = stringValue(json.get("variableCode"));
                 variable.variableName = stringValue(json.get("variableName"));
@@ -2847,9 +2406,7 @@ public class CostRunServiceImpl implements ICostRunService
                 variable.sortNo = intValue(json.get("sortNo"));
                 snapshot.variables.add(variable);
                 snapshot.variablesByCode.put(variable.variableCode, variable);
-            }
-            else if ("FORMULA".equals(item.getSnapshotType()))
-            {
+            } else if ("FORMULA".equals(item.getSnapshotType())) {
                 RuntimeFormula formula = new RuntimeFormula();
                 formula.formulaCode = stringValue(json.get("formulaCode"));
                 formula.formulaName = stringValue(json.get("formulaName"));
@@ -2857,9 +2414,7 @@ public class CostRunServiceImpl implements ICostRunService
                 formula.formulaExpr = stringValue(json.get("formulaExpr"));
                 formula.returnType = stringValue(json.get("returnType"));
                 snapshot.formulasByCode.put(formula.formulaCode, formula);
-            }
-            else if ("RULE".equals(item.getSnapshotType()))
-            {
+            } else if ("RULE".equals(item.getSnapshotType())) {
                 RuntimeRule rule = new RuntimeRule();
                 rule.feeCode = stringValue(json.get("feeCode"));
                 rule.ruleCode = stringValue(json.get("ruleCode"));
@@ -2875,9 +2430,7 @@ public class CostRunServiceImpl implements ICostRunService
                 rule.amountBusinessFormula = stringValue(json.get("amountBusinessFormula"));
                 rule.sortNo = intValue(json.get("sortNo"));
                 snapshot.rulesByCode.put(rule.ruleCode, rule);
-            }
-            else if ("RULE_CONDITION".equals(item.getSnapshotType()))
-            {
+            } else if ("RULE_CONDITION".equals(item.getSnapshotType())) {
                 RuntimeCondition condition = new RuntimeCondition();
                 condition.ruleCode = stringValue(json.get("ruleCode"));
                 condition.groupNo = intValue(json.get("groupNo"));
@@ -2887,9 +2440,7 @@ public class CostRunServiceImpl implements ICostRunService
                 condition.operatorCode = stringValue(json.get("operatorCode"));
                 condition.compareValue = stringValue(json.get("compareValue"));
                 snapshot.conditionsByRuleCode.computeIfAbsent(condition.ruleCode, key -> new ArrayList<>()).add(condition);
-            }
-            else if ("RULE_TIER".equals(item.getSnapshotType()))
-            {
+            } else if ("RULE_TIER".equals(item.getSnapshotType())) {
                 RuntimeTier tier = new RuntimeTier();
                 tier.ruleCode = stringValue(json.get("ruleCode"));
                 tier.tierNo = intValue(json.get("tierNo"));
@@ -2902,74 +2453,57 @@ public class CostRunServiceImpl implements ICostRunService
         }
 
         snapshot = hydrateRuntimeSnapshot(snapshot);
-        try
-        {
+        try {
             redisCache.setCacheObject(cacheKey, objectMapper.writeValueAsString(snapshot), 30, TimeUnit.MINUTES);
-        }
-        catch (JsonProcessingException ignored)
-        {
+        } catch (JsonProcessingException ignored) {
         }
         return snapshot;
     }
 
-    private RuntimeSnapshot hydrateRuntimeSnapshot(RuntimeSnapshot snapshot)
-    {
-        if (snapshot == null)
-        {
+    private RuntimeSnapshot hydrateRuntimeSnapshot(RuntimeSnapshot snapshot) {
+        if (snapshot == null) {
             return new RuntimeSnapshot();
         }
-        if (snapshot.fees == null)
-        {
+        if (snapshot.fees == null) {
             snapshot.fees = new ArrayList<>();
         }
-        if (snapshot.variables == null)
-        {
+        if (snapshot.variables == null) {
             snapshot.variables = new ArrayList<>();
         }
-        if (snapshot.feesByCode == null)
-        {
+        if (snapshot.feesByCode == null) {
             snapshot.feesByCode = new LinkedHashMap<>();
         }
-        if (snapshot.variablesByCode == null)
-        {
+        if (snapshot.variablesByCode == null) {
             snapshot.variablesByCode = new LinkedHashMap<>();
         }
-        if (snapshot.rulesByCode == null)
-        {
+        if (snapshot.rulesByCode == null) {
             snapshot.rulesByCode = new LinkedHashMap<>();
         }
-        if (snapshot.rulesByFeeCode == null)
-        {
+        if (snapshot.rulesByFeeCode == null) {
             snapshot.rulesByFeeCode = new LinkedHashMap<>();
         }
-        if (snapshot.executionVariablesByFeeCode == null)
-        {
+        if (snapshot.executionVariablesByFeeCode == null) {
             snapshot.executionVariablesByFeeCode = new LinkedHashMap<>();
         }
-        if (snapshot.conditionsByRuleCode == null)
-        {
+        if (snapshot.conditionsByRuleCode == null) {
             snapshot.conditionsByRuleCode = new LinkedHashMap<>();
         }
-        if (snapshot.tiersByRuleCode == null)
-        {
+        if (snapshot.tiersByRuleCode == null) {
             snapshot.tiersByRuleCode = new LinkedHashMap<>();
         }
         snapshot.fees.sort(Comparator.comparingInt(item -> item.sortNo == null ? 9999 : item.sortNo));
         snapshot.variables.sort(Comparator.comparingInt(item -> item.sortNo == null ? 9999 : item.sortNo));
         snapshot.feesByCode.clear();
-        for (RuntimeFee fee : snapshot.fees)
-        {
+        for (RuntimeFee fee : snapshot.fees) {
             fee.objectDimension = firstNonBlank(fee.objectDimension, snapshot.defaultObjectDimension);
             snapshot.feesByCode.put(fee.feeCode, fee);
         }
         snapshot.variablesByCode.clear();
-        for (RuntimeVariable variable : snapshot.variables)
-        {
+        for (RuntimeVariable variable : snapshot.variables) {
             snapshot.variablesByCode.put(variable.variableCode, variable);
         }
         snapshot.rulesByFeeCode.clear();
-        for (RuntimeRule rule : snapshot.rulesByCode.values())
-        {
+        for (RuntimeRule rule : snapshot.rulesByCode.values()) {
             rule.conditions = snapshot.conditionsByRuleCode.getOrDefault(rule.ruleCode, Collections.emptyList()).stream()
                     .sorted(Comparator.comparingInt((RuntimeCondition item) -> item.groupNo == null ? 1 : item.groupNo)
                             .thenComparingInt(item -> item.sortNo == null ? 9999 : item.sortNo))
@@ -2980,22 +2514,19 @@ public class CostRunServiceImpl implements ICostRunService
             rule.conditionGroups = buildConditionGroups(rule.conditions);
             snapshot.rulesByFeeCode.computeIfAbsent(rule.feeCode, key -> new ArrayList<>()).add(rule);
         }
-        for (List<RuntimeRule> rules : snapshot.rulesByFeeCode.values())
-        {
+        for (List<RuntimeRule> rules : snapshot.rulesByFeeCode.values()) {
             rules.sort(Comparator.comparingInt((RuntimeRule item) -> item.priority == null ? 0 : item.priority).reversed()
                     .thenComparingInt(item -> item.sortNo == null ? 9999 : item.sortNo));
         }
         snapshot.executionVariablesByFeeCode.clear();
-        for (RuntimeFee fee : snapshot.fees)
-        {
+        for (RuntimeFee fee : snapshot.fees) {
             snapshot.executionVariablesByFeeCode.put(fee.feeCode,
                     buildExecutionVariables(snapshot, snapshot.rulesByFeeCode.getOrDefault(fee.feeCode, Collections.emptyList())));
         }
         return snapshot;
     }
 
-    private RuntimeSnapshot buildDraftRuntimeSnapshot(CostScene scene)
-    {
+    private RuntimeSnapshot buildDraftRuntimeSnapshot(CostScene scene) {
         CostFeeItem feeQuery = new CostFeeItem();
         feeQuery.setSceneId(scene.getSceneId());
         feeQuery.setStatus(STATUS_ENABLED);
@@ -3038,10 +2569,8 @@ public class CostRunServiceImpl implements ICostRunService
         return hydrateRuntimeSnapshot(snapshot);
     }
 
-    private void populateDraftFees(RuntimeSnapshot snapshot, List<CostFeeItem> feeItems)
-    {
-        for (CostFeeItem fee : feeItems)
-        {
+    private void populateDraftFees(RuntimeSnapshot snapshot, List<CostFeeItem> feeItems) {
+        for (CostFeeItem fee : feeItems) {
             RuntimeFee runtimeFee = new RuntimeFee();
             runtimeFee.feeId = fee.getFeeId();
             runtimeFee.feeCode = fee.getFeeCode();
@@ -3054,10 +2583,8 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private void populateDraftVariables(RuntimeSnapshot snapshot, List<CostVariable> variables)
-    {
-        for (CostVariable variable : variables)
-        {
+    private void populateDraftVariables(RuntimeSnapshot snapshot, List<CostVariable> variables) {
+        for (CostVariable variable : variables) {
             RuntimeVariable runtimeVariable = new RuntimeVariable();
             runtimeVariable.variableCode = variable.getVariableCode();
             runtimeVariable.variableName = variable.getVariableName();
@@ -3081,10 +2608,8 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private void populateDraftFormulas(RuntimeSnapshot snapshot, List<CostFormula> formulas)
-    {
-        for (CostFormula formula : formulas)
-        {
+    private void populateDraftFormulas(RuntimeSnapshot snapshot, List<CostFormula> formulas) {
+        for (CostFormula formula : formulas) {
             RuntimeFormula runtimeFormula = new RuntimeFormula();
             runtimeFormula.formulaCode = formula.getFormulaCode();
             runtimeFormula.formulaName = formula.getFormulaName();
@@ -3095,10 +2620,8 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private void populateDraftRules(RuntimeSnapshot snapshot, List<CostRule> rules)
-    {
-        for (CostRule rule : rules)
-        {
+    private void populateDraftRules(RuntimeSnapshot snapshot, List<CostRule> rules) {
+        for (CostRule rule : rules) {
             RuntimeRule runtimeRule = new RuntimeRule();
             runtimeRule.ruleId = rule.getRuleId();
             runtimeRule.feeCode = rule.getFeeCode();
@@ -3118,13 +2641,10 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private void populateDraftConditions(RuntimeSnapshot snapshot, List<Map<String, Object>> rows)
-    {
-        for (Map<String, Object> row : rows)
-        {
+    private void populateDraftConditions(RuntimeSnapshot snapshot, List<Map<String, Object>> rows) {
+        for (Map<String, Object> row : rows) {
             String ruleCode = stringValue(row.get("ruleCode"));
-            if (!snapshot.rulesByCode.containsKey(ruleCode))
-            {
+            if (!snapshot.rulesByCode.containsKey(ruleCode)) {
                 continue;
             }
             RuntimeCondition condition = new RuntimeCondition();
@@ -3139,13 +2659,10 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private void populateDraftTiers(RuntimeSnapshot snapshot, List<Map<String, Object>> rows)
-    {
-        for (Map<String, Object> row : rows)
-        {
+    private void populateDraftTiers(RuntimeSnapshot snapshot, List<Map<String, Object>> rows) {
+        for (Map<String, Object> row : rows) {
             String ruleCode = stringValue(row.get("ruleCode"));
-            if (!snapshot.rulesByCode.containsKey(ruleCode))
-            {
+            if (!snapshot.rulesByCode.containsKey(ruleCode)) {
                 continue;
             }
             RuntimeTier tier = new RuntimeTier();
@@ -3160,19 +2677,15 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private String buildInputTemplateMessage(RuntimeSnapshot snapshot)
-    {
-        if (isDraftSnapshot(snapshot))
-        {
+    private String buildInputTemplateMessage(RuntimeSnapshot snapshot) {
+        if (isDraftSnapshot(snapshot)) {
             return "当前场景尚无生效版本，已按现有配置生成输入模板；公式变量无需手工输入，其余变量优先按 dataPath/变量编码生成命名空间结构。";
         }
         return "已按发布快照生成输入模板；公式变量无需手工输入，其余变量优先按 dataPath/变量编码生成命名空间结构。";
     }
 
-    private String buildFeeTemplateMessage(RuntimeSnapshot snapshot, boolean noRule)
-    {
-        if (noRule)
-        {
+    private String buildFeeTemplateMessage(RuntimeSnapshot snapshot, boolean noRule) {
+        if (noRule) {
             return isDraftSnapshot(snapshot)
                     ? "当前费用在现有配置下未挂载可用规则，已返回空模板。"
                     : "当前费用在该发布版本下未挂载可用规则，已返回空模板。";
@@ -3182,27 +2695,22 @@ public class CostRunServiceImpl implements ICostRunService
                 : "已按发布快照和费用关联规则生成接入模板，第三方系统只需组装 includedInTemplate=true 的字段。";
     }
 
-    private boolean isSimulationTaskType(String taskType)
-    {
+    private boolean isSimulationTaskType(String taskType) {
         return "SIMULATION".equals(taskType) || TASK_TYPE_SIMULATION_BATCH.equals(taskType);
     }
 
-    private boolean isDraftSnapshot(RuntimeSnapshot snapshot)
-    {
+    private boolean isDraftSnapshot(RuntimeSnapshot snapshot) {
         return snapshot != null && SNAPSHOT_SOURCE_DRAFT.equals(snapshot.snapshotSource);
     }
 
-    private List<RuntimeConditionGroup> buildConditionGroups(List<RuntimeCondition> conditions)
-    {
-        if (conditions == null || conditions.isEmpty())
-        {
+    private List<RuntimeConditionGroup> buildConditionGroups(List<RuntimeCondition> conditions) {
+        if (conditions == null || conditions.isEmpty()) {
             return Collections.emptyList();
         }
         Map<Integer, List<RuntimeCondition>> grouped = conditions.stream()
                 .collect(Collectors.groupingBy(item -> item.groupNo, LinkedHashMap::new, Collectors.toList()));
         List<RuntimeConditionGroup> result = new ArrayList<>();
-        for (Map.Entry<Integer, List<RuntimeCondition>> entry : grouped.entrySet())
-        {
+        for (Map.Entry<Integer, List<RuntimeCondition>> entry : grouped.entrySet()) {
             RuntimeConditionGroup group = new RuntimeConditionGroup();
             group.groupNo = entry.getKey();
             group.conditions = entry.getValue();
@@ -3213,26 +2721,21 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> buildSingleInputTemplate(RuntimeSnapshot snapshot, String taskType, int index,
-            String objectDimension)
-    {
+                                                         String objectDimension) {
         LinkedHashMap<String, Object> template = new LinkedHashMap<>();
         template.put("bizNo", buildTemplateBizNo(taskType, index));
-        if (StringUtils.isNotEmpty(objectDimension))
-        {
+        if (StringUtils.isNotEmpty(objectDimension)) {
             template.put("objectDimension", objectDimension);
         }
         template.put("objectCode", "OBJ-" + PARTITION_FORMAT.format(index));
         template.put("objectName", "示例对象" + index);
         Set<String> populatedPaths = new LinkedHashSet<>();
-        for (RuntimeVariable variable : snapshot.variables)
-        {
-            if (SOURCE_TYPE_FORMULA.equals(variable.sourceType))
-            {
+        for (RuntimeVariable variable : snapshot.variables) {
+            if (SOURCE_TYPE_FORMULA.equals(variable.sourceType)) {
                 continue;
             }
             String path = resolveTemplatePath(variable);
-            if (StringUtils.isEmpty(path) || populatedPaths.contains(path))
-            {
+            if (StringUtils.isEmpty(path) || populatedPaths.contains(path)) {
                 continue;
             }
             populatePathValue(template, path, buildTemplateValue(variable, index));
@@ -3242,26 +2745,21 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> buildSelectedInputTemplate(List<RuntimeVariable> variables, String taskType, int index,
-            String objectDimension)
-    {
+                                                           String objectDimension) {
         LinkedHashMap<String, Object> template = new LinkedHashMap<>();
         template.put("bizNo", buildTemplateBizNo(taskType, index));
-        if (StringUtils.isNotEmpty(objectDimension))
-        {
+        if (StringUtils.isNotEmpty(objectDimension)) {
             template.put("objectDimension", objectDimension);
         }
         template.put("objectCode", "OBJ-" + PARTITION_FORMAT.format(index));
         template.put("objectName", "示例对象" + index);
         Set<String> populatedPaths = new LinkedHashSet<>();
-        for (RuntimeVariable variable : variables)
-        {
-            if (SOURCE_TYPE_FORMULA.equals(variable.sourceType))
-            {
+        for (RuntimeVariable variable : variables) {
+            if (SOURCE_TYPE_FORMULA.equals(variable.sourceType)) {
                 continue;
             }
             String path = resolveTemplatePath(variable);
-            if (StringUtils.isEmpty(path) || populatedPaths.contains(path))
-            {
+            if (StringUtils.isEmpty(path) || populatedPaths.contains(path)) {
                 continue;
             }
             populatePathValue(template, path, buildTemplateValue(variable, index));
@@ -3270,57 +2768,43 @@ public class CostRunServiceImpl implements ICostRunService
         return template;
     }
 
-    private String buildTemplateBizNo(String taskType, int index)
-    {
+    private String buildTemplateBizNo(String taskType, int index) {
         String prefix;
-        if (TASK_TYPE_FORMAL_BATCH.equals(taskType))
-        {
+        if (TASK_TYPE_FORMAL_BATCH.equals(taskType)) {
             prefix = "BATCH";
-        }
-        else if (TASK_TYPE_FORMAL_SINGLE.equals(taskType))
-        {
+        } else if (TASK_TYPE_FORMAL_SINGLE.equals(taskType)) {
             prefix = "FORMAL";
-        }
-        else
-        {
+        } else {
             prefix = "SIM";
         }
         return prefix + "-" + PARTITION_FORMAT.format(index);
     }
 
-    private Object buildTemplateValue(RuntimeVariable variable, int index)
-    {
+    private Object buildTemplateValue(RuntimeVariable variable, int index) {
         String dataType = StringUtils.isEmpty(variable.dataType) ? "" : variable.dataType.toUpperCase(Locale.ROOT);
-        if (DATA_TYPE_NUMBER.equals(dataType))
-        {
+        if (DATA_TYPE_NUMBER.equals(dataType)) {
             return BigDecimal.ONE;
         }
-        if (DATA_TYPE_BOOLEAN.equals(dataType))
-        {
+        if (DATA_TYPE_BOOLEAN.equals(dataType)) {
             return Boolean.TRUE;
         }
-        if (DATA_TYPE_JSON.equals(dataType))
-        {
+        if (DATA_TYPE_JSON.equals(dataType)) {
             return new LinkedHashMap<>();
         }
         return firstNonBlank(variable.variableName, variable.variableCode) + index;
     }
 
-    private void populatePathValue(Map<String, Object> root, String path, Object value)
-    {
+    private void populatePathValue(Map<String, Object> root, String path, Object value) {
         String[] pieces = path.split("\\.");
         Map<String, Object> current = root;
-        for (int i = 0; i < pieces.length; i++)
-        {
+        for (int i = 0; i < pieces.length; i++) {
             String piece = pieces[i];
-            if (i == pieces.length - 1)
-            {
+            if (i == pieces.length - 1) {
                 current.putIfAbsent(piece, value);
                 return;
             }
             Object child = current.get(piece);
-            if (!(child instanceof Map))
-            {
+            if (!(child instanceof Map)) {
                 LinkedHashMap<String, Object> next = new LinkedHashMap<>();
                 current.put(piece, next);
                 current = next;
@@ -3330,8 +2814,7 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private List<CostCalcTask> selectTaskListInternal(CostCalcTask query)
-    {
+    private List<CostCalcTask> selectTaskListInternal(CostCalcTask query) {
         return calcTaskMapper.selectList(Wrappers.<CostCalcTask>lambdaQuery()
                 .eq(query.getTaskId() != null, CostCalcTask::getTaskId, query.getTaskId())
                 .eq(query.getSceneId() != null, CostCalcTask::getSceneId, query.getSceneId())
@@ -3344,11 +2827,9 @@ public class CostRunServiceImpl implements ICostRunService
                 .orderByDesc(CostCalcTask::getTaskId));
     }
 
-    private List<CostResultLedger> selectResultListInternal(CostResultLedger query)
-    {
+    private List<CostResultLedger> selectResultListInternal(CostResultLedger query) {
         List<Long> requestTaskIds = resolveResultRequestTaskIds(query.getRequestNo());
-        if (StringUtils.isNotEmpty(query.getRequestNo()) && requestTaskIds.isEmpty())
-        {
+        if (StringUtils.isNotEmpty(query.getRequestNo()) && requestTaskIds.isEmpty()) {
             return Collections.emptyList();
         }
         return resultLedgerMapper.selectList(Wrappers.<CostResultLedger>lambdaQuery()
@@ -3367,10 +2848,8 @@ public class CostRunServiceImpl implements ICostRunService
                 .orderByDesc(CostResultLedger::getResultId));
     }
 
-    private List<Long> resolveResultRequestTaskIds(String requestNo)
-    {
-        if (StringUtils.isEmpty(requestNo))
-        {
+    private List<Long> resolveResultRequestTaskIds(String requestNo) {
+        if (StringUtils.isEmpty(requestNo)) {
             return Collections.emptyList();
         }
         return calcTaskMapper.selectList(Wrappers.<CostCalcTask>lambdaQuery()
@@ -3382,20 +2861,16 @@ public class CostRunServiceImpl implements ICostRunService
                 .collect(Collectors.toList());
     }
 
-    private Map<Long, CostPublishVersion> selectVersionMap(Set<Long> versionIds)
-    {
-        if (versionIds == null || versionIds.isEmpty())
-        {
+    private Map<Long, CostPublishVersion> selectVersionMap(Set<Long> versionIds) {
+        if (versionIds == null || versionIds.isEmpty()) {
             return Collections.emptyMap();
         }
         return publishVersionMapper.selectBatchIds(versionIds).stream()
                 .collect(Collectors.toMap(CostPublishVersion::getVersionId, item -> item));
     }
 
-    private void enrichSimulationRecords(List<CostSimulationRecord> records)
-    {
-        if (records == null || records.isEmpty())
-        {
+    private void enrichSimulationRecords(List<CostSimulationRecord> records) {
+        if (records == null || records.isEmpty()) {
             return;
         }
         Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(records.stream().map(CostSimulationRecord::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet()))
@@ -3404,30 +2879,23 @@ public class CostRunServiceImpl implements ICostRunService
                 .map(CostSimulationRecord::getVersionId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet()));
-        for (CostSimulationRecord record : records)
-        {
+        for (CostSimulationRecord record : records) {
             CostScene scene = sceneMap.get(record.getSceneId());
-            if (scene != null)
-            {
+            if (scene != null) {
                 record.setSceneCode(scene.getSceneCode());
                 record.setSceneName(scene.getSceneName());
             }
             CostPublishVersion version = versionMap.get(record.getVersionId());
-            if (version != null)
-            {
+            if (version != null) {
                 record.setVersionNo(version.getVersionNo());
-            }
-            else if (record.getVersionId() == null)
-            {
+            } else if (record.getVersionId() == null) {
                 record.setVersionNo(DRAFT_VERSION_LABEL);
             }
         }
     }
 
-    private void enrichTasks(List<CostCalcTask> tasks)
-    {
-        if (tasks == null || tasks.isEmpty())
-        {
+    private void enrichTasks(List<CostCalcTask> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
             return;
         }
         Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(tasks.stream().map(CostCalcTask::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet()))
@@ -3436,37 +2904,29 @@ public class CostRunServiceImpl implements ICostRunService
                 .map(CostCalcTask::getVersionId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet()));
-        for (CostCalcTask task : tasks)
-        {
+        for (CostCalcTask task : tasks) {
             CostScene scene = sceneMap.get(task.getSceneId());
-            if (scene != null)
-            {
+            if (scene != null) {
                 task.setSceneCode(scene.getSceneCode());
                 task.setSceneName(scene.getSceneName());
             }
             CostPublishVersion version = versionMap.get(task.getVersionId());
-            if (version != null)
-            {
+            if (version != null) {
                 task.setVersionNo(version.getVersionNo());
             }
         }
     }
 
-    private TaskExecutionSummary summarizeTaskDetails(Long taskId)
-    {
+    private TaskExecutionSummary summarizeTaskDetails(Long taskId) {
         List<CostCalcTaskDetail> details = calcTaskDetailMapper.selectList(Wrappers.<CostCalcTaskDetail>lambdaQuery()
                 .select(CostCalcTaskDetail::getDetailStatus)
                 .eq(CostCalcTaskDetail::getTaskId, taskId));
         TaskExecutionSummary summary = new TaskExecutionSummary();
         summary.totalCount = details.size();
-        for (CostCalcTaskDetail detail : details)
-        {
-            if (DETAIL_STATUS_SUCCESS.equals(detail.getDetailStatus()))
-            {
+        for (CostCalcTaskDetail detail : details) {
+            if (DETAIL_STATUS_SUCCESS.equals(detail.getDetailStatus())) {
                 summary.successCount++;
-            }
-            else if (DETAIL_STATUS_FAILED.equals(detail.getDetailStatus()))
-            {
+            } else if (DETAIL_STATUS_FAILED.equals(detail.getDetailStatus())) {
                 summary.failedCount++;
             }
         }
@@ -3474,21 +2934,16 @@ public class CostRunServiceImpl implements ICostRunService
         return summary;
     }
 
-    private PartitionExecutionResult summarizePartitionDetails(Long taskId, Integer partitionNo)
-    {
+    private PartitionExecutionResult summarizePartitionDetails(Long taskId, Integer partitionNo) {
         List<CostCalcTaskDetail> details = calcTaskDetailMapper.selectList(Wrappers.<CostCalcTaskDetail>lambdaQuery()
                 .select(CostCalcTaskDetail::getDetailStatus)
                 .eq(CostCalcTaskDetail::getTaskId, taskId)
                 .eq(CostCalcTaskDetail::getPartitionNo, partitionNo));
         PartitionExecutionResult summary = new PartitionExecutionResult();
-        for (CostCalcTaskDetail detail : details)
-        {
-            if (DETAIL_STATUS_SUCCESS.equals(detail.getDetailStatus()))
-            {
+        for (CostCalcTaskDetail detail : details) {
+            if (DETAIL_STATUS_SUCCESS.equals(detail.getDetailStatus())) {
                 summary.successCount++;
-            }
-            else if (DETAIL_STATUS_FAILED.equals(detail.getDetailStatus()))
-            {
+            } else if (DETAIL_STATUS_FAILED.equals(detail.getDetailStatus())) {
                 summary.failedCount++;
             }
         }
@@ -3497,16 +2952,14 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     /**
-     * 鎸変换鍔￠泦鍚堜竴娆℃€у姞杞藉垎鐗囧彴璐︼紝閬垮厤浠诲姟鎬昏鎸変换鍔￠€愪釜鏌ュ垎鐗囥€?     */
-    private List<CostCalcTaskPartition> selectTaskPartitions(List<CostCalcTask> tasks)
-    {
-        if (tasks == null || tasks.isEmpty())
-        {
+     * 鎸変换鍔￠泦鍚堜竴娆℃€у姞杞藉垎鐗囧彴璐︼紝閬垮厤浠诲姟鎬昏鎸変换鍔￠€愪釜鏌ュ垎鐗囥€?
+     */
+    private List<CostCalcTaskPartition> selectTaskPartitions(List<CostCalcTask> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
             return Collections.emptyList();
         }
         Set<Long> taskIds = tasks.stream().map(CostCalcTask::getTaskId).filter(Objects::nonNull).collect(Collectors.toSet());
-        if (taskIds.isEmpty())
-        {
+        if (taskIds.isEmpty()) {
             return Collections.emptyList();
         }
         return calcTaskPartitionMapper.selectList(Wrappers.<CostCalcTaskPartition>lambdaQuery()
@@ -3515,9 +2968,9 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     /**
-     * 鏋勫缓鏈€杩?N 澶╀换鍔¤秼鍔匡紝甯姪浠庝换鍔＄骇鍒瀵熻繍琛屾尝鍔ㄣ€?     */
-    private List<Map<String, Object>> buildTaskTrend(List<CostCalcTask> tasks, int recentDays)
-    {
+     * 鏋勫缓鏈€杩?N 澶╀换鍔¤秼鍔匡紝甯姪浠庝换鍔＄骇鍒瀵熻繍琛屾尝鍔ㄣ€?
+     */
+    private List<Map<String, Object>> buildTaskTrend(List<CostCalcTask> tasks, int recentDays) {
         ZoneId zoneId = ZoneId.systemDefault();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         Map<LocalDate, List<CostCalcTask>> grouped = tasks.stream()
@@ -3527,8 +2980,7 @@ public class CostRunServiceImpl implements ICostRunService
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDate end = LocalDate.now(zoneId);
         LocalDate start = end.minusDays(Math.max(recentDays - 1L, 0L));
-        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1))
-        {
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
             List<CostCalcTask> dayTasks = grouped.getOrDefault(date, List.of());
             LinkedHashMap<String, Object> row = new LinkedHashMap<>();
             row.put("date", date.format(formatter));
@@ -3541,9 +2993,9 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     /**
-     * 鏋勫缓鏈€杩?N 澶╁垎鐗囪秼鍔匡紝渚夸簬鍒ゆ柇鏄惁瀛樺湪鍒嗙墖绾уけ璐ラ泦涓垎鍙戙€?     */
-    private List<Map<String, Object>> buildPartitionTrend(List<CostCalcTaskPartition> partitions, int recentDays)
-    {
+     * 鏋勫缓鏈€杩?N 澶╁垎鐗囪秼鍔匡紝渚夸簬鍒ゆ柇鏄惁瀛樺湪鍒嗙墖绾уけ璐ラ泦涓垎鍙戙€?
+     */
+    private List<Map<String, Object>> buildPartitionTrend(List<CostCalcTaskPartition> partitions, int recentDays) {
         ZoneId zoneId = ZoneId.systemDefault();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         Map<LocalDate, List<CostCalcTaskPartition>> grouped = partitions.stream()
@@ -3553,28 +3005,27 @@ public class CostRunServiceImpl implements ICostRunService
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDate end = LocalDate.now(zoneId);
         LocalDate start = end.minusDays(Math.max(recentDays - 1L, 0L));
-        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1))
-        {
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
             List<CostCalcTaskPartition> dayPartitions = grouped.getOrDefault(date, List.of());
             LinkedHashMap<String, Object> row = new LinkedHashMap<>();
             row.put("date", date.format(formatter));
             row.put("count", dayPartitions.size());
             row.put("failedCount", dayPartitions.stream().filter(item -> isPartitionProblematic(item)).count());
             row.put("avgDurationMs", dayPartitions.isEmpty() ? 0L : Math.round(dayPartitions.stream()
-                    .map(CostCalcTaskPartition::getDurationMs)
-                    .filter(Objects::nonNull)
-                    .mapToLong(Long::longValue)
-                    .average()
-                    .orElse(0D)));
+                                                                               .map(CostCalcTaskPartition::getDurationMs)
+                                                                               .filter(Objects::nonNull)
+                                                                               .mapToLong(Long::longValue)
+                                                                               .average()
+                                                                               .orElse(0D)));
             result.add(row);
         }
         return result;
     }
 
     /**
-     * 鏋勫缓楂橀闄╀换鍔℃帓琛岋紝浼樺厛鏆撮湶澶辫触閲忛珮銆佸け璐ュ垎鐗囧鐨勪换鍔°€?     */
-    private List<Map<String, Object>> buildTopRiskTasks(List<CostCalcTask> tasks, List<CostCalcTaskPartition> partitions, int limit)
-    {
+     * 鏋勫缓楂橀闄╀换鍔℃帓琛岋紝浼樺厛鏆撮湶澶辫触閲忛珮銆佸け璐ュ垎鐗囧鐨勪换鍔°€?
+     */
+    private List<Map<String, Object>> buildTopRiskTasks(List<CostCalcTask> tasks, List<CostCalcTaskPartition> partitions, int limit) {
         Map<Long, List<CostCalcTaskPartition>> partitionMap = partitions.stream()
                 .filter(item -> item.getTaskId() != null)
                 .collect(Collectors.groupingBy(CostCalcTaskPartition::getTaskId));
@@ -3602,9 +3053,9 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     /**
-     * 鏋勫缓浠诲姟鐘舵€佸垎甯冿紝甯姪蹇€熷垽鏂换鍔℃洿澶氬仠鐣欏湪鍝釜闃舵銆?     */
-    private List<Map<String, Object>> buildTaskStatusDistribution(List<CostCalcTask> tasks)
-    {
+     * 鏋勫缓浠诲姟鐘舵€佸垎甯冿紝甯姪蹇€熷垽鏂换鍔℃洿澶氬仠鐣欏湪鍝釜闃舵銆?
+     */
+    private List<Map<String, Object>> buildTaskStatusDistribution(List<CostCalcTask> tasks) {
         return tasks.stream()
                 .collect(Collectors.groupingBy(item -> firstNonBlank(item.getTaskStatus(), TASK_STATUS_INIT), Collectors.counting()))
                 .entrySet()
@@ -3620,9 +3071,9 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     /**
-     * 鏋勫缓杈撳叆鏉ユ簮鍒嗗竷锛屽府鍔╁垽鏂綋鍓嶆寮忔牳绠楁洿鍋?JSON 杩樻槸瀵煎叆鎵规銆?     */
-    private List<Map<String, Object>> buildInputSourceDistribution(List<CostCalcTask> tasks)
-    {
+     * 鏋勫缓杈撳叆鏉ユ簮鍒嗗竷锛屽府鍔╁垽鏂綋鍓嶆寮忔牳绠楁洿鍋?JSON 杩樻槸瀵煎叆鎵规銆?
+     */
+    private List<Map<String, Object>> buildInputSourceDistribution(List<CostCalcTask> tasks) {
         return tasks.stream()
                 .collect(Collectors.groupingBy(item -> firstNonBlank(item.getInputSourceType(), "INLINE_JSON"), Collectors.counting()))
                 .entrySet()
@@ -3637,8 +3088,7 @@ public class CostRunServiceImpl implements ICostRunService
                 .collect(Collectors.toList());
     }
 
-    private Map<String, Object> buildPartitionOwnerSummary(List<CostCalcTaskPartition> partitions)
-    {
+    private Map<String, Object> buildPartitionOwnerSummary(List<CostCalcTaskPartition> partitions) {
         List<CostCalcTaskPartition> safePartitions = partitions == null ? List.of() : partitions;
         LocalDateTime staleThreshold = LocalDateTime.now().minusSeconds(resolveTaskStaleTimeoutSeconds());
         long claimedPartitionCount = safePartitions.stream()
@@ -3667,8 +3117,7 @@ public class CostRunServiceImpl implements ICostRunService
         return summary;
     }
 
-    private List<Map<String, Object>> buildPartitionOwnerDistribution(List<CostCalcTaskPartition> partitions, int limit)
-    {
+    private List<Map<String, Object>> buildPartitionOwnerDistribution(List<CostCalcTaskPartition> partitions, int limit) {
         return (partitions == null ? List.<CostCalcTaskPartition>of() : partitions).stream()
                 .filter(item -> StringUtils.isNotEmpty(item.getExecuteNode()))
                 .collect(Collectors.groupingBy(CostCalcTaskPartition::getExecuteNode))
@@ -3699,8 +3148,7 @@ public class CostRunServiceImpl implements ICostRunService
                 .collect(Collectors.toList());
     }
 
-    private List<Map<String, Object>> buildTopOwnerRiskTasks(List<CostCalcTask> tasks, List<CostCalcTaskPartition> partitions, int limit)
-    {
+    private List<Map<String, Object>> buildTopOwnerRiskTasks(List<CostCalcTask> tasks, List<CostCalcTaskPartition> partitions, int limit) {
         LocalDateTime staleThreshold = LocalDateTime.now().minusSeconds(resolveTaskStaleTimeoutSeconds());
         Map<Long, List<CostCalcTaskPartition>> partitionMap = (partitions == null ? List.<CostCalcTaskPartition>of() : partitions).stream()
                 .filter(item -> item.getTaskId() != null)
@@ -3719,10 +3167,8 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> buildOwnerRiskTaskRow(CostCalcTask task, List<CostCalcTaskPartition> taskPartitions,
-                                                      LocalDateTime staleThreshold)
-    {
-        if (task == null || task.getTaskId() == null)
-        {
+                                                      LocalDateTime staleThreshold) {
+        if (task == null || task.getTaskId() == null) {
             return null;
         }
         long staleRunningOwnerCount = taskPartitions.stream()
@@ -3740,8 +3186,7 @@ public class CostRunServiceImpl implements ICostRunService
                 .filter(StringUtils::isNotEmpty)
                 .distinct()
                 .count();
-        if (staleRunningOwnerCount <= 0 && runningWithoutOwnerCount <= 0)
-        {
+        if (staleRunningOwnerCount <= 0 && runningWithoutOwnerCount <= 0) {
             return null;
         }
         LinkedHashMap<String, Object> row = new LinkedHashMap<>();
@@ -3756,38 +3201,31 @@ public class CostRunServiceImpl implements ICostRunService
         return row;
     }
 
-    private Date resolveTaskTrendDate(CostCalcTask task)
-    {
+    private Date resolveTaskTrendDate(CostCalcTask task) {
         return task.getStartedTime() != null ? task.getStartedTime() : task.getCreateTime();
     }
 
-    private Date resolvePartitionTrendDate(CostCalcTaskPartition partition)
-    {
+    private Date resolvePartitionTrendDate(CostCalcTaskPartition partition) {
         return partition.getStartedTime() != null ? partition.getStartedTime() : partition.getCreateTime();
     }
 
-    private boolean isTaskProblematic(String taskStatus)
-    {
+    private boolean isTaskProblematic(String taskStatus) {
         return TASK_STATUS_FAILED.equals(taskStatus) || TASK_STATUS_PART_SUCCESS.equals(taskStatus) || TASK_STATUS_CANCELLED.equals(taskStatus);
     }
 
-    private boolean isPartitionProblematic(CostCalcTaskPartition partition)
-    {
+    private boolean isPartitionProblematic(CostCalcTaskPartition partition) {
         return partition != null
                 && (TASK_STATUS_FAILED.equals(partition.getPartitionStatus())
                 || TASK_STATUS_PART_SUCCESS.equals(partition.getPartitionStatus())
                 || (partition.getFailCount() != null && partition.getFailCount() > 0));
     }
 
-    private void enrichInputBatches(List<CostCalcInputBatch> batches)
-    {
-        if (batches == null || batches.isEmpty())
-        {
+    private void enrichInputBatches(List<CostCalcInputBatch> batches) {
+        if (batches == null || batches.isEmpty()) {
             return;
         }
         List<CostCalcInputBatch> filtered = batches.stream().filter(Objects::nonNull).collect(Collectors.toList());
-        if (filtered.isEmpty())
-        {
+        if (filtered.isEmpty()) {
             return;
         }
         Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(filtered.stream().map(CostCalcInputBatch::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet()))
@@ -3796,26 +3234,21 @@ public class CostRunServiceImpl implements ICostRunService
                 .map(CostCalcInputBatch::getVersionId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet()));
-        for (CostCalcInputBatch batch : filtered)
-        {
+        for (CostCalcInputBatch batch : filtered) {
             CostScene scene = sceneMap.get(batch.getSceneId());
-            if (scene != null)
-            {
+            if (scene != null) {
                 batch.setSceneCode(scene.getSceneCode());
                 batch.setSceneName(scene.getSceneName());
             }
             CostPublishVersion version = versionMap.get(batch.getVersionId());
-            if (version != null)
-            {
+            if (version != null) {
                 batch.setVersionNo(version.getVersionNo());
             }
         }
     }
 
-    private void enrichResults(List<CostResultLedger> results)
-    {
-        if (results == null || results.isEmpty())
-        {
+    private void enrichResults(List<CostResultLedger> results) {
+        if (results == null || results.isEmpty()) {
             return;
         }
         Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(results.stream().map(CostResultLedger::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet()))
@@ -3828,27 +3261,22 @@ public class CostRunServiceImpl implements ICostRunService
                 .stream().collect(Collectors.toMap(CostFeeItem::getFeeId, item -> item));
         Map<Long, CostResultTrace> traceMap = resultTraceMapper.selectBatchIds(results.stream().map(CostResultLedger::getTraceId).filter(Objects::nonNull).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(CostResultTrace::getTraceId, item -> item));
-        for (CostResultLedger result : results)
-        {
+        for (CostResultLedger result : results) {
             CostScene scene = sceneMap.get(result.getSceneId());
-            if (scene != null)
-            {
+            if (scene != null) {
                 result.setSceneCode(scene.getSceneCode());
                 result.setSceneName(scene.getSceneName());
             }
             CostPublishVersion version = versionMap.get(result.getVersionId());
-            if (version != null)
-            {
+            if (version != null) {
                 result.setVersionNo(version.getVersionNo());
             }
             CostFeeItem fee = feeMap.get(result.getFeeId());
-            if (fee != null)
-            {
+            if (fee != null) {
                 result.setUnitCode(fee.getUnitCode());
             }
             CostResultTrace trace = traceMap.get(result.getTraceId());
-            if (trace != null)
-            {
+            if (trace != null) {
                 Map<String, Object> pricing = parseJsonMap(trace.getPricingJson());
                 result.setMatchedGroupNo(intValue(pricing.get("matchedGroupNo")));
                 result.setPricingMode(stringValue(pricing.get("pricingMode")));
@@ -3857,21 +3285,16 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private List<Map<String, Object>> parseTaskInput(CostCalcTaskSubmitBo bo)
-    {
-        if (INPUT_SOURCE_BATCH.equals(resolveInputSourceType(bo)))
-        {
+    private List<Map<String, Object>> parseTaskInput(CostCalcTaskSubmitBo bo) {
+        if (INPUT_SOURCE_BATCH.equals(resolveInputSourceType(bo))) {
             return loadInputBatchItems(bo);
         }
-        if (TASK_TYPE_FORMAL_SINGLE.equals(bo.getTaskType()))
-        {
+        if (TASK_TYPE_FORMAL_SINGLE.equals(bo.getTaskType())) {
             return Collections.singletonList(parseObjectJson(bo.getInputJson(), "鍗曠瑪姝ｅ紡鏍哥畻杈撳叆蹇呴』鏄?JSON 瀵硅薄"));
         }
-        if (TASK_TYPE_FORMAL_BATCH.equals(bo.getTaskType()))
-        {
+        if (TASK_TYPE_FORMAL_BATCH.equals(bo.getTaskType())) {
             List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "鎵归噺浠诲姟杈撳叆蹇呴』鏄?JSON 鏁扮粍");
-            if (inputs.isEmpty())
-            {
+            if (inputs.isEmpty()) {
                 throw new ServiceException("鎵归噺浠诲姟杈撳叆涓嶈兘涓虹┖鏁扮粍");
             }
             validateDuplicateBizNo(inputs);
@@ -3880,57 +3303,46 @@ public class CostRunServiceImpl implements ICostRunService
         throw new ServiceException("鏆備笉鏀寔鐨勪换鍔＄被鍨嬶細" + bo.getTaskType());
     }
 
-    private String resolveInputSourceType(CostCalcTaskSubmitBo bo)
-    {
-        if (StringUtils.isNotEmpty(bo.getInputSourceType()))
-        {
+    private String resolveInputSourceType(CostCalcTaskSubmitBo bo) {
+        if (StringUtils.isNotEmpty(bo.getInputSourceType())) {
             return bo.getInputSourceType().trim().toUpperCase(Locale.ROOT);
         }
         return StringUtils.isNotEmpty(bo.getSourceBatchNo()) ? INPUT_SOURCE_BATCH : INPUT_SOURCE_INLINE_JSON;
     }
 
-    private List<Map<String, Object>> loadInputBatchItems(CostCalcTaskSubmitBo bo)
-    {
-        if (StringUtils.isEmpty(bo.getSourceBatchNo()))
-        {
+    private List<Map<String, Object>> loadInputBatchItems(CostCalcTaskSubmitBo bo) {
+        if (StringUtils.isEmpty(bo.getSourceBatchNo())) {
             throw new ServiceException("批次导入任务缺少来源批次号");
         }
         CostCalcInputBatch batch = calcInputBatchMapper.selectOne(Wrappers.<CostCalcInputBatch>lambdaQuery()
                 .eq(CostCalcInputBatch::getBatchNo, bo.getSourceBatchNo())
                 .last("limit 1"));
-        if (batch == null)
-        {
+        if (batch == null) {
             throw new ServiceException("鏉ユ簮杈撳叆鎵规涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
         }
-        if (!Objects.equals(batch.getSceneId(), bo.getSceneId()))
-        {
+        if (!Objects.equals(batch.getSceneId(), bo.getSceneId())) {
             throw new ServiceException("鏉ユ簮杈撳叆鎵规涓庡綋鍓嶅満鏅笉鍖归厤");
         }
-        if (StringUtils.isNotEmpty(bo.getBillMonth()) && !Objects.equals(batch.getBillMonth(), bo.getBillMonth()))
-        {
+        if (StringUtils.isNotEmpty(bo.getBillMonth()) && !Objects.equals(batch.getBillMonth(), bo.getBillMonth())) {
             throw new ServiceException("鏉ユ簮杈撳叆鎵规涓庡綋鍓嶈处鏈熶笉鍖归厤");
         }
         List<CostCalcInputBatchItem> items = calcInputBatchItemMapper.selectList(Wrappers.<CostCalcInputBatchItem>lambdaQuery()
                 .eq(CostCalcInputBatchItem::getBatchId, batch.getBatchId())
                 .orderByAsc(CostCalcInputBatchItem::getItemNo)
                 .orderByAsc(CostCalcInputBatchItem::getItemId));
-        if (items.isEmpty())
-        {
+        if (items.isEmpty()) {
             throw new ServiceException("鏉ユ簮杈撳叆鎵规娌℃湁鍙敤鏄庣粏");
         }
         List<Map<String, Object>> inputs = new ArrayList<>();
-        for (CostCalcInputBatchItem item : items)
-        {
+        for (CostCalcInputBatchItem item : items) {
             inputs.add(parseObjectJson(item.getInputJson(), "杈撳叆鎵规鏄庣粏蹇呴』鏄?JSON 瀵硅薄"));
         }
         validateDuplicateBizNo(inputs);
         return inputs;
     }
 
-    private void markInputBatchSubmitted(String sourceBatchNo, String operator)
-    {
-        if (StringUtils.isEmpty(sourceBatchNo))
-        {
+    private void markInputBatchSubmitted(String sourceBatchNo, String operator) {
+        if (StringUtils.isEmpty(sourceBatchNo)) {
             return;
         }
         calcInputBatchMapper.update(null, Wrappers.<CostCalcInputBatch>lambdaUpdate()
@@ -3940,31 +3352,24 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostCalcInputBatch::getUpdateTime, DateUtils.getNowDate()));
     }
 
-    private void validateDuplicateBizNo(List<Map<String, Object>> inputs)
-    {
+    private void validateDuplicateBizNo(List<Map<String, Object>> inputs) {
         Set<String> seen = new LinkedHashSet<>();
-        for (int i = 0; i < inputs.size(); i++)
-        {
+        for (int i = 0; i < inputs.size(); i++) {
             String bizNo = resolveBizNo(inputs.get(i), i + 1);
-            if (!seen.add(bizNo))
-            {
+            if (!seen.add(bizNo)) {
                 throw new ServiceException("批量任务存在重复业务单号：" + bizNo);
             }
         }
     }
 
-    private List<Map<String, Object>> parseInlineCalculationInputs(String inputJson)
-    {
+    private List<Map<String, Object>> parseInlineCalculationInputs(String inputJson) {
         Object parsed = parseJsonToObject(inputJson);
-        if (parsed instanceof Map)
-        {
+        if (parsed instanceof Map) {
             return Collections.singletonList(castMap(parsed));
         }
-        if (parsed instanceof List)
-        {
+        if (parsed instanceof List) {
             List<Map<String, Object>> inputs = parseArrayJson(inputJson, "费用计算输入必须是 JSON 对象或对象数组");
-            if (inputs.isEmpty())
-            {
+            if (inputs.isEmpty()) {
                 throw new ServiceException("璐圭敤璁＄畻杈撳叆涓嶈兘涓虹┖鏁扮粍");
             }
             validateDuplicateBizNo(inputs);
@@ -3973,17 +3378,14 @@ public class CostRunServiceImpl implements ICostRunService
         throw new ServiceException("费用计算输入必须是 JSON 对象或对象数组");
     }
 
-    private void validateBillMonth(String billMonth)
-    {
-        if (!billMonth.matches("\\d{4}-\\d{2}"))
-        {
+    private void validateBillMonth(String billMonth) {
+        if (!billMonth.matches("\\d{4}-\\d{2}")) {
             throw new ServiceException("璐︽湡鏍煎紡蹇呴』涓?yyyy-MM");
         }
     }
 
     private Map<String, Object> buildFeeCalculationRecord(Map<String, Object> input, RuntimeFee fee,
-            ExecutionResult executionResult, int index, boolean includeExplain, long durationMs)
-    {
+                                                          ExecutionResult executionResult, int index, boolean includeExplain, long durationMs) {
         FeeExecutionResult feeResult = findFeeExecutionResult(executionResult, fee.feeCode);
         LinkedHashMap<String, Object> item = new LinkedHashMap<>();
         String bizNo = resolveBizNo(input, index);
@@ -4007,8 +3409,7 @@ public class CostRunServiceImpl implements ICostRunService
         item.put("tierRange", feeResult == null ? null : feeResult.pricingExplain.get("tierRange"));
         item.put("durationMs", durationMs);
         item.put("errorMessage", "");
-        if (includeExplain)
-        {
+        if (includeExplain) {
             item.put("explain", feeResult == null
                     ? executionResult.skippedFeeExplains.getOrDefault(fee.feeCode,
                     buildFeeNoMatchExplain(fee, Collections.emptyList(), executionResult.variableView, Collections.emptyList()))
@@ -4017,10 +3418,8 @@ public class CostRunServiceImpl implements ICostRunService
         return item;
     }
 
-    private FeeExecutionResult findFeeExecutionResult(ExecutionResult executionResult, String feeCode)
-    {
-        if (executionResult == null || executionResult.feeResults == null || StringUtils.isEmpty(feeCode))
-        {
+    private FeeExecutionResult findFeeExecutionResult(ExecutionResult executionResult, String feeCode) {
+        if (executionResult == null || executionResult.feeResults == null || StringUtils.isEmpty(feeCode)) {
             return null;
         }
         return executionResult.feeResults.stream()
@@ -4030,8 +3429,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> buildFeeCalculationFailureRecord(Map<String, Object> input, RuntimeFee fee,
-            int index, Exception exception, long durationMs, boolean includeExplain)
-    {
+                                                                 int index, Exception exception, long durationMs, boolean includeExplain) {
         LinkedHashMap<String, Object> item = new LinkedHashMap<>();
         String bizNo = resolveBizNo(input, index);
         item.put("recordIndex", index);
@@ -4054,15 +3452,13 @@ public class CostRunServiceImpl implements ICostRunService
         item.put("tierRange", null);
         item.put("durationMs", durationMs);
         item.put("errorMessage", limitLength(exception.getMessage(), 1000));
-        if (includeExplain)
-        {
+        if (includeExplain) {
             item.put("explain", buildFeeFailureExplain(fee, exception));
         }
         return item;
     }
 
-    private Map<String, Object> buildFeeCalculationExplain(FeeExecutionResult feeResult)
-    {
+    private Map<String, Object> buildFeeCalculationExplain(FeeExecutionResult feeResult) {
         LinkedHashMap<String, Object> explain = new LinkedHashMap<>();
         explain.put("matched", true);
         explain.put("feeCode", feeResult.feeCode);
@@ -4079,8 +3475,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> buildFeeNoMatchExplain(RuntimeFee fee, List<RuntimeRule> rules,
-            Map<String, Object> variableValues, List<Map<String, Object>> ruleEvaluations)
-    {
+                                                       Map<String, Object> variableValues, List<Map<String, Object>> ruleEvaluations) {
         LinkedHashMap<String, Object> explain = new LinkedHashMap<>();
         explain.put("matched", false);
         explain.put("feeCode", fee.feeCode);
@@ -4093,8 +3488,7 @@ public class CostRunServiceImpl implements ICostRunService
         return explain;
     }
 
-    private Map<String, Object> buildFeeFailureExplain(RuntimeFee fee, Exception exception)
-    {
+    private Map<String, Object> buildFeeFailureExplain(RuntimeFee fee, Exception exception) {
         LinkedHashMap<String, Object> explain = new LinkedHashMap<>();
         explain.put("matched", false);
         explain.put("feeCode", fee.feeCode);
@@ -4104,22 +3498,18 @@ public class CostRunServiceImpl implements ICostRunService
         return explain;
     }
 
-    private String buildDetailSummary(List<CostResultLedger> ledgers)
-    {
-        if (ledgers.isEmpty())
-        {
+    private String buildDetailSummary(List<CostResultLedger> ledgers) {
+        if (ledgers.isEmpty()) {
             return "未命中任何费用规则";
         }
         BigDecimal total = ledgers.stream().map(CostResultLedger::getAmountValue).reduce(BigDecimal.ZERO, BigDecimal::add);
         return String.format(Locale.ROOT, "宸茬敓鎴?%d 鏉¤垂鐢ㄧ粨鏋滐紝閲戦鍚堣 %s", ledgers.size(), total.setScale(2, RoundingMode.HALF_UP));
     }
 
-    private List<CostCalcTaskDetail> buildTaskDetails(CostCalcTask task, List<Map<String, Object>> inputs)
-    {
+    private List<CostCalcTaskDetail> buildTaskDetails(CostCalcTask task, List<Map<String, Object>> inputs) {
         List<CostCalcTaskDetail> details = new ArrayList<>();
         int partitionSize = resolveTaskPartitionSize(inputs.size());
-        for (int i = 0; i < inputs.size(); i++)
-        {
+        for (int i = 0; i < inputs.size(); i++) {
             Map<String, Object> input = inputs.get(i);
             CostCalcTaskDetail detail = new CostCalcTaskDetail();
             detail.setTaskId(task.getTaskId());
@@ -4137,15 +3527,13 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     /**
-     * 鏍规嵁浠诲姟鏄庣粏鐢熸垚鍒嗙墖鍙拌处锛屼负鍒嗙墖绾х洃鎺с€侀噸璇曚笌澶辫触瀹氫綅鎻愪緵鍩虹銆?     */
-    private List<CostCalcTaskPartition> buildTaskPartitions(CostCalcTask task, List<CostCalcTaskDetail> details)
-    {
+     * 鏍规嵁浠诲姟鏄庣粏鐢熸垚鍒嗙墖鍙拌处锛屼负鍒嗙墖绾х洃鎺с€侀噸璇曚笌澶辫触瀹氫綅鎻愪緵鍩虹銆?
+     */
+    private List<CostCalcTaskPartition> buildTaskPartitions(CostCalcTask task, List<CostCalcTaskDetail> details) {
         List<CostCalcTaskPartition> partitions = new ArrayList<>();
         List<List<CostCalcTaskDetail>> grouped = splitTaskPartitions(details);
-        for (List<CostCalcTaskDetail> partitionDetails : grouped)
-        {
-            if (partitionDetails.isEmpty())
-            {
+        for (List<CostCalcTaskDetail> partitionDetails : grouped) {
+            if (partitionDetails.isEmpty()) {
                 continue;
             }
             CostCalcTaskPartition partition = new CostCalcTaskPartition();
@@ -4169,73 +3557,61 @@ public class CostRunServiceImpl implements ICostRunService
         return partitions;
     }
 
-    private void insertTaskDetailsInChunks(List<CostCalcTaskDetail> details)
-    {
+    private void insertTaskDetailsInChunks(List<CostCalcTaskDetail> details) {
         insertInChunks(details, DEFAULT_TASK_DETAIL_INSERT_SIZE, calcTaskDetailMapper::insertBatch);
     }
 
-    private void insertTaskPartitionsInChunks(List<CostCalcTaskPartition> partitions)
-    {
+    private void insertTaskPartitionsInChunks(List<CostCalcTaskPartition> partitions) {
         insertInChunks(partitions, DEFAULT_TASK_PARTITION_INSERT_SIZE, calcTaskPartitionMapper::insertBatch);
     }
 
-    private <T> void insertInChunks(List<T> items, int chunkSize, java.util.function.ToIntFunction<List<T>> inserter)
-    {
-        if (items == null || items.isEmpty())
-        {
+    private <T> void insertInChunks(List<T> items, int chunkSize, java.util.function.ToIntFunction<List<T>> inserter) {
+        if (items == null || items.isEmpty()) {
             return;
         }
         int safeChunkSize = Math.max(1, chunkSize);
-        for (int start = 0; start < items.size(); start += safeChunkSize)
-        {
+        for (int start = 0; start < items.size(); start += safeChunkSize) {
             int end = Math.min(start + safeChunkSize, items.size());
             inserter.applyAsInt(items.subList(start, end));
         }
     }
 
-    private List<List<CostCalcTaskDetail>> splitTaskPartitions(List<CostCalcTaskDetail> details)
-    {
+    private List<List<CostCalcTaskDetail>> splitTaskPartitions(List<CostCalcTaskDetail> details) {
         return new ArrayList<>(details.stream().collect(Collectors.groupingBy(
                 CostCalcTaskDetail::getPartitionNo,
                 LinkedHashMap::new,
                 Collectors.toList())).values());
     }
 
-    private int resolveTaskParallelism(int partitionCount)
-    {
+    private int resolveTaskParallelism(int partitionCount) {
         int poolSize = threadPoolTaskExecutor.getCorePoolSize() > 0
                 ? threadPoolTaskExecutor.getCorePoolSize() : DEFAULT_TASK_PARALLELISM;
         return Math.max(1, Math.min(Math.min(poolSize, DEFAULT_TASK_PARALLELISM), partitionCount));
     }
 
-    private int resolveTaskPartitionSize(int inputSize)
-    {
+    private int resolveTaskPartitionSize(int inputSize) {
         return inputSize <= 0 ? DEFAULT_TASK_PARTITION_SIZE : DEFAULT_TASK_PARTITION_SIZE;
     }
 
-    private Map<String, Object> buildInputBatchLoadingGuide(int itemTotal)
-    {
+    private Map<String, Object> buildInputBatchLoadingGuide(int itemTotal) {
         int safeTotal = Math.max(itemTotal, 0);
         int partitionCount = Math.max(1, (int) Math.ceil(safeTotal / (double) DEFAULT_TASK_PARTITION_SIZE));
         LinkedHashMap<String, Object> guide = new LinkedHashMap<>();
         guide.put("partitionSize", DEFAULT_TASK_PARTITION_SIZE);
         guide.put("estimatedPartitionCount", partitionCount);
-        if (safeTotal <= 0)
-        {
+        if (safeTotal <= 0) {
             guide.put("type", "info");
             guide.put("title", "当前批次暂无有效输入");
             guide.put("description", "请先检查导入内容或重新生成批次，再进入正式核算。");
             return guide;
         }
-        if (safeTotal <= 50)
-        {
+        if (safeTotal <= 50) {
             guide.put("type", "info");
             guide.put("title", String.format(Locale.ROOT, "当前批次共 %d 条，预计拆成 %d 个分片", safeTotal, partitionCount));
             guide.put("description", "当前规模适合联调和小批量复核；如果只是验证少量样例，也可以回到任务中心使用 JSON 直传。");
             return guide;
         }
-        if (safeTotal <= DEFAULT_TASK_PARTITION_SIZE)
-        {
+        if (safeTotal <= DEFAULT_TASK_PARTITION_SIZE) {
             guide.put("type", "success");
             guide.put("title", String.format(Locale.ROOT, "当前批次共 %d 条，预计拆成 %d 个分片", safeTotal, partitionCount));
             guide.put("description", "当前规模适合按企业级批次流程直接提交正式核算，可保留装载台账、分片进度和失败恢复能力。");
@@ -4247,45 +3623,35 @@ public class CostRunServiceImpl implements ICostRunService
         return guide;
     }
 
-    private int insertInputBatchItems(CostCalcInputBatch batch, String inputJson)
-    {
-        if (batch == null || batch.getBatchId() == null)
-        {
+    private int insertInputBatchItems(CostCalcInputBatch batch, String inputJson) {
+        if (batch == null || batch.getBatchId() == null) {
             throw new ServiceException("导入批次不存在，无法写入批次明细");
         }
         String trimmed = StringUtils.trimToEmpty(inputJson);
-        if (StringUtils.isEmpty(trimmed))
-        {
+        if (StringUtils.isEmpty(trimmed)) {
             throw new ServiceException("导入批次输入不能为空数组");
         }
         Set<String> bizNoSet = new LinkedHashSet<>();
         List<CostCalcInputBatchItem> buffer = new ArrayList<>(DEFAULT_INPUT_BATCH_INSERT_SIZE);
         int itemNo = 0;
-        try (JsonParser parser = objectMapper.getFactory().createParser(trimmed))
-        {
+        try (JsonParser parser = objectMapper.getFactory().createParser(trimmed)) {
             JsonToken firstToken = parser.nextToken();
-            if (firstToken != JsonToken.START_ARRAY)
-            {
+            if (firstToken != JsonToken.START_ARRAY) {
                 throw new ServiceException("导入批次输入必须是 JSON 数组");
             }
-            while (parser.nextToken() != JsonToken.END_ARRAY)
-            {
-                if (parser.currentToken() != JsonToken.START_OBJECT)
-                {
+            while (parser.nextToken() != JsonToken.END_ARRAY) {
+                if (parser.currentToken() != JsonToken.START_OBJECT) {
                     throw new ServiceException("导入批次输入必须是 JSON 对象数组");
                 }
                 JsonNode node = objectMapper.readTree(parser);
-                if (node == null || !node.isObject())
-                {
+                if (node == null || !node.isObject()) {
                     throw new ServiceException("导入批次输入必须是 JSON 对象数组");
                 }
-                Map<String, Object> input = objectMapper.convertValue(node, new TypeReference<LinkedHashMap<String, Object>>()
-                {
+                Map<String, Object> input = objectMapper.convertValue(node, new TypeReference<LinkedHashMap<String, Object>>() {
                 });
                 itemNo++;
                 String bizNo = resolveBizNo(input, itemNo);
-                if (!bizNoSet.add(bizNo))
-                {
+                if (!bizNoSet.add(bizNo)) {
                     throw new ServiceException("鎵归噺杈撳叆瀛樺湪閲嶅涓氬姟鍗曞彿: " + bizNo);
                 }
                 CostCalcInputBatchItem item = new CostCalcInputBatchItem();
@@ -4297,72 +3663,58 @@ public class CostRunServiceImpl implements ICostRunService
                 item.setInputJson(writeJson(input));
                 item.setErrorMessage("");
                 buffer.add(item);
-                if (buffer.size() >= DEFAULT_INPUT_BATCH_INSERT_SIZE)
-                {
+                if (buffer.size() >= DEFAULT_INPUT_BATCH_INSERT_SIZE) {
                     calcInputBatchItemMapper.insertBatch(buffer);
                     buffer.clear();
                 }
             }
-            if (!buffer.isEmpty())
-            {
+            if (!buffer.isEmpty()) {
                 calcInputBatchItemMapper.insertBatch(buffer);
             }
-        }
-        catch (ServiceException exception)
-        {
+        } catch (ServiceException exception) {
             throw exception;
-        }
-        catch (IOException exception)
-        {
+        } catch (IOException exception) {
             throw new ServiceException("导入批次输入必须是 JSON 数组");
         }
-        if (itemNo <= 0)
-        {
+        if (itemNo <= 0) {
             throw new ServiceException("导入批次输入不能为空数组");
         }
         return itemNo;
     }
 
-    private int resolvePartitionStartItemNo(Integer partitionNo)
-    {
+    private int resolvePartitionStartItemNo(Integer partitionNo) {
         int safePartitionNo = partitionNo == null || partitionNo <= 0 ? 1 : partitionNo;
         return (safePartitionNo - 1) * DEFAULT_TASK_PARTITION_SIZE + 1;
     }
 
-    private int resolvePartitionEndItemNo(Integer partitionNo, int partitionItemCount)
-    {
+    private int resolvePartitionEndItemNo(Integer partitionNo, int partitionItemCount) {
         return resolvePartitionStartItemNo(partitionNo) + Math.max(partitionItemCount, 1) - 1;
     }
 
-    private boolean isTaskCancelled(Long taskId)
-    {
+    private boolean isTaskCancelled(Long taskId) {
         CostCalcTask task = calcTaskMapper.selectById(taskId);
         return task == null || TASK_STATUS_CANCELLED.equals(task.getTaskStatus());
     }
 
     /**
-     * 鍒嗙墖杩涘叆鎵ц鍓嶅厛钀借繍琛屾€侊紝渚夸簬浠诲姟涓績瑙傚療鍒嗙墖瀹炴椂杩涘害銆?     */
-    private PartitionClaimToken markPartitionRunning(Long taskId, List<CostCalcTaskDetail> partitionDetails)
-    {
-        if (partitionDetails == null || partitionDetails.isEmpty())
-        {
+     * 鍒嗙墖杩涘叆鎵ц鍓嶅厛钀借繍琛屾€侊紝渚夸簬浠诲姟涓績瑙傚療鍒嗙墖瀹炴椂杩涘害銆?
+     */
+    private PartitionClaimToken markPartitionRunning(Long taskId, List<CostCalcTaskDetail> partitionDetails) {
+        if (partitionDetails == null || partitionDetails.isEmpty()) {
             return null;
         }
         Integer partitionNo = partitionDetails.get(0).getPartitionNo();
         String executeNode = resolveExecuteNode();
         Date claimTime = normalizePartitionClaimTime(DateUtils.getNowDate());
-        if (!tryClaimPartitionExecution(taskId, partitionNo, claimTime))
-        {
+        if (!tryClaimPartitionExecution(taskId, partitionNo, claimTime)) {
             throw new IllegalStateException(String.format(Locale.ROOT,
                     "分片已被其他执行器认领，taskId=%d, partitionNo=%d", taskId, partitionNo));
         }
         return new PartitionClaimToken(taskId, partitionNo, executeNode, claimTime);
     }
 
-    private boolean tryClaimPartitionExecution(Long taskId, Integer partitionNo, Date claimTime)
-    {
-        if (taskId == null || partitionNo == null)
-        {
+    private boolean tryClaimPartitionExecution(Long taskId, Integer partitionNo, Date claimTime) {
+        if (taskId == null || partitionNo == null) {
             return false;
         }
         Date claimedAt = normalizePartitionClaimTime(claimTime == null ? DateUtils.getNowDate() : claimTime);
@@ -4383,11 +3735,9 @@ public class CostRunServiceImpl implements ICostRunService
         return updated > 0;
     }
 
-    private boolean isPartitionClaimOwned(PartitionClaimToken claimToken)
-    {
+    private boolean isPartitionClaimOwned(PartitionClaimToken claimToken) {
         if (claimToken == null || claimToken.taskId == null || claimToken.partitionNo == null
-                || StringUtils.isEmpty(claimToken.executeNode) || claimToken.claimTime == null)
-        {
+                || StringUtils.isEmpty(claimToken.executeNode) || claimToken.claimTime == null) {
             return false;
         }
         return calcTaskPartitionMapper.selectCount(Wrappers.<CostCalcTaskPartition>lambdaQuery()
@@ -4398,22 +3748,19 @@ public class CostRunServiceImpl implements ICostRunService
                 .eq(CostCalcTaskPartition::getClaimTime, claimToken.claimTime)) > 0;
     }
 
-    private Date normalizePartitionClaimTime(Date value)
-    {
-        if (value == null)
-        {
+    private Date normalizePartitionClaimTime(Date value) {
+        if (value == null) {
             return null;
         }
         return new Date((value.getTime() / 1000L) * 1000L);
     }
 
     /**
-     * 鍒嗙墖瀹屾垚鍚庡洖鍐欑粺璁′笌閿欒鎽樿锛屾敮鎾戝悗缁垎鐗囩骇閲嶈瘯鍜岀洃鎺с€?     */
+     * 鍒嗙墖瀹屾垚鍚庡洖鍐欑粺璁′笌閿欒鎽樿锛屾敮鎾戝悗缁垎鐗囩骇閲嶈瘯鍜岀洃鎺с€?
+     */
     private void finishPartition(Long taskId, List<CostCalcTaskDetail> partitionDetails, PartitionClaimToken claimToken,
-            PartitionExecutionResult result, Throwable throwable)
-    {
-        if (partitionDetails == null || partitionDetails.isEmpty() || claimToken == null || !isPartitionClaimOwned(claimToken))
-        {
+                                 PartitionExecutionResult result, Throwable throwable) {
+        if (partitionDetails == null || partitionDetails.isEmpty() || claimToken == null || !isPartitionClaimOwned(claimToken)) {
             return;
         }
         Integer partitionNo = partitionDetails.get(0).getPartitionNo();
@@ -4454,32 +3801,25 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     protected PartitionExecutionResult executeTaskPartition(Long taskId, RuntimeSnapshot snapshot, List<CostCalcTaskDetail> details,
-            PartitionClaimToken claimToken)
-    {
+                                                            PartitionClaimToken claimToken) {
         CostCalcTask task = calcTaskMapper.selectById(taskId);
         if (task == null || TASK_STATUS_CANCELLED.equals(task.getTaskStatus()) || details.isEmpty()
-                || claimToken == null || !isPartitionClaimOwned(claimToken))
-        {
+                || claimToken == null || !isPartitionClaimOwned(claimToken)) {
             return new PartitionExecutionResult();
         }
 
         PartitionExecutionBundle bundle = new PartitionExecutionBundle();
-        for (CostCalcTaskDetail detail : details)
-        {
-            if (isTaskCancelled(taskId) || !isPartitionClaimOwned(claimToken))
-            {
+        for (CostCalcTaskDetail detail : details) {
+            if (isTaskCancelled(taskId) || !isPartitionClaimOwned(claimToken)) {
                 break;
             }
             prepareTaskDetailExecution(task, detail, snapshot, bundle);
         }
-        if (!bundle.detailUpdates.isEmpty())
-        {
+        if (!bundle.detailUpdates.isEmpty()) {
             persistPartitionBundle(taskId, claimToken, bundle);
         }
-        if (!bundle.ownerLost)
-        {
-            for (TaskDetailFailure failure : bundle.failures)
-            {
+        if (!bundle.ownerLost) {
+            for (TaskDetailFailure failure : bundle.failures) {
                 createTaskAlarm(task, failure.detail, "TASK_DETAIL_FAILED", "WARN",
                         "任务明细执行失败", "业务单号 " + failure.detail.getBizNo() + " 执行失败：" + limitLength(failure.errorMessage, 300));
             }
@@ -4487,15 +3827,12 @@ public class CostRunServiceImpl implements ICostRunService
         return bundle.toResult();
     }
 
-    private void prepareTaskDetailExecution(CostCalcTask task, CostCalcTaskDetail detail, RuntimeSnapshot snapshot, PartitionExecutionBundle bundle)
-    {
-        try
-        {
+    private void prepareTaskDetailExecution(CostCalcTask task, CostCalcTaskDetail detail, RuntimeSnapshot snapshot, PartitionExecutionBundle bundle) {
+        try {
             Map<String, Object> input = parseObjectJson(detail.getInputJson(), "浠诲姟鏄庣粏杈撳叆蹇呴』鏄?JSON 瀵硅薄");
             ExecutionResult executionResult = executeSingle(snapshot, task.getTaskNo(), task.getBillMonth(), input);
             List<CostResultLedger> detailLedgers = new ArrayList<>();
-            for (FeeExecutionResult feeResult : executionResult.feeResults)
-            {
+            for (FeeExecutionResult feeResult : executionResult.feeResults) {
                 CostResultTrace trace = buildTraceRecord(snapshot, feeResult);
                 CostResultLedger ledger = buildLedgerRecord(task, detail, snapshot, input, feeResult, trace.getTraceId());
                 bundle.traceInserts.add(trace);
@@ -4509,9 +3846,7 @@ public class CostRunServiceImpl implements ICostRunService
                     .reduce(BigDecimal.ZERO, BigDecimal::add));
             bundle.processedCount++;
             bundle.successCount++;
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             String errorMessage = limitLength(e.getMessage(), 1000);
             bundle.detailUpdates.add(buildTaskDetailUpdate(detail, DETAIL_STATUS_FAILED, "鎵ц澶辫触", errorMessage));
             bundle.failures.add(new TaskDetailFailure(detail, errorMessage));
@@ -4520,32 +3855,24 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private void persistPartitionBundle(Long taskId, PartitionClaimToken claimToken, PartitionExecutionBundle bundle)
-    {
-        if (!isPartitionClaimOwned(claimToken))
-        {
+    private void persistPartitionBundle(Long taskId, PartitionClaimToken claimToken, PartitionExecutionBundle bundle) {
+        if (!isPartitionClaimOwned(claimToken)) {
             bundle.markOwnerLost();
             return;
         }
-        try
-        {
+        try {
             transactionTemplate.executeWithoutResult(status -> persistPartitionBundleInBatch(taskId, bundle));
             bundle.persistMode = PARTITION_PERSIST_MODE_BATCH;
             bundle.recoveryHint = "";
             bundle.lastErrorStage = "";
-        }
-        catch (Exception batchException)
-        {
+        } catch (Exception batchException) {
             String batchMessage = limitLength(resolveThrowableMessage(batchException, "鍒嗙墖鎵归噺钀藉簱澶辫触"), 500);
-            try
-            {
+            try {
                 transactionTemplate.executeWithoutResult(status -> persistPartitionBundleRowByRow(taskId, bundle));
                 bundle.persistMode = PARTITION_PERSIST_MODE_SINGLE;
                 bundle.recoveryHint = limitLength("批量落库失败后已自动降级为逐条写入：" + batchMessage, 500);
                 bundle.lastErrorStage = PARTITION_STAGE_BATCH_PERSIST;
-            }
-            catch (Exception singleException)
-            {
+            } catch (Exception singleException) {
                 String singleMessage = limitLength(resolveThrowableMessage(singleException, "鍒嗙墖閫愭潯钀藉簱澶辫触"), 500);
                 throw new ServiceException("分片结果落库失败，批量写入与逐条降级均未成功。批量阶段："
                         + batchMessage + "；逐条阶段：" + singleMessage);
@@ -4553,44 +3880,34 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    protected void persistPartitionBundleInBatch(Long taskId, PartitionExecutionBundle bundle)
-    {
+    protected void persistPartitionBundleInBatch(Long taskId, PartitionExecutionBundle bundle) {
         purgeExistingTaskResults(taskId, bundle.bizNos());
-        if (!bundle.traceInserts.isEmpty())
-        {
+        if (!bundle.traceInserts.isEmpty()) {
             resultTraceMapper.insertBatch(bundle.traceInserts);
         }
-        if (!bundle.ledgerInserts.isEmpty())
-        {
+        if (!bundle.ledgerInserts.isEmpty()) {
             resultLedgerMapper.insertBatch(bundle.ledgerInserts);
         }
         calcTaskDetailMapper.updateBatchResult(bundle.detailUpdates);
     }
 
-    private void persistPartitionBundleRowByRow(Long taskId, PartitionExecutionBundle bundle)
-    {
+    private void persistPartitionBundleRowByRow(Long taskId, PartitionExecutionBundle bundle) {
         purgeExistingTaskResults(taskId, bundle.bizNos());
-        for (CostResultTrace trace : bundle.traceInserts)
-        {
+        for (CostResultTrace trace : bundle.traceInserts) {
             resultTraceMapper.insert(trace);
         }
-        for (CostResultLedger ledger : bundle.ledgerInserts)
-        {
+        for (CostResultLedger ledger : bundle.ledgerInserts) {
             resultLedgerMapper.insert(ledger);
         }
-        for (CostCalcTaskDetail detailUpdate : bundle.detailUpdates)
-        {
+        for (CostCalcTaskDetail detailUpdate : bundle.detailUpdates) {
             calcTaskDetailMapper.updateById(detailUpdate);
         }
     }
 
-    private String resolveThrowableMessage(Throwable throwable, String fallback)
-    {
+    private String resolveThrowableMessage(Throwable throwable, String fallback) {
         Throwable current = throwable;
-        while (current != null)
-        {
-            if (StringUtils.isNotEmpty(current.getMessage()))
-            {
+        while (current != null) {
+            if (StringUtils.isNotEmpty(current.getMessage())) {
                 return current.getMessage();
             }
             current = current.getCause();
@@ -4598,29 +3915,24 @@ public class CostRunServiceImpl implements ICostRunService
         return fallback;
     }
 
-    private void purgeExistingTaskResults(Long taskId, Collection<String> bizNos)
-    {
-        if (bizNos == null || bizNos.isEmpty())
-        {
+    private void purgeExistingTaskResults(Long taskId, Collection<String> bizNos) {
+        if (bizNos == null || bizNos.isEmpty()) {
             return;
         }
         List<CostResultLedger> existing = resultLedgerMapper.selectList(Wrappers.<CostResultLedger>lambdaQuery()
                 .eq(CostResultLedger::getTaskId, taskId)
                 .in(CostResultLedger::getBizNo, bizNos));
-        if (existing.isEmpty())
-        {
+        if (existing.isEmpty()) {
             return;
         }
         List<Long> traceIds = existing.stream().map(CostResultLedger::getTraceId).filter(Objects::nonNull).collect(Collectors.toList());
         resultLedgerMapper.deleteBatchIds(existing.stream().map(CostResultLedger::getResultId).collect(Collectors.toList()));
-        if (!traceIds.isEmpty())
-        {
+        if (!traceIds.isEmpty()) {
             resultTraceMapper.deleteBatchIds(traceIds);
         }
     }
 
-    private CostResultTrace buildTraceRecord(RuntimeSnapshot snapshot, FeeExecutionResult feeResult)
-    {
+    private CostResultTrace buildTraceRecord(RuntimeSnapshot snapshot, FeeExecutionResult feeResult) {
         CostResultTrace trace = new CostResultTrace();
         trace.setTraceId(nextSnowflakeId());
         trace.setSceneId(snapshot.sceneId);
@@ -4635,8 +3947,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private CostResultLedger buildLedgerRecord(CostCalcTask task, CostCalcTaskDetail detail, RuntimeSnapshot snapshot,
-            Map<String, Object> input, FeeExecutionResult feeResult, Long traceId)
-    {
+                                               Map<String, Object> input, FeeExecutionResult feeResult, Long traceId) {
         CostResultLedger ledger = new CostResultLedger();
         ledger.setResultId(nextSnowflakeId());
         ledger.setTaskId(task.getTaskId());
@@ -4660,8 +3971,7 @@ public class CostRunServiceImpl implements ICostRunService
         return ledger;
     }
 
-    private CostCalcTaskDetail buildTaskDetailUpdate(CostCalcTaskDetail detail, String status, String resultSummary, String errorMessage)
-    {
+    private CostCalcTaskDetail buildTaskDetailUpdate(CostCalcTaskDetail detail, String status, String resultSummary, String errorMessage) {
         CostCalcTaskDetail update = new CostCalcTaskDetail();
         update.setDetailId(detail.getDetailId());
         update.setBizNo(detail.getBizNo());
@@ -4672,17 +3982,14 @@ public class CostRunServiceImpl implements ICostRunService
         return update;
     }
 
-    private long nextSnowflakeId()
-    {
+    private long nextSnowflakeId() {
         return IdWorker.getId();
     }
 
     private PartitionExecutionResult markPartitionFailed(Long taskId, List<CostCalcTaskDetail> partition,
-            PartitionClaimToken claimToken, Throwable throwable)
-    {
+                                                         PartitionClaimToken claimToken, Throwable throwable) {
         CostCalcTask task = calcTaskMapper.selectById(taskId);
-        if (task == null || partition == null || partition.isEmpty() || !isPartitionClaimOwned(claimToken))
-        {
+        if (task == null || partition == null || partition.isEmpty() || !isPartitionClaimOwned(claimToken)) {
             return new PartitionExecutionResult();
         }
         String errorMessage = limitLength(throwable == null ? "鍒嗙墖鎵ц澶辫触" : throwable.getMessage(), 1000);
@@ -4690,8 +3997,7 @@ public class CostRunServiceImpl implements ICostRunService
                 .map(detail -> buildTaskDetailUpdate(detail, DETAIL_STATUS_FAILED, "鍒嗙墖鎵ц澶辫触", errorMessage))
                 .collect(Collectors.toList());
         transactionTemplate.executeWithoutResult(status -> calcTaskDetailMapper.updateBatchResult(updates));
-        for (CostCalcTaskDetail detail : partition)
-        {
+        for (CostCalcTaskDetail detail : partition) {
             createTaskAlarm(task, detail, "TASK_PARTITION_FAILED", "ERROR",
                     "任务分片执行失败", "分片 " + detail.getPartitionNo() + " 执行失败：" + limitLength(errorMessage, 300));
         }
@@ -4704,29 +4010,23 @@ public class CostRunServiceImpl implements ICostRunService
         return result;
     }
 
-    private Map<String, Object> parseObjectJson(String json, String errorMessage)
-    {
+    private Map<String, Object> parseObjectJson(String json, String errorMessage) {
         Object parsed = parseJsonToObject(json);
-        if (!(parsed instanceof Map))
-        {
+        if (!(parsed instanceof Map)) {
             throw new ServiceException(errorMessage);
         }
         return castMap(parsed);
     }
 
-    private List<Map<String, Object>> parseArrayJson(String json, String errorMessage)
-    {
+    private List<Map<String, Object>> parseArrayJson(String json, String errorMessage) {
         Object parsed = parseJsonToObject(json);
-        if (!(parsed instanceof List))
-        {
+        if (!(parsed instanceof List)) {
             throw new ServiceException(errorMessage);
         }
         List<?> list = (List<?>) parsed;
         List<Map<String, Object>> result = new ArrayList<>();
-        for (Object item : list)
-        {
-            if (!(item instanceof Map))
-            {
+        for (Object item : list) {
+            if (!(item instanceof Map)) {
                 throw new ServiceException(errorMessage);
             }
             result.add(castMap(item));
@@ -4735,16 +4035,14 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> buildInputPreviewResult(Long sceneId, Long versionId, Long feeId, String feeCode,
-            String taskType, String rawJson, String mappingJson)
-    {
+                                                        String taskType, String rawJson, String mappingJson) {
         List<Map<String, Object>> rawRecords = parseInlineCalculationInputs(rawJson);
         InputBuildContext context = buildInputBuildContext(sceneId, versionId, feeId, feeCode, taskType, mappingJson);
         return buildMappedInputResult(context, rawRecords, 1);
     }
 
     private InputBuildContext buildInputBuildContext(Long sceneId, Long versionId, Long feeId, String feeCode,
-            String taskType, String mappingJson)
-    {
+                                                     String taskType, String mappingJson) {
         Map<String, Object> template = buildFeeInputTemplate(sceneId, versionId, feeId, feeCode, taskType);
         InputBuildContext context = new InputBuildContext();
         context.template = template;
@@ -4757,12 +4055,10 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> buildMappedInputResult(InputBuildContext context, List<Map<String, Object>> rawRecords,
-            int startIndex)
-    {
+                                                       int startIndex) {
         List<Map<String, Object>> mappedRecords = new ArrayList<>();
         LinkedHashSet<String> missingPaths = new LinkedHashSet<>();
-        for (int i = 0; i < rawRecords.size(); i++)
-        {
+        for (int i = 0; i < rawRecords.size(); i++) {
             mappedRecords.add(buildMappedInputRecord(rawRecords.get(i), context.fields, context.mapping, context.taskType,
                     context.defaultObjectDimension, startIndex + i, missingPaths));
         }
@@ -4788,25 +4084,19 @@ public class CostRunServiceImpl implements ICostRunService
         return result;
     }
 
-    private List<Map<String, Object>> extractAccessResponseRecords(CostAccessProfile profile, Object responsePayload)
-    {
+    private List<Map<String, Object>> extractAccessResponseRecords(CostAccessProfile profile, Object responsePayload) {
         AccessFetchConfig fetchConfig = buildAccessFetchConfig(profile);
         Object recordPayload = responsePayload;
-        if (StringUtils.isNotEmpty(fetchConfig.recordsPath))
-        {
+        if (StringUtils.isNotEmpty(fetchConfig.recordsPath)) {
             recordPayload = resolveByPath(responsePayload, fetchConfig.recordsPath);
         }
-        if (recordPayload instanceof Map)
-        {
+        if (recordPayload instanceof Map) {
             return Collections.singletonList(castMap(recordPayload));
         }
-        if (recordPayload instanceof List)
-        {
+        if (recordPayload instanceof List) {
             List<Map<String, Object>> records = new ArrayList<>();
-            for (Object item : (List<?>) recordPayload)
-            {
-                if (!(item instanceof Map))
-                {
+            for (Object item : (List<?>) recordPayload) {
+                if (!(item instanceof Map)) {
                     throw new ServiceException("鐩磋繛涓氬姟鎺ュ彛杩斿洖鐨勮褰曢泦鍚堝繀椤绘槸 JSON 瀵硅薄鏁扮粍");
                 }
                 records.add(castMap(item));
@@ -4817,11 +4107,9 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> createPagedInputBatchByProfile(CostAccessProfile profile, InputBuildContext context,
-            String billMonth, String requestPayloadJson, String remark, AccessFetchConfig fetchConfig)
-    {
+                                                               String billMonth, String requestPayloadJson, String remark, AccessFetchConfig fetchConfig) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(profile.getSceneId(), profile.getVersionId(), true);
-        if (snapshot != null)
-        {
+        if (snapshot != null) {
             CostCalcInputBatch batch = createInputBatchShell(snapshot, billMonth, remark, ACCESS_SOURCE_TYPE_HTTP_API,
                     profile.getProfileId(), INPUT_BATCH_STATUS_LOADING);
             AccessFetchCheckpoint checkpoint = new AccessFetchCheckpoint();
@@ -4851,11 +4139,9 @@ public class CostRunServiceImpl implements ICostRunService
         boolean hasMore = true;
         int pageNo = fetchConfig.startPage;
 
-        while (hasMore && pageSummaries.size() < fetchConfig.maxPages)
-        {
+        while (hasMore && pageSummaries.size() < fetchConfig.maxPages) {
             Map<String, Object> fetchResult = fetchProfilePayload(profile, requestPayloadJson, fetchConfig, pageNo, nextCursor);
-            if (firstResponsePayload == null)
-            {
+            if (firstResponsePayload == null) {
                 firstResponsePayload = fetchResult.get("responsePayload");
                 firstRequestPayload = fetchResult.get("requestPayload");
             }
@@ -4880,15 +4166,13 @@ public class CostRunServiceImpl implements ICostRunService
             hasMore = resolveAccessFetchHasMore(fetchConfig, rawRecords.size(), fetchResult.get("responsePayload"), responseTotal,
                     totalRawCount, pageNo - fetchConfig.startPage + 1);
             nextCursor = resolveAccessFetchNextCursor(fetchConfig, fetchResult.get("responsePayload"));
-            if (ACCESS_FETCH_MODE_CURSOR.equals(fetchConfig.pagingMode) && StringUtils.isEmpty(nextCursor))
-            {
+            if (ACCESS_FETCH_MODE_CURSOR.equals(fetchConfig.pagingMode) && StringUtils.isEmpty(nextCursor)) {
                 hasMore = false;
             }
             pageNo++;
         }
 
-        if (totalMappedCount <= 0)
-        {
+        if (totalMappedCount <= 0) {
             throw new ServiceException("按接入方案分页拉取后未生成任何标准计费对象，无法创建导入批次");
         }
         boolean maxPageReached = hasMore && pageSummaries.size() >= fetchConfig.maxPages;
@@ -4916,8 +4200,7 @@ public class CostRunServiceImpl implements ICostRunService
         return result;
     }
 
-    private CostCalcInputBatch createInputBatchShell(RuntimeSnapshot snapshot, String billMonth, String remark, String sourceType)
-    {
+    private CostCalcInputBatch createInputBatchShell(RuntimeSnapshot snapshot, String billMonth, String remark, String sourceType) {
         Date now = DateUtils.getNowDate();
         String operator = resolveOperator();
         CostCalcInputBatch batch = new CostCalcInputBatch();
@@ -4941,8 +4224,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private CostCalcInputBatch createInputBatchShell(RuntimeSnapshot snapshot, String billMonth, String remark, String sourceType,
-            Long accessProfileId, String batchStatus)
-    {
+                                                     Long accessProfileId, String batchStatus) {
         CostCalcInputBatch batch = createInputBatchShell(snapshot, billMonth, remark, sourceType);
         batch.setAccessProfileId(accessProfileId);
         batch.setBatchStatus(firstNonBlank(batchStatus, batch.getBatchStatus()));
@@ -4954,36 +4236,28 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> resumePagedInputBatchByProfile(CostAccessProfile profile, InputBuildContext context,
-            CostAccessProfileBuildBatchBo bo, String remark, AccessFetchConfig fetchConfig)
-    {
+                                                               CostAccessProfileBuildBatchBo bo, String remark, AccessFetchConfig fetchConfig) {
         CostCalcInputBatch batch = calcInputBatchMapper.selectById(bo.getResumeBatchId());
-        if (batch == null)
-        {
+        if (batch == null) {
             throw new ServiceException("待继续的导入批次不存在，请刷新后重试");
         }
-        if (!Objects.equals(batch.getSceneId(), profile.getSceneId()))
-        {
+        if (!Objects.equals(batch.getSceneId(), profile.getSceneId())) {
             throw new ServiceException("待继续的导入批次与当前场景不匹配");
         }
-        if (profile.getVersionId() != null && !Objects.equals(batch.getVersionId(), profile.getVersionId()))
-        {
+        if (profile.getVersionId() != null && !Objects.equals(batch.getVersionId(), profile.getVersionId())) {
             throw new ServiceException("待继续的导入批次与当前版本不匹配");
         }
-        if (batch.getAccessProfileId() != null && !Objects.equals(batch.getAccessProfileId(), profile.getProfileId()))
-        {
+        if (batch.getAccessProfileId() != null && !Objects.equals(batch.getAccessProfileId(), profile.getProfileId())) {
             throw new ServiceException("待继续的导入批次与当前接入方案不匹配");
         }
         AccessFetchCheckpoint checkpoint = parseAccessFetchCheckpoint(batch.getCheckpointJson());
-        if (!Boolean.TRUE.equals(checkpoint.hasMore))
-        {
+        if (!Boolean.TRUE.equals(checkpoint.hasMore)) {
             throw new ServiceException("当前导入批次没有待继续的分页游标");
         }
-        if (StringUtils.isNotEmpty(bo.getBillMonth()) && !Objects.equals(StringUtils.trim(bo.getBillMonth()), batch.getBillMonth()))
-        {
+        if (StringUtils.isNotEmpty(bo.getBillMonth()) && !Objects.equals(StringUtils.trim(bo.getBillMonth()), batch.getBillMonth())) {
             throw new ServiceException("继续装载时账期必须与原导入批次保持一致");
         }
-        if (StringUtils.isNotEmpty(StringUtils.trim(bo.getRequestPayloadJson())))
-        {
+        if (StringUtils.isNotEmpty(StringUtils.trim(bo.getRequestPayloadJson()))) {
             checkpoint.requestPayloadJson = StringUtils.trim(bo.getRequestPayloadJson());
         }
         return continuePagedInputBatchByProfile(profile, context, batch, checkpoint, firstNonBlank(remark, batch.getRemark()),
@@ -4991,9 +4265,8 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> continuePagedInputBatchByProfile(CostAccessProfile profile, InputBuildContext context,
-            CostCalcInputBatch batch, AccessFetchCheckpoint checkpoint, String remark, AccessFetchConfig fetchConfig,
-            boolean resumed)
-    {
+                                                                 CostCalcInputBatch batch, AccessFetchCheckpoint checkpoint, String remark, AccessFetchConfig fetchConfig,
+                                                                 boolean resumed) {
         Set<String> seenBizNos = new LinkedHashSet<>();
         List<Map<String, Object>> previewMappedRecords = new ArrayList<>();
         LinkedHashSet<String> missingPaths = new LinkedHashSet<>();
@@ -5012,13 +4285,10 @@ public class CostRunServiceImpl implements ICostRunService
         batch.setAccessProfileId(profile.getProfileId());
         batch.setRemark(firstNonBlank(remark, batch.getRemark()));
         persistAccessBatchProgress(batch, checkpoint, INPUT_BATCH_STATUS_LOADING, "", batch.getRemark());
-        try
-        {
-            while (hasMore && pageSummaries.size() < fetchConfig.maxPages)
-            {
+        try {
+            while (hasMore && pageSummaries.size() < fetchConfig.maxPages) {
                 Map<String, Object> fetchResult = fetchProfilePayload(profile, requestPayloadJson, fetchConfig, pageNo, nextCursor);
-                if (firstResponsePayload == null)
-                {
+                if (firstResponsePayload == null) {
                     firstResponsePayload = fetchResult.get("responsePayload");
                     firstRequestPayload = fetchResult.get("requestPayload");
                 }
@@ -5044,8 +4314,7 @@ public class CostRunServiceImpl implements ICostRunService
                 hasMore = resolveAccessFetchHasMore(fetchConfig, rawRecords.size(), fetchResult.get("responsePayload"), responseTotal,
                         totalRawCount, pageSummaries.size());
                 nextCursor = resolveAccessFetchNextCursor(fetchConfig, fetchResult.get("responsePayload"));
-                if (ACCESS_FETCH_MODE_CURSOR.equals(fetchConfig.pagingMode) && StringUtils.isEmpty(nextCursor))
-                {
+                if (ACCESS_FETCH_MODE_CURSOR.equals(fetchConfig.pagingMode) && StringUtils.isEmpty(nextCursor)) {
                     hasMore = false;
                 }
                 checkpoint.requestPayloadJson = requestPayloadJson;
@@ -5066,9 +4335,7 @@ public class CostRunServiceImpl implements ICostRunService
                 persistAccessBatchProgress(batch, checkpoint, INPUT_BATCH_STATUS_LOADING, "", batch.getRemark());
                 pageNo++;
             }
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             checkpoint.hasMore = true;
             checkpoint.nextPageNo = pageNo;
             checkpoint.nextCursor = nextCursor;
@@ -5077,8 +4344,7 @@ public class CostRunServiceImpl implements ICostRunService
                     + limitLength(e.getMessage(), 200));
         }
 
-        if (totalMappedCount <= 0)
-        {
+        if (totalMappedCount <= 0) {
             throw new ServiceException("按接入方案分页拉取后未生成任何标准计费对象，无法创建导入批次");
         }
         boolean resumable = hasMore;
@@ -5089,8 +4355,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private void persistAccessBatchProgress(CostCalcInputBatch batch, AccessFetchCheckpoint checkpoint, String batchStatus,
-            String errorMessage, String remark)
-    {
+                                            String errorMessage, String remark) {
         batch.setBatchStatus(firstNonBlank(batchStatus, batch.getBatchStatus()));
         batch.setCheckpointJson(writeJson(checkpoint));
         batch.setTotalCount(checkpoint.mappedRecordCount == null ? batch.getTotalCount() : checkpoint.mappedRecordCount);
@@ -5103,8 +4368,7 @@ public class CostRunServiceImpl implements ICostRunService
         calcInputBatchMapper.updateById(batch);
     }
 
-    private AccessFetchCheckpoint parseAccessFetchCheckpoint(String checkpointJson)
-    {
+    private AccessFetchCheckpoint parseAccessFetchCheckpoint(String checkpointJson) {
         Map<String, Object> checkpointMap = parseOptionalJsonMap(checkpointJson);
         AccessFetchCheckpoint checkpoint = new AccessFetchCheckpoint();
         checkpoint.requestPayloadJson = stringValue(checkpointMap.get("requestPayloadJson"));
@@ -5126,10 +4390,9 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> buildAccessBatchResult(CostAccessProfile profile, InputBuildContext context, CostCalcInputBatch batch,
-            AccessFetchCheckpoint checkpoint, AccessFetchConfig fetchConfig, Object firstRequestPayload, Object firstResponsePayload,
-            List<Map<String, Object>> previewMappedRecords, LinkedHashSet<String> missingPaths, List<Map<String, Object>> pageSummaries,
-            int totalMappedCount, int totalRawCount, Integer responseTotal, boolean resumable, boolean resumed)
-    {
+                                                       AccessFetchCheckpoint checkpoint, AccessFetchConfig fetchConfig, Object firstRequestPayload, Object firstResponsePayload,
+                                                       List<Map<String, Object>> previewMappedRecords, LinkedHashSet<String> missingPaths, List<Map<String, Object>> pageSummaries,
+                                                       int totalMappedCount, int totalRawCount, Integer responseTotal, boolean resumable, boolean resumed) {
         Map<String, Object> result = selectInputBatchDetail(batch.getBatchId(), 1, 10);
         LinkedHashMap<String, Object> fetchMeta = new LinkedHashMap<>();
         fetchMeta.put("paged", true);
@@ -5157,25 +4420,21 @@ public class CostRunServiceImpl implements ICostRunService
         return result;
     }
 
-    private int countInputBatchItems(Long batchId)
-    {
+    private int countInputBatchItems(Long batchId) {
         return Math.toIntExact(calcInputBatchItemMapper.selectCount(Wrappers.<CostCalcInputBatchItem>lambdaQuery()
                 .eq(CostCalcInputBatchItem::getBatchId, batchId)));
     }
 
     private void bindAccessProfileToBatch(Object batchPayload, Long profileId, String requestPayloadJson,
-            AccessFetchConfig fetchConfig)
-    {
+                                          AccessFetchConfig fetchConfig) {
         Object batchIdValue = batchPayload instanceof CostCalcInputBatch
                 ? ((CostCalcInputBatch) batchPayload).getBatchId()
                 : batchPayload instanceof Map ? castMap(batchPayload).get("batchId") : null;
-        if (batchIdValue == null)
-        {
+        if (batchIdValue == null) {
             return;
         }
         CostCalcInputBatch batch = calcInputBatchMapper.selectById(NumberUtils.toLong(String.valueOf(batchIdValue)));
-        if (batch == null)
-        {
+        if (batch == null) {
             return;
         }
         AccessFetchCheckpoint checkpoint = new AccessFetchCheckpoint();
@@ -5193,8 +4452,7 @@ public class CostRunServiceImpl implements ICostRunService
         calcInputBatchMapper.updateById(batch);
     }
 
-    private void finalizeInputBatch(CostCalcInputBatch batch, int totalCount)
-    {
+    private void finalizeInputBatch(CostCalcInputBatch batch, int totalCount) {
         batch.setTotalCount(totalCount);
         batch.setValidCount(totalCount);
         batch.setUpdateBy(resolveOperator());
@@ -5203,26 +4461,21 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private int appendInputBatchItems(CostCalcInputBatch batch, List<Map<String, Object>> inputs, int startItemNo,
-            Set<String> seenBizNos)
-    {
-        if (inputs == null || inputs.isEmpty())
-        {
+                                      Set<String> seenBizNos) {
+        if (inputs == null || inputs.isEmpty()) {
             return 0;
         }
         List<String> currentPageBizNos = new ArrayList<>(inputs.size());
         int probeItemNo = startItemNo;
-        for (Map<String, Object> input : inputs)
-        {
+        for (Map<String, Object> input : inputs) {
             probeItemNo++;
             String bizNo = resolveBizNo(input, probeItemNo);
-            if (seenBizNos != null && !seenBizNos.add(bizNo))
-            {
+            if (seenBizNos != null && !seenBizNos.add(bizNo)) {
                 throw new ServiceException("鍒嗛〉瑁呰浇鏃跺彂鐜伴噸澶嶄笟鍔″崟鍙?" + bizNo);
             }
             currentPageBizNos.add(bizNo);
         }
-        if (batch.getBatchId() != null)
-        {
+        if (batch.getBatchId() != null) {
             List<String> existedBizNos = calcInputBatchItemMapper.selectList(Wrappers.<CostCalcInputBatchItem>lambdaQuery()
                             .eq(CostCalcInputBatchItem::getBatchId, batch.getBatchId())
                             .in(CostCalcInputBatchItem::getBizNo, currentPageBizNos)
@@ -5232,19 +4485,16 @@ public class CostRunServiceImpl implements ICostRunService
                     .filter(StringUtils::isNotEmpty)
                     .distinct()
                     .collect(Collectors.toList());
-            if (!existedBizNos.isEmpty())
-            {
+            if (!existedBizNos.isEmpty()) {
                 throw new ServiceException("鍒嗛〉瑁呰浇鏃跺彂鐜版壒娆″唴宸插瓨鍦ㄤ笟鍔″崟鍙?" + String.join(", ", existedBizNos));
             }
         }
         List<CostCalcInputBatchItem> buffer = new ArrayList<>(DEFAULT_INPUT_BATCH_INSERT_SIZE);
         int itemNo = startItemNo;
-        for (Map<String, Object> input : inputs)
-        {
+        for (Map<String, Object> input : inputs) {
             itemNo++;
             String bizNo = resolveBizNo(input, itemNo);
-            if (false && seenBizNos != null && !seenBizNos.add(bizNo))
-            {
+            if (false && seenBizNos != null && !seenBizNos.add(bizNo)) {
                 throw new ServiceException("鍒嗛〉瑁呰浇鏃跺彂鐜伴噸澶嶄笟鍔″崟鍙? " + bizNo);
             }
             CostCalcInputBatchItem item = new CostCalcInputBatchItem();
@@ -5256,43 +4506,35 @@ public class CostRunServiceImpl implements ICostRunService
             item.setInputJson(writeJson(input));
             item.setErrorMessage("");
             buffer.add(item);
-            if (buffer.size() >= DEFAULT_INPUT_BATCH_INSERT_SIZE)
-            {
+            if (buffer.size() >= DEFAULT_INPUT_BATCH_INSERT_SIZE) {
                 calcInputBatchItemMapper.insertBatch(buffer);
                 buffer.clear();
             }
         }
-        if (!buffer.isEmpty())
-        {
+        if (!buffer.isEmpty()) {
             calcInputBatchItemMapper.insertBatch(buffer);
         }
         return inputs.size();
     }
 
-    private void appendPreviewRecords(List<Map<String, Object>> target, List<Map<String, Object>> pageRecords, int limit)
-    {
-        if (target.size() >= limit)
-        {
+    private void appendPreviewRecords(List<Map<String, Object>> target, List<Map<String, Object>> pageRecords, int limit) {
+        if (target.size() >= limit) {
             return;
         }
-        for (Map<String, Object> record : pageRecords)
-        {
+        for (Map<String, Object> record : pageRecords) {
             target.add(record);
-            if (target.size() >= limit)
-            {
+            if (target.size() >= limit) {
                 return;
             }
         }
     }
 
-    private Map<String, Object> fetchProfilePayload(CostAccessProfile profile, String requestPayloadJson)
-    {
+    private Map<String, Object> fetchProfilePayload(CostAccessProfile profile, String requestPayloadJson) {
         return fetchProfilePayload(profile, requestPayloadJson, buildAccessFetchConfig(profile), null, "");
     }
 
     private Map<String, Object> fetchProfilePayload(CostAccessProfile profile, String requestPayloadJson,
-            AccessFetchConfig fetchConfig, Integer pageNo, String cursor)
-    {
+                                                    AccessFetchConfig fetchConfig, Integer pageNo, String cursor) {
         String requestMethod = StringUtils.defaultIfEmpty(StringUtils.upperCase(profile.getRequestMethod()), "GET");
         Object requestPayload = applyAccessFetchRequestControls(
                 parseOptionalJsonObject(firstNonBlank(requestPayloadJson, profile.getSamplePayloadJson())),
@@ -5301,17 +4543,13 @@ public class CostRunServiceImpl implements ICostRunService
         String requestUrl = buildAccessRequestUrl(profile.getEndpointUrl(), requestMethod, requestPayload);
         HttpEntity<?> requestEntity = buildAccessRequestEntity(headers, requestMethod, requestPayload);
         ResponseEntity<String> response;
-        try
-        {
+        try {
             response = costAccessRestTemplate.exchange(requestUrl, HttpMethod.valueOf(requestMethod), requestEntity, String.class);
-        }
-        catch (RestClientException e)
-        {
+        } catch (RestClientException e) {
             throw new ServiceException("直连业务接口失败：" + limitLength(e.getMessage(), 300));
         }
         String responseBody = StringUtils.defaultString(response.getBody());
-        if (StringUtils.isEmpty(StringUtils.trim(responseBody)))
-        {
+        if (StringUtils.isEmpty(StringUtils.trim(responseBody))) {
             throw new ServiceException("业务接口已返回，但响应体为空，无法预演标准计费对象");
         }
         Object responsePayload = parseJsonToObject(responseBody);
@@ -5339,67 +4577,53 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Object applyAccessFetchRequestControls(Object requestPayload, AccessFetchConfig fetchConfig, Integer pageNo,
-            String cursor)
-    {
-        if (!fetchConfig.paged)
-        {
+                                                   String cursor) {
+        if (!fetchConfig.paged) {
             return requestPayload;
         }
         LinkedHashMap<String, Object> payload = requestPayload instanceof Map
                 ? new LinkedHashMap<>(castMap(requestPayload))
                 : new LinkedHashMap<>();
-        if (ACCESS_FETCH_MODE_PAGE_NO.equals(fetchConfig.pagingMode))
-        {
+        if (ACCESS_FETCH_MODE_PAGE_NO.equals(fetchConfig.pagingMode)) {
             payload.put(fetchConfig.pageField, pageNo == null ? fetchConfig.startPage : pageNo);
             payload.put(fetchConfig.pageSizeField, fetchConfig.pageSize);
-        }
-        else if (ACCESS_FETCH_MODE_CURSOR.equals(fetchConfig.pagingMode))
-        {
+        } else if (ACCESS_FETCH_MODE_CURSOR.equals(fetchConfig.pagingMode)) {
             payload.put(fetchConfig.pageSizeField, fetchConfig.pageSize);
-            if (StringUtils.isNotEmpty(cursor))
-            {
+            if (StringUtils.isNotEmpty(cursor)) {
                 payload.put(fetchConfig.cursorField, cursor);
             }
         }
         return payload;
     }
 
-    private HttpHeaders buildAccessHeaders(CostAccessProfile profile)
-    {
+    private HttpHeaders buildAccessHeaders(CostAccessProfile profile) {
         HttpHeaders headers = new HttpHeaders();
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         Map<String, Object> authConfig = parseOptionalJsonMap(profile.getAuthConfigJson());
         String authType = StringUtils.defaultIfEmpty(StringUtils.upperCase(profile.getAuthType()), AUTH_TYPE_NONE);
-        if (AUTH_TYPE_BASIC.equals(authType))
-        {
+        if (AUTH_TYPE_BASIC.equals(authType)) {
             String username = firstNonBlank(stringValue(authConfig.get("username")), stringValue(authConfig.get("user")));
             String password = firstNonBlank(stringValue(authConfig.get("password")), stringValue(authConfig.get("pass")));
-            if (StringUtils.isEmpty(username))
-            {
+            if (StringUtils.isEmpty(username)) {
                 throw new ServiceException("BASIC 閴存潈缂哄皯 username 閰嶇疆");
             }
             headers.setBasicAuth(username, StringUtils.defaultString(password));
-        }
-        else if (AUTH_TYPE_BEARER.equals(authType))
-        {
+        } else if (AUTH_TYPE_BEARER.equals(authType)) {
             String token = firstNonBlank(
                     firstNonBlank(stringValue(authConfig.get("token")), stringValue(authConfig.get("accessToken"))),
                     stringValue(authConfig.get("bearerToken")));
-            if (StringUtils.isEmpty(token))
-            {
+            if (StringUtils.isEmpty(token)) {
                 throw new ServiceException("BEARER 閴存潈缂哄皯 token 閰嶇疆");
             }
             headers.setBearerAuth(token);
         }
 
         Object extraHeaders = authConfig.get("headers");
-        if (extraHeaders instanceof Map)
-        {
+        if (extraHeaders instanceof Map) {
             castMap(extraHeaders).forEach((key, value) -> {
-                if (StringUtils.isNotEmpty(key) && value != null)
-                {
+                if (StringUtils.isNotEmpty(key) && value != null) {
                     headers.set(key, String.valueOf(value));
                 }
             });
@@ -5407,8 +4631,7 @@ public class CostRunServiceImpl implements ICostRunService
         return headers;
     }
 
-    private AccessFetchConfig buildAccessFetchConfig(CostAccessProfile profile)
-    {
+    private AccessFetchConfig buildAccessFetchConfig(CostAccessProfile profile) {
         Map<String, Object> config = parseOptionalJsonMap(profile.getFetchConfigJson());
         Map<String, Object> paging = config.get("paging") instanceof Map ? castMap(config.get("paging")) : Collections.emptyMap();
         AccessFetchConfig fetchConfig = new AccessFetchConfig();
@@ -5436,78 +4659,61 @@ public class CostRunServiceImpl implements ICostRunService
         return fetchConfig;
     }
 
-    private Integer resolvePagedResponseTotal(AccessFetchConfig fetchConfig, Object responsePayload, Integer fallback)
-    {
-        if (StringUtils.isEmpty(fetchConfig.totalPath))
-        {
+    private Integer resolvePagedResponseTotal(AccessFetchConfig fetchConfig, Object responsePayload, Integer fallback) {
+        if (StringUtils.isEmpty(fetchConfig.totalPath)) {
             return fallback;
         }
         Object totalValue = resolveByPath(responsePayload, fetchConfig.totalPath);
-        if (totalValue == null)
-        {
+        if (totalValue == null) {
             return fallback;
         }
         return NumberUtils.toInt(String.valueOf(totalValue), fallback == null ? 0 : fallback);
     }
 
     private boolean resolveAccessFetchHasMore(AccessFetchConfig fetchConfig, int pageRecordCount, Object responsePayload,
-            Integer responseTotal, int totalFetchedCount, int fetchedPageCount)
-    {
-        if (!fetchConfig.paged)
-        {
+                                              Integer responseTotal, int totalFetchedCount, int fetchedPageCount) {
+        if (!fetchConfig.paged) {
             return false;
         }
-        if (StringUtils.isNotEmpty(fetchConfig.hasMorePath))
-        {
+        if (StringUtils.isNotEmpty(fetchConfig.hasMorePath)) {
             Object value = resolveByPath(responsePayload, fetchConfig.hasMorePath);
-            if (value != null)
-            {
+            if (value != null) {
                 return Boolean.parseBoolean(String.valueOf(value));
             }
         }
-        if (responseTotal != null && responseTotal > 0)
-        {
+        if (responseTotal != null && responseTotal > 0) {
             return totalFetchedCount < responseTotal;
         }
-        if (pageRecordCount < fetchConfig.pageSize)
-        {
+        if (pageRecordCount < fetchConfig.pageSize) {
             return false;
         }
         return fetchedPageCount < fetchConfig.maxPages;
     }
 
-    private String resolveAccessFetchNextCursor(AccessFetchConfig fetchConfig, Object responsePayload)
-    {
-        if (StringUtils.isEmpty(fetchConfig.nextCursorPath))
-        {
+    private String resolveAccessFetchNextCursor(AccessFetchConfig fetchConfig, Object responsePayload) {
+        if (StringUtils.isEmpty(fetchConfig.nextCursorPath)) {
             return "";
         }
         Object value = resolveByPath(responsePayload, fetchConfig.nextCursorPath);
         return value == null ? "" : String.valueOf(value);
     }
 
-    private String buildAccessRequestUrl(String endpointUrl, String requestMethod, Object requestPayload)
-    {
+    private String buildAccessRequestUrl(String endpointUrl, String requestMethod, Object requestPayload) {
         String normalizedUrl = StringUtils.trim(endpointUrl);
         if (!StringUtils.startsWithIgnoreCase(normalizedUrl, "http://")
-                && !StringUtils.startsWithIgnoreCase(normalizedUrl, "https://"))
-        {
+                && !StringUtils.startsWithIgnoreCase(normalizedUrl, "https://")) {
             throw new ServiceException("接口地址必须以 http:// 或 https:// 开头");
         }
-        if (!HttpMethod.GET.name().equalsIgnoreCase(requestMethod) || !(requestPayload instanceof Map))
-        {
+        if (!HttpMethod.GET.name().equalsIgnoreCase(requestMethod) || !(requestPayload instanceof Map)) {
             return normalizedUrl;
         }
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(normalizedUrl);
         castMap(requestPayload).forEach((key, value) -> {
-            if (StringUtils.isEmpty(key) || value == null)
-            {
+            if (StringUtils.isEmpty(key) || value == null) {
                 return;
             }
-            if (value instanceof Collection)
-            {
-                for (Object item : (Collection<?>) value)
-                {
+            if (value instanceof Collection) {
+                for (Object item : (Collection<?>) value) {
                     builder.queryParam(key, item == null ? "" : writeJsonQueryValue(item));
                 }
                 return;
@@ -5517,48 +4723,37 @@ public class CostRunServiceImpl implements ICostRunService
         return builder.build(true).toUriString();
     }
 
-    private HttpEntity<?> buildAccessRequestEntity(HttpHeaders headers, String requestMethod, Object requestPayload)
-    {
-        if (HttpMethod.GET.name().equalsIgnoreCase(requestMethod))
-        {
+    private HttpEntity<?> buildAccessRequestEntity(HttpHeaders headers, String requestMethod, Object requestPayload) {
+        if (HttpMethod.GET.name().equalsIgnoreCase(requestMethod)) {
             return new HttpEntity<>(headers);
         }
         return new HttpEntity<>(requestPayload == null ? new LinkedHashMap<>() : requestPayload, headers);
     }
 
-    private Object parseOptionalJsonObject(String json)
-    {
+    private Object parseOptionalJsonObject(String json) {
         String normalized = StringUtils.trim(json);
-        if (StringUtils.isEmpty(normalized))
-        {
+        if (StringUtils.isEmpty(normalized)) {
             return null;
         }
         return parseJsonToObject(normalized);
     }
 
-    private String writeJsonString(Object value)
-    {
-        try
-        {
+    private String writeJsonString(Object value) {
+        try {
             return objectMapper.writeValueAsString(value);
-        }
-        catch (JsonProcessingException e)
-        {
+        } catch (JsonProcessingException e) {
             throw new ServiceException("JSON 序列化失败");
         }
     }
 
-    private String writeJsonQueryValue(Object value)
-    {
-        if (value == null || value instanceof String || value instanceof Number || value instanceof Boolean)
-        {
+    private String writeJsonQueryValue(Object value) {
+        if (value == null || value instanceof String || value instanceof Number || value instanceof Boolean) {
             return String.valueOf(value);
         }
         return writeJsonString(value);
     }
 
-    private Map<String, Object> buildAccessProfileSummary(CostAccessProfile profile)
-    {
+    private Map<String, Object> buildAccessProfileSummary(CostAccessProfile profile) {
         LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
         summary.put("profileId", profile.getProfileId());
         summary.put("profileCode", profile.getProfileCode());
@@ -5579,98 +4774,75 @@ public class CostRunServiceImpl implements ICostRunService
         return summary;
     }
 
-    private String buildProfileFetchPreviewMessage(CostAccessProfile profile, Map<String, Object> preview)
-    {
+    private String buildProfileFetchPreviewMessage(CostAccessProfile profile, Map<String, Object> preview) {
         return "已按接入方案 " + profile.getProfileName() + " 拉取业务接口并完成标准计费对象预演，共生成 "
                 + NumberUtils.toInt(stringValue(preview.get("mappedRecordCount"))) + " 条标准对象";
     }
 
-    private String buildProfileInputBatchRemark(CostAccessProfile profile)
-    {
+    private String buildProfileInputBatchRemark(CostAccessProfile profile) {
         return profile.getProfileCode() + " 直连业务接口生成导入批次";
     }
 
-    private Object parseJsonToObject(String json)
-    {
-        if (StringUtils.isEmpty(json))
-        {
+    private Object parseJsonToObject(String json) {
+        if (StringUtils.isEmpty(json)) {
             return new LinkedHashMap<>();
         }
-        try
-        {
+        try {
             return objectMapper.readValue(json, Object.class);
-        }
-        catch (JsonProcessingException e)
-        {
+        } catch (JsonProcessingException e) {
             throw new ServiceException("JSON 解析失败：" + e.getOriginalMessage());
         }
     }
 
-    private Map<String, Object> parseJsonMap(String json)
-    {
-        if (StringUtils.isEmpty(json))
-        {
+    private Map<String, Object> parseJsonMap(String json) {
+        if (StringUtils.isEmpty(json)) {
             return new LinkedHashMap<>();
         }
-        try
-        {
-            return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {});
-        }
-        catch (JsonProcessingException e)
-        {
+        try {
+            return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {
+            });
+        } catch (JsonProcessingException e) {
             throw new ServiceException("鍙戝竷蹇収 JSON 瑙ｆ瀽澶辫触");
         }
     }
 
-    private Map<String, Object> parseOptionalJsonMap(String json)
-    {
+    private Map<String, Object> parseOptionalJsonMap(String json) {
         String normalized = StringUtils.trim(json);
-        if (StringUtils.isEmpty(normalized))
-        {
+        if (StringUtils.isEmpty(normalized)) {
             return new LinkedHashMap<>();
         }
         return parseJsonMap(normalized);
     }
 
-    private List<Map<String, Object>> castFieldList(Object value)
-    {
-        if (!(value instanceof List))
-        {
+    private List<Map<String, Object>> castFieldList(Object value) {
+        if (!(value instanceof List)) {
             return Collections.emptyList();
         }
         List<Map<String, Object>> result = new ArrayList<>();
-        for (Object item : (List<?>) value)
-        {
-            if (item instanceof Map)
-            {
+        for (Object item : (List<?>) value) {
+            if (item instanceof Map) {
                 result.add(castMap(item));
             }
         }
         return result;
     }
 
-    private List<String> castStringList(Object value)
-    {
-        if (!(value instanceof List))
-        {
+    private List<String> castStringList(Object value) {
+        if (!(value instanceof List)) {
             return Collections.emptyList();
         }
         List<String> result = new ArrayList<>();
-        for (Object item : (List<?>) value)
-        {
-            if (item != null)
-            {
+        for (Object item : (List<?>) value) {
+            if (item != null) {
                 result.add(String.valueOf(item));
             }
         }
         return result;
     }
 
-    private List<Map<String, Object>> buildFieldMappingSummary(List<Map<String, Object>> fields, Map<String, Object> mapping)
-    {
+    private List<Map<String, Object>> buildFieldMappingSummary(List<Map<String, Object>> fields, Map<String, Object> mapping) {
         List<Map<String, Object>> result = new ArrayList<>();
-        for (Map<String, Object> field : fields)
-        {
+        for (Map<String, Object> field : fields) {
             LinkedHashMap<String, Object> item = new LinkedHashMap<>();
             String path = stringValue(field.get("path"));
             String variableCode = stringValue(field.get("variableCode"));
@@ -5688,9 +4860,8 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private Map<String, Object> buildMappedInputRecord(Map<String, Object> rawRecord, List<Map<String, Object>> fields,
-            Map<String, Object> mapping, String taskType, String defaultObjectDimension, int index,
-            Set<String> missingPaths)
-    {
+                                                       Map<String, Object> mapping, String taskType, String defaultObjectDimension, int index,
+                                                       Set<String> missingPaths) {
         LinkedHashMap<String, Object> target = new LinkedHashMap<>();
         populatePathValue(target, "bizNo",
                 firstNonBlank(resolveMappedCoreField(rawRecord, mapping, "bizNo"), buildTemplateBizNo(taskType, index)));
@@ -5698,8 +4869,7 @@ public class CostRunServiceImpl implements ICostRunService
                 firstNonBlank(resolveMappedCoreField(rawRecord, mapping, "objectDimension"),
                         resolveString(rawRecord, "objectDimension", "object_dimension", "objectType", "object_type")),
                 defaultObjectDimension);
-        if (StringUtils.isNotEmpty(objectDimension))
-        {
+        if (StringUtils.isNotEmpty(objectDimension)) {
             populatePathValue(target, "objectDimension", objectDimension);
         }
         populatePathValue(target, "objectCode",
@@ -5709,17 +4879,14 @@ public class CostRunServiceImpl implements ICostRunService
                 firstNonBlank(resolveMappedCoreField(rawRecord, mapping, "objectName"),
                         resolveString(rawRecord, "objectName", "object_name", "teamName", "team_name", "name")));
 
-        for (Map<String, Object> field : fields)
-        {
-            if (!Boolean.TRUE.equals(field.get("includedInTemplate")))
-            {
+        for (Map<String, Object> field : fields) {
+            if (!Boolean.TRUE.equals(field.get("includedInTemplate"))) {
                 continue;
             }
             String path = stringValue(field.get("path"));
             String variableCode = stringValue(field.get("variableCode"));
             Object mappedValue = resolveMappedFieldValue(rawRecord, mapping, path, variableCode);
-            if (mappedValue == null)
-            {
+            if (mappedValue == null) {
                 missingPaths.add(path);
                 continue;
             }
@@ -5728,89 +4895,70 @@ public class CostRunServiceImpl implements ICostRunService
         return target;
     }
 
-    private String resolveMappedCoreField(Map<String, Object> rawRecord, Map<String, Object> mapping, String targetKey)
-    {
+    private String resolveMappedCoreField(Map<String, Object> rawRecord, Map<String, Object> mapping, String targetKey) {
         Object mappingSpec = resolveInputBuildMappingSpec(mapping, targetKey, targetKey);
         Object resolved = resolveValueByMappingSpec(rawRecord, mappingSpec);
         return resolved == null ? "" : String.valueOf(resolved);
     }
 
     private Object resolveMappedFieldValue(Map<String, Object> rawRecord, Map<String, Object> mapping, String path,
-            String variableCode)
-    {
+                                           String variableCode) {
         Object mappingSpec = resolveInputBuildMappingSpec(mapping, path, variableCode);
         Object mappedValue = resolveValueByMappingSpec(rawRecord, mappingSpec);
-        if (mappedValue != null)
-        {
+        if (mappedValue != null) {
             return mappedValue;
         }
-        if (StringUtils.isNotEmpty(path))
-        {
+        if (StringUtils.isNotEmpty(path)) {
             mappedValue = resolveByPath(rawRecord, path);
-            if (mappedValue != null)
-            {
+            if (mappedValue != null) {
                 return mappedValue;
             }
         }
-        if (StringUtils.isNotEmpty(variableCode))
-        {
+        if (StringUtils.isNotEmpty(variableCode)) {
             return resolveByPath(rawRecord, variableCode);
         }
         return null;
     }
 
-    private Object resolveInputBuildMappingSpec(Map<String, Object> mapping, String path, String variableCode)
-    {
-        if (mapping == null || mapping.isEmpty())
-        {
+    private Object resolveInputBuildMappingSpec(Map<String, Object> mapping, String path, String variableCode) {
+        if (mapping == null || mapping.isEmpty()) {
             return null;
         }
-        if (StringUtils.isNotEmpty(path) && mapping.containsKey(path))
-        {
+        if (StringUtils.isNotEmpty(path) && mapping.containsKey(path)) {
             return mapping.get(path);
         }
-        if (StringUtils.isNotEmpty(variableCode) && mapping.containsKey(variableCode))
-        {
+        if (StringUtils.isNotEmpty(variableCode) && mapping.containsKey(variableCode)) {
             return mapping.get(variableCode);
         }
         return null;
     }
 
-    private Object resolveValueByMappingSpec(Map<String, Object> rawRecord, Object mappingSpec)
-    {
-        if (mappingSpec == null)
-        {
+    private Object resolveValueByMappingSpec(Map<String, Object> rawRecord, Object mappingSpec) {
+        if (mappingSpec == null) {
             return null;
         }
-        if (mappingSpec instanceof Map)
-        {
+        if (mappingSpec instanceof Map) {
             Map<String, Object> specMap = castMap(mappingSpec);
-            if (specMap.containsKey("value"))
-            {
+            if (specMap.containsKey("value")) {
                 return specMap.get("value");
             }
             String sourcePath = firstNonBlank(stringValue(specMap.get("path")), stringValue(specMap.get("sourcePath")));
             return StringUtils.isEmpty(sourcePath) ? null : resolveByPath(rawRecord, sourcePath);
         }
-        if (mappingSpec instanceof String)
-        {
+        if (mappingSpec instanceof String) {
             String sourcePath = StringUtils.trim((String) mappingSpec);
             return StringUtils.isEmpty(sourcePath) ? null : resolveByPath(rawRecord, sourcePath);
         }
         return mappingSpec;
     }
 
-    private String describeMappingSpec(Object mappingSpec)
-    {
-        if (mappingSpec == null)
-        {
+    private String describeMappingSpec(Object mappingSpec) {
+        if (mappingSpec == null) {
             return "AUTO";
         }
-        if (mappingSpec instanceof Map)
-        {
+        if (mappingSpec instanceof Map) {
             Map<String, Object> specMap = castMap(mappingSpec);
-            if (specMap.containsKey("value"))
-            {
+            if (specMap.containsKey("value")) {
                 return "CONST";
             }
             return firstNonBlank(stringValue(specMap.get("path")), stringValue(specMap.get("sourcePath")));
@@ -5818,52 +4966,38 @@ public class CostRunServiceImpl implements ICostRunService
         return String.valueOf(mappingSpec);
     }
 
-    private String buildInputBuildPreviewMessage(int mappedRecordCount, int missingCount)
-    {
-        if (missingCount <= 0)
-        {
+    private String buildInputBuildPreviewMessage(int mappedRecordCount, int missingCount) {
+        if (missingCount <= 0) {
             return "已生成 " + mappedRecordCount + " 条标准计费对象，可直接复制到单费用取价或正式核算入口继续联调。";
         }
         return "已生成 " + mappedRecordCount + " 条标准计费对象，仍有 " + missingCount + " 个模板路径未命中，请继续补映射。";
     }
 
-    private String writeJson(Object value)
-    {
-        try
-        {
+    private String writeJson(Object value) {
+        try {
             return objectMapper.writeValueAsString(value);
-        }
-        catch (JsonProcessingException e)
-        {
+        } catch (JsonProcessingException e) {
             throw new ServiceException("JSON 序列化失败");
         }
     }
 
-    private Object evaluateExpression(String expression, Map<String, Object> context)
-    {
-        if (StringUtils.isEmpty(expression))
-        {
+    private Object evaluateExpression(String expression, Map<String, Object> context) {
+        if (StringUtils.isEmpty(expression)) {
             return null;
         }
-        try
-        {
+        try {
             return expressionService.evaluate(expression, context);
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             throw new ServiceException("琛ㄨ揪寮忔墽琛屽け璐ワ細" + expression);
         }
     }
 
-    private Map<String, Object> mergeContext(Map<String, Object> inputContext, Map<String, Object> variableValues, Map<String, Object> feeResultContext)
-    {
+    private Map<String, Object> mergeContext(Map<String, Object> inputContext, Map<String, Object> variableValues, Map<String, Object> feeResultContext) {
         LinkedHashMap<String, Object> context = new LinkedHashMap<>();
-        if (inputContext != null)
-        {
+        if (inputContext != null) {
             context.putAll(inputContext);
         }
-        if (variableValues != null)
-        {
+        if (variableValues != null) {
             context.putAll(variableValues);
         }
         context.put("I", inputContext == null ? new LinkedHashMap<>() : new LinkedHashMap<>(inputContext));
@@ -5879,39 +5013,31 @@ public class CostRunServiceImpl implements ICostRunService
         return context;
     }
 
-    private String resolveVariableFormula(RuntimeSnapshot snapshot, RuntimeVariable variable)
-    {
-        if (StringUtils.isEmpty(variable.formulaCode))
-        {
+    private String resolveVariableFormula(RuntimeSnapshot snapshot, RuntimeVariable variable) {
+        if (StringUtils.isEmpty(variable.formulaCode)) {
             throw new ServiceException("当前运行配置中的公式变量[" + variable.variableCode + "]未绑定公式编码，请先补齐配置后再执行");
         }
         RuntimeFormula formula = snapshot.formulasByCode.get(variable.formulaCode);
-        if (formula == null || StringUtils.isEmpty(formula.formulaExpr))
-        {
+        if (formula == null || StringUtils.isEmpty(formula.formulaExpr)) {
             throw new ServiceException("当前运行配置中的公式变量[" + variable.variableCode + "]引用的公式编码[" + variable.formulaCode + "]不存在或不可执行，请先补齐配置后再执行");
         }
         return formula.formulaExpr;
     }
 
-    private String resolveTemplatePath(RuntimeVariable variable)
-    {
-        if (variable == null)
-        {
+    private String resolveTemplatePath(RuntimeVariable variable) {
+        if (variable == null) {
             return "";
         }
-        if (SOURCE_TYPE_REMOTE.equalsIgnoreCase(variable.sourceType))
-        {
+        if (SOURCE_TYPE_REMOTE.equalsIgnoreCase(variable.sourceType)) {
             return buildRemoteTemplatePath(variable);
         }
         return firstNonBlank(variable.dataPath, variable.variableCode);
     }
 
-    private String buildRemoteTemplatePath(RuntimeVariable variable)
-    {
+    private String buildRemoteTemplatePath(RuntimeVariable variable) {
         Map<String, Object> mapping = parseOptionalJsonMap(variable.mappingConfigJson);
         String configuredContextPath = stringValue(mapping.get("contextPath"));
-        if (StringUtils.isNotEmpty(configuredContextPath))
-        {
+        if (StringUtils.isNotEmpty(configuredContextPath)) {
             return configuredContextPath;
         }
         String scopeCode = firstNonBlank(variable.sourceSystem, variable.variableCode);
@@ -5919,54 +5045,44 @@ public class CostRunServiceImpl implements ICostRunService
         return REMOTE_CONTEXT_ROOT + "." + scopeCode + "." + variable.variableCode + "." + valuePath;
     }
 
-    private RuntimeFormula requireRuleFormula(RuntimeSnapshot snapshot, RuntimeRule rule)
-    {
-        if (StringUtils.isEmpty(rule.amountFormulaCode))
-        {
+    private RuntimeFormula requireRuleFormula(RuntimeSnapshot snapshot, RuntimeRule rule) {
+        if (StringUtils.isEmpty(rule.amountFormulaCode)) {
             throw new ServiceException("当前运行配置中的公式规则[" + rule.ruleCode + "]未绑定金额公式编码，请先补齐配置后再执行");
         }
         RuntimeFormula formula = snapshot.formulasByCode.get(rule.amountFormulaCode);
-        if (formula == null || StringUtils.isEmpty(formula.formulaExpr))
-        {
+        if (formula == null || StringUtils.isEmpty(formula.formulaExpr)) {
             throw new ServiceException("当前运行配置中的公式规则[" + rule.ruleCode + "]引用的公式编码[" + rule.amountFormulaCode + "]不存在或不可执行，请先补齐配置后再执行");
         }
         return formula;
     }
 
-    private Object resolveRemoteVariableValue(RuntimeVariable variable, Map<String, Object> baseContext)
-    {
+    private Object resolveRemoteVariableValue(RuntimeVariable variable, Map<String, Object> baseContext) {
         Map<String, Object> mapping = parseOptionalJsonMap(variable.mappingConfigJson);
         mapping.putIfAbsent("sourceSystem", variable.sourceSystem);
         mapping.putIfAbsent("variableCode", variable.variableCode);
         Object value = resolveRemoteValueFromInput(baseContext, variable, mapping);
-        if (value != null)
-        {
+        if (value != null) {
             cacheRemoteVariableSnapshot(variable, baseContext, value);
             return value;
         }
         return resolveRemoteFallbackValue(variable, baseContext);
     }
 
-    private Object resolveRemoteValueFromInput(Map<String, Object> input, RuntimeVariable variable, Map<String, Object> mapping)
-    {
-        if (input == null || variable == null)
-        {
+    private Object resolveRemoteValueFromInput(Map<String, Object> input, RuntimeVariable variable, Map<String, Object> mapping) {
+        if (input == null || variable == null) {
             return null;
         }
-        for (Object candidate : buildRemoteCandidates(input, variable, mapping))
-        {
+        for (Object candidate : buildRemoteCandidates(input, variable, mapping)) {
             Object normalized = normalizeRemoteCandidate(candidate, mapping, input);
             Object value = extractRemoteValue(normalized, variable, mapping);
-            if (value != null)
-            {
+            if (value != null) {
                 return value;
             }
         }
         return null;
     }
 
-    private List<Object> buildRemoteCandidates(Map<String, Object> input, RuntimeVariable variable, Map<String, Object> mapping)
-    {
+    private List<Object> buildRemoteCandidates(Map<String, Object> input, RuntimeVariable variable, Map<String, Object> mapping) {
         List<Object> candidates = new ArrayList<>();
         addRemoteCandidate(candidates, resolveByPath(input, stringValue(mapping.get("contextPath"))));
         addRemoteCandidate(candidates, resolveByPath(input, REMOTE_CONTEXT_ROOT));
@@ -5977,96 +5093,75 @@ public class CostRunServiceImpl implements ICostRunService
         return candidates;
     }
 
-    private void addRemoteCandidate(List<Object> candidates, Object candidate)
-    {
-        if (candidate != null)
-        {
+    private void addRemoteCandidate(List<Object> candidates, Object candidate) {
+        if (candidate != null) {
             candidates.add(candidate);
         }
     }
 
-    private Object normalizeRemoteCandidate(Object candidate, Map<String, Object> mapping, Map<String, Object> input)
-    {
-        if (candidate instanceof Map)
-        {
+    private Object normalizeRemoteCandidate(Object candidate, Map<String, Object> mapping, Map<String, Object> input) {
+        if (candidate instanceof Map) {
             Map<String, Object> candidateMap = castMap(candidate);
             Object nested = resolveNestedRemoteCandidate(candidateMap, mapping);
-            if (nested != null && nested != candidate)
-            {
+            if (nested != null && nested != candidate) {
                 return normalizeRemoteCandidate(nested, mapping, input);
             }
             return candidateMap;
         }
-        if (candidate instanceof List)
-        {
+        if (candidate instanceof List) {
             return selectRemoteMatchedRow((List<?>) candidate, mapping, input);
         }
         return candidate;
     }
 
-    private Object resolveNestedRemoteCandidate(Map<String, Object> candidate, Map<String, Object> mapping)
-    {
+    private Object resolveNestedRemoteCandidate(Map<String, Object> candidate, Map<String, Object> mapping) {
         String scopeKey = stringValue(mapping.get("scopeKey"));
-        if (StringUtils.isNotEmpty(scopeKey) && candidate.containsKey(scopeKey))
-        {
+        if (StringUtils.isNotEmpty(scopeKey) && candidate.containsKey(scopeKey)) {
             return candidate.get(scopeKey);
         }
         String sourceSystem = stringValue(mapping.get("sourceSystem"));
         String variableCode = stringValue(mapping.get("variableCode"));
-        if (StringUtils.isNotEmpty(sourceSystem))
-        {
+        if (StringUtils.isNotEmpty(sourceSystem)) {
             Object systemScoped = candidate.get(sourceSystem);
             if (systemScoped instanceof Map && StringUtils.isNotEmpty(variableCode)
-                    && ((Map<?, ?>) systemScoped).containsKey(variableCode))
-            {
+                    && ((Map<?, ?>) systemScoped).containsKey(variableCode)) {
                 return ((Map<?, ?>) systemScoped).get(variableCode);
             }
-            if (systemScoped != null)
-            {
+            if (systemScoped != null) {
                 return systemScoped;
             }
         }
-        if (StringUtils.isNotEmpty(variableCode) && candidate.containsKey(variableCode))
-        {
+        if (StringUtils.isNotEmpty(variableCode) && candidate.containsKey(variableCode)) {
             return candidate.get(variableCode);
         }
         return candidate;
     }
 
-    private Object selectRemoteMatchedRow(List<?> rows, Map<String, Object> mapping, Map<String, Object> input)
-    {
-        if (rows == null || rows.isEmpty())
-        {
+    private Object selectRemoteMatchedRow(List<?> rows, Map<String, Object> mapping, Map<String, Object> input) {
+        if (rows == null || rows.isEmpty()) {
             return null;
         }
         Map<String, String> matchBy = normalizeMatchByConfig(mapping.get("matchBy"));
-        for (Object row : rows)
-        {
-            if (!(row instanceof Map))
-            {
+        for (Object row : rows) {
+            if (!(row instanceof Map)) {
                 continue;
             }
             Map<String, Object> rowMap = castMap(row);
-            if (matchBy.isEmpty())
-            {
+            if (matchBy.isEmpty()) {
                 if (matchesRemoteRow(rowMap, input, "objectCode", "objectCode")
-                        || matchesRemoteRow(rowMap, input, "bizNo", "bizNo"))
-                {
+                        || matchesRemoteRow(rowMap, input, "bizNo", "bizNo")) {
                     return rowMap;
                 }
                 continue;
             }
             boolean matched = true;
-            for (Map.Entry<String, String> entry : matchBy.entrySet())
-            {
-                if (!matchesRemoteRow(rowMap, input, entry.getKey(), entry.getValue()))
-                {
+            for (Map.Entry<String, String> entry : matchBy.entrySet()) {
+                if (!matchesRemoteRow(rowMap, input, entry.getKey(), entry.getValue())) {
                     matched = false;
                     break;
                 }
             }
-            if (matched)
-            {
+            if (matched) {
                 return rowMap;
             }
         }
@@ -6074,30 +5169,24 @@ public class CostRunServiceImpl implements ICostRunService
         return first instanceof Map ? castMap(first) : first;
     }
 
-    private Map<String, String> normalizeMatchByConfig(Object raw)
-    {
+    private Map<String, String> normalizeMatchByConfig(Object raw) {
         LinkedHashMap<String, String> matchBy = new LinkedHashMap<>();
-        if (!(raw instanceof Map))
-        {
+        if (!(raw instanceof Map)) {
             return matchBy;
         }
         Map<?, ?> rawMap = (Map<?, ?>) raw;
-        for (Map.Entry<?, ?> entry : rawMap.entrySet())
-        {
+        for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
             String remoteField = stringValue(entry.getKey());
             String localField = stringValue(entry.getValue());
-            if (StringUtils.isNotEmpty(remoteField) && StringUtils.isNotEmpty(localField))
-            {
+            if (StringUtils.isNotEmpty(remoteField) && StringUtils.isNotEmpty(localField)) {
                 matchBy.put(remoteField, localField);
             }
         }
         return matchBy;
     }
 
-    private boolean matchesRemoteRow(Map<String, Object> row, Map<String, Object> input, String remoteField, String localField)
-    {
-        if (row == null || input == null || StringUtils.isEmpty(remoteField) || StringUtils.isEmpty(localField))
-        {
+    private boolean matchesRemoteRow(Map<String, Object> row, Map<String, Object> input, String remoteField, String localField) {
+        if (row == null || input == null || StringUtils.isEmpty(remoteField) || StringUtils.isEmpty(localField)) {
             return false;
         }
         Object remoteValue = resolveByPath(row, remoteField);
@@ -6106,42 +5195,33 @@ public class CostRunServiceImpl implements ICostRunService
                 && StringUtils.equals(String.valueOf(remoteValue), String.valueOf(localValue));
     }
 
-    private Object extractRemoteValue(Object candidate, RuntimeVariable variable, Map<String, Object> mapping)
-    {
-        if (candidate == null)
-        {
+    private Object extractRemoteValue(Object candidate, RuntimeVariable variable, Map<String, Object> mapping) {
+        if (candidate == null) {
             return null;
         }
-        if (!(candidate instanceof Map))
-        {
+        if (!(candidate instanceof Map)) {
             return candidate;
         }
         Map<String, Object> candidateMap = castMap(candidate);
-        for (String path : buildRemoteValuePaths(variable, mapping))
-        {
+        for (String path : buildRemoteValuePaths(variable, mapping)) {
             Object value = resolveByPath(candidateMap, path);
-            if (value != null)
-            {
+            if (value != null) {
                 return value;
             }
         }
         return null;
     }
 
-    private List<String> buildRemoteValuePaths(RuntimeVariable variable, Map<String, Object> mapping)
-    {
+    private List<String> buildRemoteValuePaths(RuntimeVariable variable, Map<String, Object> mapping) {
         LinkedHashSet<String> paths = new LinkedHashSet<>();
         String configuredValuePath = stringValue(mapping.get("valuePath"));
-        if (StringUtils.isNotEmpty(configuredValuePath))
-        {
+        if (StringUtils.isNotEmpty(configuredValuePath)) {
             paths.add(configuredValuePath);
         }
-        if (StringUtils.isNotEmpty(variable.dataPath))
-        {
+        if (StringUtils.isNotEmpty(variable.dataPath)) {
             paths.add(variable.dataPath);
         }
-        if (StringUtils.isNotEmpty(variable.variableCode))
-        {
+        if (StringUtils.isNotEmpty(variable.variableCode)) {
             paths.add(variable.variableCode);
         }
         paths.add("mappedValue");
@@ -6149,65 +5229,53 @@ public class CostRunServiceImpl implements ICostRunService
         return new ArrayList<>(paths);
     }
 
-    private String resolveRemoteValuePath(RuntimeVariable variable, Map<String, Object> mapping)
-    {
+    private String resolveRemoteValuePath(RuntimeVariable variable, Map<String, Object> mapping) {
         List<String> paths = buildRemoteValuePaths(variable, mapping);
         return paths.isEmpty() ? "value" : paths.get(0);
     }
 
-    private Object resolveRemoteFallbackValue(RuntimeVariable variable, Map<String, Object> baseContext)
-    {
+    private Object resolveRemoteFallbackValue(RuntimeVariable variable, Map<String, Object> baseContext) {
         String fallbackPolicy = firstNonBlank(StringUtils.trim(variable.fallbackPolicy), FALLBACK_POLICY_FAIL_FAST);
-        if (FALLBACK_POLICY_DEFAULT_VALUE.equalsIgnoreCase(fallbackPolicy))
-        {
+        if (FALLBACK_POLICY_DEFAULT_VALUE.equalsIgnoreCase(fallbackPolicy)) {
             return variable.defaultValue;
         }
-        if (FALLBACK_POLICY_LAST_SNAPSHOT.equalsIgnoreCase(fallbackPolicy))
-        {
+        if (FALLBACK_POLICY_LAST_SNAPSHOT.equalsIgnoreCase(fallbackPolicy)) {
             Object cachedValue = readRemoteCachedValue(variable, baseContext);
-            if (cachedValue != null)
-            {
+            if (cachedValue != null) {
                 return cachedValue;
             }
-            if (variable.defaultValue != null)
-            {
+            if (variable.defaultValue != null) {
                 return variable.defaultValue;
             }
         }
         throw new ServiceException("第三方变量[" + variable.variableCode + "]未获取到运行值，请检查 remoteContext/remotePayload 输入或调整兜底策略");
     }
 
-    private Object readRemoteCachedValue(RuntimeVariable variable, Map<String, Object> baseContext)
-    {
+    private Object readRemoteCachedValue(RuntimeVariable variable, Map<String, Object> baseContext) {
         String cacheKey = buildRemoteLastSnapshotCacheKey(variable, baseContext);
         String cachedJson = redisCache.getCacheObject(cacheKey);
         return StringUtils.isEmpty(cachedJson) ? null : parseJsonToObject(cachedJson);
     }
 
-    private void cacheRemoteVariableSnapshot(RuntimeVariable variable, Map<String, Object> baseContext, Object value)
-    {
-        if (variable == null || value == null)
-        {
+    private void cacheRemoteVariableSnapshot(RuntimeVariable variable, Map<String, Object> baseContext, Object value) {
+        if (variable == null || value == null) {
             return;
         }
         String fallbackPolicy = firstNonBlank(StringUtils.trim(variable.fallbackPolicy), "");
         String cachePolicy = firstNonBlank(StringUtils.trim(variable.cachePolicy), CACHE_POLICY_NONE);
-        if (CACHE_POLICY_NONE.equalsIgnoreCase(cachePolicy) && !FALLBACK_POLICY_LAST_SNAPSHOT.equalsIgnoreCase(fallbackPolicy))
-        {
+        if (CACHE_POLICY_NONE.equalsIgnoreCase(cachePolicy) && !FALLBACK_POLICY_LAST_SNAPSHOT.equalsIgnoreCase(fallbackPolicy)) {
             return;
         }
         String cacheKey = buildRemoteLastSnapshotCacheKey(variable, baseContext);
         String payload = writeJson(value);
-        if (CACHE_POLICY_TTL.equalsIgnoreCase(cachePolicy))
-        {
+        if (CACHE_POLICY_TTL.equalsIgnoreCase(cachePolicy)) {
             redisCache.setCacheObject(cacheKey, payload, REMOTE_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
             return;
         }
         redisCache.setCacheObject(cacheKey, payload);
     }
 
-    private String buildRemoteLastSnapshotCacheKey(RuntimeVariable variable, Map<String, Object> baseContext)
-    {
+    private String buildRemoteLastSnapshotCacheKey(RuntimeVariable variable, Map<String, Object> baseContext) {
         String sceneCode = resolveString(baseContext, "sceneCode");
         String objectCode = resolveString(baseContext, "objectCode", "object_code");
         String bizNo = resolveString(baseContext, "bizNo", "biz_no");
@@ -6217,105 +5285,82 @@ public class CostRunServiceImpl implements ICostRunService
                 + ":" + sourceSystem + ":" + variable.variableCode + ":" + objectKey;
     }
 
-    private Object resolveValueFromInput(Map<String, Object> input, String dataPath, String variableCode, Object defaultValue)
-    {
+    private Object resolveValueFromInput(Map<String, Object> input, String dataPath, String variableCode, Object defaultValue) {
         Object value = null;
-        if (StringUtils.isNotEmpty(dataPath))
-        {
+        if (StringUtils.isNotEmpty(dataPath)) {
             value = resolveByPath(input, dataPath);
         }
-        if (value == null && StringUtils.isNotEmpty(variableCode))
-        {
+        if (value == null && StringUtils.isNotEmpty(variableCode)) {
             value = resolveByPath(input, variableCode);
         }
         return value != null ? value : defaultValue;
     }
 
-    private Object resolveByPath(Object input, String path)
-    {
-        if (!(input instanceof Map))
-        {
+    private Object resolveByPath(Object input, String path) {
+        if (!(input instanceof Map)) {
             return null;
         }
         return resolveByPath(castMap(input), path);
     }
 
-    private Object resolveByPath(Map<String, Object> input, String path)
-    {
-        if (input == null || StringUtils.isEmpty(path))
-        {
+    private Object resolveByPath(Map<String, Object> input, String path) {
+        if (input == null || StringUtils.isEmpty(path)) {
             return null;
         }
         String[] pieces = path.split("\\.");
         Object current = input;
-        for (String piece : pieces)
-        {
-            if (!(current instanceof Map))
-            {
+        for (String piece : pieces) {
+            if (!(current instanceof Map)) {
                 return null;
             }
             current = ((Map<?, ?>) current).get(piece);
-            if (current == null)
-            {
+            if (current == null) {
                 return null;
             }
         }
         return current;
     }
 
-    private Object convertValueByType(Object value, String dataType, Object defaultValue)
-    {
-        if (DATA_TYPE_NUMBER.equals(dataType))
-        {
+    private Object convertValueByType(Object value, String dataType, Object defaultValue) {
+        if (DATA_TYPE_NUMBER.equals(dataType)) {
             return toBigDecimal(value == null ? defaultValue : value);
         }
-        if (DATA_TYPE_BOOLEAN.equals(dataType))
-        {
+        if (DATA_TYPE_BOOLEAN.equals(dataType)) {
             return convertBoolean(value == null ? defaultValue : value);
         }
-        if (DATA_TYPE_JSON.equals(dataType) && value instanceof String)
-        {
+        if (DATA_TYPE_JSON.equals(dataType) && value instanceof String) {
             return parseJsonToObject(String.valueOf(value));
         }
-        if (value == null)
-        {
+        if (value == null) {
             return defaultValue;
         }
         return value;
     }
 
-    private Boolean convertBoolean(Object value)
-    {
-        if (value == null)
-        {
+    private Boolean convertBoolean(Object value) {
+        if (value == null) {
             return Boolean.FALSE;
         }
-        if (value instanceof Boolean)
-        {
+        if (value instanceof Boolean) {
             return (Boolean) value;
         }
         return "true".equalsIgnoreCase(String.valueOf(value)) || "1".equals(String.valueOf(value));
     }
 
-    private List<String> splitValues(String compareValue)
-    {
-        if (StringUtils.isEmpty(compareValue))
-        {
+    private List<String> splitValues(String compareValue) {
+        if (StringUtils.isEmpty(compareValue)) {
             return Collections.emptyList();
         }
         List<String> result = new ArrayList<>();
-        for (String piece : compareValue.split(","))
-        {
-            if (StringUtils.isNotEmpty(piece))
-            {
+        for (String piece : compareValue.split(",")) {
+            if (StringUtils.isNotEmpty(piece)) {
                 result.add(piece.trim());
             }
         }
         return result;
     }
 
-    private Long findFeeIdByCode(Long sceneId, String feeCode)
-    {
+    private Long findFeeIdByCode(Long sceneId, String feeCode) {
         CostFeeItem fee = feeMapper.selectOne(Wrappers.<CostFeeItem>lambdaQuery()
                 .eq(CostFeeItem::getSceneId, sceneId)
                 .eq(CostFeeItem::getFeeCode, feeCode)
@@ -6323,8 +5368,7 @@ public class CostRunServiceImpl implements ICostRunService
         return fee == null ? null : fee.getFeeId();
     }
 
-    private Map<String, Object> buildStep(String stepType, String objectCode, String objectName, String resultSummary)
-    {
+    private Map<String, Object> buildStep(String stepType, String objectCode, String objectName, String resultSummary) {
         LinkedHashMap<String, Object> step = new LinkedHashMap<>();
         step.put("stepType", stepType);
         step.put("objectCode", objectCode);
@@ -6333,81 +5377,63 @@ public class CostRunServiceImpl implements ICostRunService
         return step;
     }
 
-    private BigDecimal toBigDecimal(Object value)
-    {
-        if (value == null || StringUtils.isEmpty(String.valueOf(value)))
-        {
+    private BigDecimal toBigDecimal(Object value) {
+        if (value == null || StringUtils.isEmpty(String.valueOf(value))) {
             return null;
         }
-        if (value instanceof BigDecimal)
-        {
+        if (value instanceof BigDecimal) {
             return (BigDecimal) value;
         }
-        try
-        {
+        try {
             return new BigDecimal(String.valueOf(value).trim());
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             return null;
         }
     }
 
-    private BigDecimal defaultZero(BigDecimal value)
-    {
+    private BigDecimal defaultZero(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
 
-    private Integer intValue(Object value)
-    {
-        if (value == null || StringUtils.isEmpty(String.valueOf(value)))
-        {
+    private Integer intValue(Object value) {
+        if (value == null || StringUtils.isEmpty(String.valueOf(value))) {
             return null;
         }
         return Integer.parseInt(String.valueOf(value));
     }
 
-    private Long longValue(Object value)
-    {
-        if (value == null || StringUtils.isEmpty(String.valueOf(value)))
-        {
+    private Long longValue(Object value) {
+        if (value == null || StringUtils.isEmpty(String.valueOf(value))) {
             return null;
         }
         return Long.parseLong(String.valueOf(value));
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> castMap(Object value)
-    {
+    private Map<String, Object> castMap(Object value) {
         return (Map<String, Object>) value;
     }
 
-    private String resolveBizNo(Map<String, Object> input, int fallbackNo)
-    {
+    private String resolveBizNo(Map<String, Object> input, int fallbackNo) {
         String bizNo = resolveString(input, "bizNo", "biz_no", "businessNo", "business_no");
         return StringUtils.isNotEmpty(bizNo) ? bizNo : "BIZ-" + PARTITION_FORMAT.format(fallbackNo);
     }
 
-    private String resolveString(Map<String, Object> input, String... keys)
-    {
-        for (String key : keys)
-        {
+    private String resolveString(Map<String, Object> input, String... keys) {
+        for (String key : keys) {
             Object value = input.get(key);
-            if (value != null && StringUtils.isNotEmpty(String.valueOf(value)))
-            {
+            if (value != null && StringUtils.isNotEmpty(String.valueOf(value))) {
                 return String.valueOf(value);
             }
         }
         return "";
     }
 
-    private String buildRunNo(String prefix)
-    {
+    private String buildRunNo(String prefix) {
         return prefix + "-" + LocalDateTime.now().format(NO_TIME_FORMATTER) + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
     }
 
-    private String resolveExecuteNode()
-    {
+    private String resolveExecuteNode() {
         return firstNonBlank(
                 normalizeNodeValue(costDispatchProperties == null ? null : costDispatchProperties.getNodeId()),
                 normalizeNodeValue(environment == null ? null : environment.getProperty("cost.dispatch.node-id")),
@@ -6419,31 +5445,26 @@ public class CostRunServiceImpl implements ICostRunService
                 "LOCAL");
     }
 
-    private long resolveTaskDispatchIntervalSeconds()
-    {
+    private long resolveTaskDispatchIntervalSeconds() {
         long configured = costDispatchProperties == null || costDispatchProperties.getDispatchIntervalSeconds() == null
                 ? DEFAULT_TASK_DISPATCH_INTERVAL_SECONDS
                 : costDispatchProperties.getDispatchIntervalSeconds();
         return Math.max(1L, configured);
     }
 
-    private long resolveTaskStaleTimeoutSeconds()
-    {
+    private long resolveTaskStaleTimeoutSeconds() {
         long configured = costDispatchProperties == null || costDispatchProperties.getStaleTimeoutSeconds() == null
                 ? DEFAULT_TASK_STALE_TIMEOUT_SECONDS
                 : costDispatchProperties.getStaleTimeoutSeconds();
         return Math.max(10L, configured);
     }
 
-    private long resolveTaskStaleTimeoutMillis()
-    {
+    private long resolveTaskStaleTimeoutMillis() {
         return TimeUnit.SECONDS.toMillis(resolveTaskStaleTimeoutSeconds());
     }
 
-    private String buildSpringNodeIdentity()
-    {
-        if (environment == null)
-        {
+    private String buildSpringNodeIdentity() {
+        if (environment == null) {
             return null;
         }
         String applicationName = normalizeNodeValue(environment.getProperty("spring.application.name"));
@@ -6451,88 +5472,69 @@ public class CostRunServiceImpl implements ICostRunService
         String host = firstNonBlank(
                 normalizeNodeValue(System.getenv("COMPUTERNAME")),
                 normalizeNodeValue(System.getenv("HOSTNAME")));
-        if (applicationName == null && serverPort == null)
-        {
+        if (applicationName == null && serverPort == null) {
             return null;
         }
         StringBuilder builder = new StringBuilder();
         builder.append(firstNonBlank(applicationName, "cost-platform"));
-        if (host != null)
-        {
+        if (host != null) {
             builder.append('@').append(host);
         }
-        if (serverPort != null)
-        {
+        if (serverPort != null) {
             builder.append(':').append(serverPort);
         }
         return builder.toString();
     }
 
-    private String normalizeNodeValue(String value)
-    {
-        if (value == null)
-        {
+    private String normalizeNodeValue(String value) {
+        if (value == null) {
             return null;
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
     }
 
-    private String firstNonBlank(String first, String second)
-    {
+    private String firstNonBlank(String first, String second) {
         return StringUtils.isNotEmpty(first) ? first : second;
     }
 
-    private String firstNonBlank(String... values)
-    {
-        if (values == null || values.length == 0)
-        {
+    private String firstNonBlank(String... values) {
+        if (values == null || values.length == 0) {
             return "";
         }
-        for (String value : values)
-        {
-            if (StringUtils.isNotEmpty(value))
-            {
+        for (String value : values) {
+            if (StringUtils.isNotEmpty(value)) {
                 return value;
             }
         }
         return "";
     }
 
-    private String resolveOperator()
-    {
-        try
-        {
+    private String resolveOperator() {
+        try {
             return firstNonBlank(SecurityUtils.getUsername(), "system");
-        }
-        catch (Exception ignored)
-        {
+        } catch (Exception ignored) {
             return "system";
         }
     }
 
-    private String stringValue(Object value)
-    {
+    private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
     }
 
-    private String limitLength(String text, int maxLength)
-    {
-        if (text == null)
-        {
+    private String limitLength(String text, int maxLength) {
+        if (text == null) {
             return "";
         }
         return text.length() <= maxLength ? text : text.substring(0, maxLength);
     }
 
-    private CostBillPeriod ensureBillPeriodAvailable(Long sceneId, String billMonth, Long versionId)
-    {
+    private CostBillPeriod ensureBillPeriodAvailable(Long sceneId, String billMonth, Long versionId) {
         CostBillPeriod period = billPeriodMapper.selectOne(Wrappers.<CostBillPeriod>lambdaQuery()
                 .eq(CostBillPeriod::getSceneId, sceneId)
                 .eq(CostBillPeriod::getBillMonth, billMonth)
                 .last("limit 1"));
-        if (period == null)
-        {
+        if (period == null) {
             Date now = DateUtils.getNowDate();
             String operator = resolveOperator();
             period = new CostBillPeriod();
@@ -6550,12 +5552,10 @@ public class CostRunServiceImpl implements ICostRunService
             billPeriodMapper.insert(period);
             return period;
         }
-        if (PERIOD_STATUS_SEALED.equals(period.getPeriodStatus()))
-        {
+        if (PERIOD_STATUS_SEALED.equals(period.getPeriodStatus())) {
             throw new ServiceException("当前账期已封存，禁止直接提交正式核算任务");
         }
-        if (!Objects.equals(period.getActiveVersionId(), versionId))
-        {
+        if (!Objects.equals(period.getActiveVersionId(), versionId)) {
             billPeriodMapper.update(null, Wrappers.<CostBillPeriod>lambdaUpdate()
                     .eq(CostBillPeriod::getPeriodId, period.getPeriodId())
                     .set(CostBillPeriod::getActiveVersionId, versionId)
@@ -6566,8 +5566,7 @@ public class CostRunServiceImpl implements ICostRunService
         return period;
     }
 
-    private void markPeriodInProgress(CostBillPeriod period, CostCalcTask task)
-    {
+    private void markPeriodInProgress(CostBillPeriod period, CostCalcTask task) {
         billPeriodMapper.update(null, Wrappers.<CostBillPeriod>lambdaUpdate()
                 .eq(CostBillPeriod::getPeriodId, period.getPeriodId())
                 .ne(CostBillPeriod::getPeriodStatus, PERIOD_STATUS_SEALED)
@@ -6579,14 +5578,12 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostBillPeriod::getUpdateTime, DateUtils.getNowDate()));
     }
 
-    private void refreshBillPeriod(Long sceneId, String billMonth, CostCalcTask task)
-    {
+    private void refreshBillPeriod(Long sceneId, String billMonth, CostCalcTask task) {
         CostBillPeriod period = billPeriodMapper.selectOne(Wrappers.<CostBillPeriod>lambdaQuery()
                 .eq(CostBillPeriod::getSceneId, sceneId)
                 .eq(CostBillPeriod::getBillMonth, billMonth)
                 .last("limit 1"));
-        if (period == null)
-        {
+        if (period == null) {
             return;
         }
         Long targetTaskId = task == null ? period.getLastTaskId() : task.getTaskId();
@@ -6595,22 +5592,16 @@ public class CostRunServiceImpl implements ICostRunService
                 : countTaskResults(targetTaskId);
         long resultCount = resultCountValue == null ? 0L : resultCountValue;
         BigDecimal amountTotal = defaultZero(targetTaskId == null
-                        ? resultLedgerMapper.sumAmountBySceneAndBillMonth(sceneId, billMonth)
-                        : calcTaskPartitionMapper.sumAmountByTaskId(targetTaskId))
+                ? resultLedgerMapper.sumAmountBySceneAndBillMonth(sceneId, billMonth)
+                : calcTaskPartitionMapper.sumAmountByTaskId(targetTaskId))
                 .setScale(2, RoundingMode.HALF_UP);
         String periodStatus = period.getPeriodStatus();
-        if (!PERIOD_STATUS_SEALED.equals(periodStatus))
-        {
-            if (task != null && (TASK_STATUS_RUNNING.equals(task.getTaskStatus()) || TASK_STATUS_INIT.equals(task.getTaskStatus())))
-            {
+        if (!PERIOD_STATUS_SEALED.equals(periodStatus)) {
+            if (task != null && (TASK_STATUS_RUNNING.equals(task.getTaskStatus()) || TASK_STATUS_INIT.equals(task.getTaskStatus()))) {
                 periodStatus = PERIOD_STATUS_IN_PROGRESS;
-            }
-            else if (resultCount > 0)
-            {
+            } else if (resultCount > 0) {
                 periodStatus = PERIOD_STATUS_CLOSED;
-            }
-            else
-            {
+            } else {
                 periodStatus = PERIOD_STATUS_NOT_STARTED;
             }
         }
@@ -6626,22 +5617,17 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostBillPeriod::getUpdateTime, DateUtils.getNowDate()));
     }
 
-    private void syncRecalcByTask(CostCalcTask task, String taskStatus)
-    {
+    private void syncRecalcByTask(CostCalcTask task, String taskStatus) {
         CostRecalcOrder recalcOrder = recalcOrderMapper.selectOne(Wrappers.<CostRecalcOrder>lambdaQuery()
                 .eq(CostRecalcOrder::getTargetTaskId, task.getTaskId())
                 .last("limit 1"));
-        if (recalcOrder == null)
-        {
+        if (recalcOrder == null) {
             return;
         }
         String recalcStatus = RECALC_STATUS_RUNNING;
-        if (TASK_STATUS_SUCCESS.equals(taskStatus) || TASK_STATUS_PART_SUCCESS.equals(taskStatus))
-        {
+        if (TASK_STATUS_SUCCESS.equals(taskStatus) || TASK_STATUS_PART_SUCCESS.equals(taskStatus)) {
             recalcStatus = RECALC_STATUS_SUCCESS;
-        }
-        else if (TASK_STATUS_FAILED.equals(taskStatus) || TASK_STATUS_CANCELLED.equals(taskStatus))
-        {
+        } else if (TASK_STATUS_FAILED.equals(taskStatus) || TASK_STATUS_CANCELLED.equals(taskStatus)) {
             recalcStatus = RECALC_STATUS_FAILED;
         }
         String diffSummaryJson = buildRecalcDiffSummary(recalcOrder, task);
@@ -6656,8 +5642,7 @@ public class CostRunServiceImpl implements ICostRunService
                 .set(CostRecalcOrder::getUpdateTime, DateUtils.getNowDate()));
     }
 
-    private String buildRecalcDiffSummary(CostRecalcOrder recalcOrder, CostCalcTask task)
-    {
+    private String buildRecalcDiffSummary(CostRecalcOrder recalcOrder, CostCalcTask task) {
         CostCalcTask baselineTask = recalcOrder.getBaselineTaskId() == null ? null : calcTaskMapper.selectById(recalcOrder.getBaselineTaskId());
         BigDecimal baselineAmount = sumTaskAmount(recalcOrder.getBaselineTaskId());
         BigDecimal targetAmount = sumTaskAmount(task.getTaskId());
@@ -6673,60 +5658,45 @@ public class CostRunServiceImpl implements ICostRunService
         return writeJson(summary);
     }
 
-    private BigDecimal extractDiffAmount(String diffSummaryJson)
-    {
-        try
-        {
-            Map<String, Object> summary = objectMapper.readValue(diffSummaryJson, new TypeReference<Map<String, Object>>() {});
+    private BigDecimal extractDiffAmount(String diffSummaryJson) {
+        try {
+            Map<String, Object> summary = objectMapper.readValue(diffSummaryJson, new TypeReference<Map<String, Object>>() {
+            });
             BigDecimal diffAmount = toBigDecimal(summary.get("diffAmount"));
             return defaultZero(diffAmount).setScale(2, RoundingMode.HALF_UP);
-        }
-        catch (Exception ignored)
-        {
+        } catch (Exception ignored) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
     }
 
-    private BigDecimal sumTaskAmount(Long taskId)
-    {
-        if (taskId == null)
-        {
+    private BigDecimal sumTaskAmount(Long taskId) {
+        if (taskId == null) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
         return defaultZero(calcTaskPartitionMapper.sumAmountByTaskId(taskId)).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private long countTaskResults(Long taskId)
-    {
-        if (taskId == null)
-        {
+    private long countTaskResults(Long taskId) {
+        if (taskId == null) {
             return 0L;
         }
         return resultLedgerMapper.selectCount(Wrappers.<CostResultLedger>lambdaQuery()
                 .eq(CostResultLedger::getTaskId, taskId));
     }
 
-    private void runTaskFinishSideEffect(CostCalcTask task, String action, Runnable runnable)
-    {
-        try
-        {
+    private void runTaskFinishSideEffect(CostCalcTask task, String action, Runnable runnable) {
+        try {
             runnable.run();
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             log.warn("Task finish side effect failed, taskId={}, action={}", task == null ? null : task.getTaskId(), action, ex);
-            if (task == null)
-            {
+            if (task == null) {
                 return;
             }
-            try
-            {
+            try {
                 createTaskAlarm(task, null, "TASK_FINISH_SIDE_EFFECT_FAILED", "WARN",
                         "浠诲姟鏀跺熬娌荤悊澶辫触",
                         "任务 " + task.getTaskNo() + " 在 " + action + " 阶段失败：" + limitLength(ex.getMessage(), 300));
-            }
-            catch (Exception alarmException)
-            {
+            } catch (Exception alarmException) {
                 log.warn("Task finish side effect alarm create failed, taskId={}, action={}",
                         task.getTaskId(), action, alarmException);
             }
@@ -6734,8 +5704,7 @@ public class CostRunServiceImpl implements ICostRunService
     }
 
     private void createTaskAlarm(CostCalcTask task, CostCalcTaskDetail detail, String alarmType,
-            String alarmLevel, String alarmTitle, String alarmContent)
-    {
+                                 String alarmLevel, String alarmTitle, String alarmContent) {
         CostAlarmRecord alarm = new CostAlarmRecord();
         alarm.setSceneId(task.getSceneId());
         alarm.setVersionId(task.getVersionId());
@@ -6750,13 +5719,11 @@ public class CostRunServiceImpl implements ICostRunService
         alarmService.createAlarm(alarm);
     }
 
-    private String buildRuntimeCacheKey(Long versionId)
-    {
+    private String buildRuntimeCacheKey(Long versionId) {
         return RUNTIME_CACHE_PREFIX + versionId;
     }
 
-    private static class InputBuildContext
-    {
+    private static class InputBuildContext {
         private Map<String, Object> template = new LinkedHashMap<>();
         private Map<String, Object> mapping = new LinkedHashMap<>();
         private List<Map<String, Object>> fields = Collections.emptyList();
@@ -6765,8 +5732,7 @@ public class CostRunServiceImpl implements ICostRunService
         private String defaultObjectDimension;
     }
 
-    private static class AccessFetchConfig
-    {
+    private static class AccessFetchConfig {
         private boolean paged;
         private String pagingMode = ACCESS_FETCH_MODE_NONE;
         private String recordsPath;
@@ -6781,8 +5747,7 @@ public class CostRunServiceImpl implements ICostRunService
         private int startPage = 1;
     }
 
-    private static class AccessFetchCheckpoint
-    {
+    private static class AccessFetchCheckpoint {
         public String requestPayloadJson;
         public String pagingMode;
         public String recordsPath;
@@ -6800,8 +5765,7 @@ public class CostRunServiceImpl implements ICostRunService
         public Integer maxPages;
     }
 
-    public static class RuntimeSnapshot
-    {
+    public static class RuntimeSnapshot {
         public Long sceneId;
         public Long versionId;
         public String sceneCode;
@@ -6821,8 +5785,7 @@ public class CostRunServiceImpl implements ICostRunService
         public Map<String, List<RuntimeTier>> tiersByRuleCode = new LinkedHashMap<>();
     }
 
-    public static class RuntimeFee
-    {
+    public static class RuntimeFee {
         public Long feeId;
         public String feeCode;
         public String feeName;
@@ -6831,8 +5794,7 @@ public class CostRunServiceImpl implements ICostRunService
         public Integer sortNo;
     }
 
-    public static class RuntimeVariable
-    {
+    public static class RuntimeVariable {
         public String variableCode;
         public String variableName;
         public String sourceType;
@@ -6852,8 +5814,7 @@ public class CostRunServiceImpl implements ICostRunService
         public Integer sortNo;
     }
 
-    public static class RuntimeFormula
-    {
+    public static class RuntimeFormula {
         public String formulaCode;
         public String formulaName;
         public String businessFormula;
@@ -6861,8 +5822,7 @@ public class CostRunServiceImpl implements ICostRunService
         public String returnType;
     }
 
-    public static class RuntimeRule
-    {
+    public static class RuntimeRule {
         public Long ruleId;
         public String feeCode;
         public String ruleCode;
@@ -6883,8 +5843,7 @@ public class CostRunServiceImpl implements ICostRunService
         public List<RuntimeTier> tiers = Collections.emptyList();
     }
 
-    public static class RuntimeCondition
-    {
+    public static class RuntimeCondition {
         public String ruleCode;
         public Integer groupNo;
         public Integer sortNo;
@@ -6894,14 +5853,12 @@ public class CostRunServiceImpl implements ICostRunService
         public String compareValue;
     }
 
-    public static class RuntimeConditionGroup
-    {
+    public static class RuntimeConditionGroup {
         public Integer groupNo;
         public List<RuntimeCondition> conditions = Collections.emptyList();
     }
 
-    public static class RuntimeTier
-    {
+    public static class RuntimeTier {
         public Long tierId;
         public String ruleCode;
         public Integer tierNo;
@@ -6910,36 +5867,31 @@ public class CostRunServiceImpl implements ICostRunService
         public BigDecimal rateValue;
         public String intervalMode;
 
-        private String buildRangeSummary()
-        {
+        private String buildRangeSummary() {
             return String.format(Locale.ROOT, "%s ~ %s",
                     startValue == null ? "-INF" : startValue.toPlainString(),
                     endValue == null ? "+INF" : endValue.toPlainString());
         }
     }
 
-    private static class FeeTemplateContext
-    {
+    private static class FeeTemplateContext {
         private final Map<String, FeeTemplateVariable> variables = new LinkedHashMap<>();
         private final List<Map<String, Object>> ruleSummaries = new ArrayList<>();
     }
 
-    private static class FeeTemplateVariable
-    {
+    private static class FeeTemplateVariable {
         private final RuntimeVariable variable;
         private final Set<String> templateRoles = new LinkedHashSet<>();
         private final Set<String> sourceRuleCodes = new LinkedHashSet<>();
         private final Set<String> dependsOn = new LinkedHashSet<>();
         private boolean includedInTemplate;
 
-        private FeeTemplateVariable(RuntimeVariable variable)
-        {
+        private FeeTemplateVariable(RuntimeVariable variable) {
             this.variable = variable;
         }
     }
 
-    private static class RuleMatchResult
-    {
+    private static class RuleMatchResult {
         private RuntimeRule rule;
         private RuntimeTier tier;
         private Integer matchedGroupNo;
@@ -6947,44 +5899,36 @@ public class CostRunServiceImpl implements ICostRunService
         private List<Map<String, Object>> ruleEvaluations = new ArrayList<>();
     }
 
-    private static class AfterCommitTaskSynchronization implements TransactionSynchronization
-    {
+    private static class AfterCommitTaskSynchronization implements TransactionSynchronization {
         private final Runnable runnable;
 
-        private AfterCommitTaskSynchronization(Runnable runnable)
-        {
+        private AfterCommitTaskSynchronization(Runnable runnable) {
             this.runnable = runnable;
         }
 
         @Override
-        public void afterCommit()
-        {
-            if (runnable != null)
-            {
+        public void afterCommit() {
+            if (runnable != null) {
                 runnable.run();
             }
         }
     }
 
-    private static class TaskClaimResult
-    {
+    private static class TaskClaimResult {
         private final Date startedTime;
 
-        private TaskClaimResult(Date startedTime)
-        {
+        private TaskClaimResult(Date startedTime) {
             this.startedTime = startedTime;
         }
     }
 
-    private static class PartitionClaimToken
-    {
+    private static class PartitionClaimToken {
         private final Long taskId;
         private final Integer partitionNo;
         private final String executeNode;
         private final Date claimTime;
 
-        private PartitionClaimToken(Long taskId, Integer partitionNo, String executeNode, Date claimTime)
-        {
+        private PartitionClaimToken(Long taskId, Integer partitionNo, String executeNode, Date claimTime) {
             this.taskId = taskId;
             this.partitionNo = partitionNo;
             this.executeNode = executeNode;
@@ -6992,34 +5936,29 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private static class PartitionDispatchContext
-    {
+    private static class PartitionDispatchContext {
         private final List<CostCalcTaskDetail> partitionDetails;
         private final PartitionClaimToken claimToken;
 
-        private PartitionDispatchContext(List<CostCalcTaskDetail> partitionDetails, PartitionClaimToken claimToken)
-        {
+        private PartitionDispatchContext(List<CostCalcTaskDetail> partitionDetails, PartitionClaimToken claimToken) {
             this.partitionDetails = partitionDetails;
             this.claimToken = claimToken;
         }
     }
 
-    private static class ConditionMatchResult
-    {
+    private static class ConditionMatchResult {
         private boolean matched;
         private Integer matchedGroupNo;
     }
 
-    private static class PricingResult
-    {
+    private static class PricingResult {
         private BigDecimal quantityValue;
         private BigDecimal unitPrice;
         private BigDecimal amountValue;
         private Map<String, Object> pricingExplain;
     }
 
-    private static class FeeExecutionResult
-    {
+    private static class FeeExecutionResult {
         private Long feeId;
         private String feeCode;
         private String feeName;
@@ -7037,8 +5976,7 @@ public class CostRunServiceImpl implements ICostRunService
         private Map<String, Object> pricingExplain;
         private List<Map<String, Object>> timelineSteps;
 
-        private Map<String, Object> toView()
-        {
+        private Map<String, Object> toView() {
             LinkedHashMap<String, Object> item = new LinkedHashMap<>();
             item.put("feeId", feeId);
             item.put("feeCode", feeCode);
@@ -7052,8 +5990,7 @@ public class CostRunServiceImpl implements ICostRunService
             return item;
         }
 
-        private Map<String, Object> toExplainView()
-        {
+        private Map<String, Object> toExplainView() {
             LinkedHashMap<String, Object> item = new LinkedHashMap<>();
             item.put("feeCode", feeCode);
             item.put("feeName", feeName);
@@ -7067,28 +6004,24 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private static class TaskDetailFailure
-    {
+    private static class TaskDetailFailure {
         private final CostCalcTaskDetail detail;
         private final String errorMessage;
 
-        private TaskDetailFailure(CostCalcTaskDetail detail, String errorMessage)
-        {
+        private TaskDetailFailure(CostCalcTaskDetail detail, String errorMessage) {
             this.detail = detail;
             this.errorMessage = errorMessage;
         }
     }
 
-    private static class TaskExecutionSummary
-    {
+    private static class TaskExecutionSummary {
         private int totalCount;
         private int processedCount;
         private int successCount;
         private int failedCount;
     }
 
-    private static class PartitionExecutionResult
-    {
+    private static class PartitionExecutionResult {
         private int processedCount;
         private int successCount;
         private int failedCount;
@@ -7098,8 +6031,7 @@ public class CostRunServiceImpl implements ICostRunService
         private String lastErrorStage = "";
     }
 
-    static class PartitionExecutionBundle
-    {
+    static class PartitionExecutionBundle {
         private final List<CostResultTrace> traceInserts = new ArrayList<>();
         private final List<CostResultLedger> ledgerInserts = new ArrayList<>();
         private final List<CostCalcTaskDetail> detailUpdates = new ArrayList<>();
@@ -7113,16 +6045,14 @@ public class CostRunServiceImpl implements ICostRunService
         private String recoveryHint = "";
         private String lastErrorStage = "";
 
-        private Collection<String> bizNos()
-        {
+        private Collection<String> bizNos() {
             return detailUpdates.stream()
                     .map(CostCalcTaskDetail::getBizNo)
                     .filter(StringUtils::isNotEmpty)
                     .collect(Collectors.toCollection(LinkedHashSet::new));
         }
 
-        private PartitionExecutionResult toResult()
-        {
+        private PartitionExecutionResult toResult() {
             PartitionExecutionResult result = new PartitionExecutionResult();
             result.processedCount = processedCount;
             result.successCount = successCount;
@@ -7134,8 +6064,7 @@ public class CostRunServiceImpl implements ICostRunService
             return result;
         }
 
-        private void markOwnerLost()
-        {
+        private void markOwnerLost() {
             this.ownerLost = true;
             this.processedCount = 0;
             this.successCount = 0;
@@ -7151,8 +6080,7 @@ public class CostRunServiceImpl implements ICostRunService
         }
     }
 
-    private static class ExecutionResult
-    {
+    private static class ExecutionResult {
         private Map<String, Object> variableView;
         private Map<String, Object> resultView;
         private Map<String, Object> explainView;

@@ -6,18 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ruoyi.common.constant.CacheConstants;
 import com.ruoyi.common.core.redis.RedisCache;
-import com.ruoyi.system.domain.cost.CostFeeItem;
-import com.ruoyi.system.domain.cost.CostPublishVersion;
-import com.ruoyi.system.domain.cost.CostRule;
-import com.ruoyi.system.domain.cost.CostScene;
-import com.ruoyi.system.domain.cost.CostSimulationRecord;
-import com.ruoyi.system.domain.cost.CostVariable;
-import com.ruoyi.system.mapper.cost.CostFeeMapper;
-import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
-import com.ruoyi.system.mapper.cost.CostRuleMapper;
-import com.ruoyi.system.mapper.cost.CostSceneMapper;
-import com.ruoyi.system.mapper.cost.CostSimulationRecordMapper;
-import com.ruoyi.system.mapper.cost.CostVariableMapper;
+import com.ruoyi.system.domain.cost.*;
+import com.ruoyi.system.mapper.cost.*;
 import com.ruoyi.system.service.impl.cost.CostDistributedLockSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,16 +25,13 @@ import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-class CostPublishControllerManualIT
-{
+class CostPublishControllerManualIT {
     private static final DateTimeFormatter STAMP_FORMATTER = DateTimeFormatter.ofPattern("HHmmssSSS");
     private static final String SCENE_CODE = "SHOUGANG-ORE-HR-001";
 
@@ -79,8 +66,7 @@ class CostPublishControllerManualIT
     private CostDistributedLockSupport distributedLockSupport;
 
     @Test
-    void shouldBlockPublishPrecheckWhenFormulaReferencesAreNotGoverned() throws Exception
-    {
+    void shouldBlockPublishPrecheckWhenFormulaReferencesAreNotGoverned() throws Exception {
         Long sceneId = requireSceneId();
         CostFeeItem fee = findAnyEnabledFee(sceneId);
         String stamp = LocalTime.now().format(STAMP_FORMATTER);
@@ -120,8 +106,7 @@ class CostPublishControllerManualIT
     }
 
     @Test
-    void shouldTreatDraftSimulationAsPrecheckEvidenceWhenSceneHasNoActiveVersion() throws Exception
-    {
+    void shouldTreatDraftSimulationAsPrecheckEvidenceWhenSceneHasNoActiveVersion() throws Exception {
         Long sceneId = requireSceneId();
         CostScene scene = sceneMapper.selectById(sceneId);
         Long previousActiveVersionId = scene == null ? null : scene.getActiveVersionId();
@@ -131,8 +116,7 @@ class CostPublishControllerManualIT
                 .eq(CostScene::getSceneId, sceneId)
                 .set(CostScene::getActiveVersionId, null));
 
-        try
-        {
+        try {
             String token = loginAndGetToken();
             String authorization = "Bearer " + token;
 
@@ -168,9 +152,7 @@ class CostPublishControllerManualIT
                     .andReturn());
             assertThat(findCheckItem(afterPrecheck.path("items"), "FIRST_RELEASE_SIMULATION_READY")).isNotNull();
             assertThat(findCheckItem(afterPrecheck.path("items"), "FIRST_RELEASE_NO_SIMULATION")).isNull();
-        }
-        finally
-        {
+        } finally {
             sceneMapper.update(null, Wrappers.<CostScene>lambdaUpdate()
                     .eq(CostScene::getSceneId, sceneId)
                     .set(CostScene::getActiveVersionId, previousActiveVersionId));
@@ -178,8 +160,7 @@ class CostPublishControllerManualIT
     }
 
     @Test
-    void shouldBlockPublishActivateAndRollbackWhenSceneVersioningLockExists() throws Exception
-    {
+    void shouldBlockPublishActivateAndRollbackWhenSceneVersioningLockExists() throws Exception {
         Long sceneId = requireSceneId();
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
@@ -189,8 +170,7 @@ class CostPublishControllerManualIT
         String lockKey = distributedLockSupport.buildSceneVersioningLockKey(sceneId);
         redisCache.setCacheObject(lockKey, "itest-lock", 30, TimeUnit.SECONDS);
 
-        try
-        {
+        try {
             ObjectNode publishBody = objectMapper.createObjectNode();
             publishBody.put("sceneId", sceneId);
             publishBody.put("publishDesc", "lock-regression-" + stamp);
@@ -218,23 +198,19 @@ class CostPublishControllerManualIT
                     .andReturn());
             assertThat(rollbackResponse.path("code").asInt()).isEqualTo(500);
             assertThat(rollbackResponse.path("msg").asText()).contains("发布/生效/回滚");
-        }
-        finally
-        {
+        } finally {
             redisCache.deleteObject(lockKey);
         }
     }
 
-    private Long requireSceneId()
-    {
+    private Long requireSceneId() {
         CostScene scene = sceneMapper.selectOne(Wrappers.<CostScene>lambdaQuery()
                 .eq(CostScene::getSceneCode, SCENE_CODE));
         assertThat(scene).as("missing seeded real-cost scene %s", SCENE_CODE).isNotNull();
         return scene.getSceneId();
     }
 
-    private CostFeeItem findAnyEnabledFee(Long sceneId)
-    {
+    private CostFeeItem findAnyEnabledFee(Long sceneId) {
         CostFeeItem query = new CostFeeItem();
         query.setSceneId(sceneId);
         query.setStatus("0");
@@ -243,8 +219,7 @@ class CostPublishControllerManualIT
                 .orElseThrow(() -> new IllegalStateException("missing enabled fees in seeded real-cost scene"));
     }
 
-    private Long publishScene(Long sceneId, String authorization, String publishDesc) throws Exception
-    {
+    private Long publishScene(Long sceneId, String authorization, String publishDesc) throws Exception {
         Long previousLatestVersionId = latestVersionId(sceneId);
 
         ObjectNode publishBody = objectMapper.createObjectNode();
@@ -262,21 +237,18 @@ class CostPublishControllerManualIT
 
         CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
         assertThat(latestVersion).isNotNull();
-        if (previousLatestVersionId != null)
-        {
+        if (previousLatestVersionId != null) {
             assertThat(latestVersion.getVersionId()).isNotEqualTo(previousLatestVersionId);
         }
         return latestVersion.getVersionId();
     }
 
-    private Long latestVersionId(Long sceneId)
-    {
+    private Long latestVersionId(Long sceneId) {
         CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
         return latestVersion == null ? null : latestVersion.getVersionId();
     }
 
-    private CostVariable buildFormulaVariable(Long sceneId, String variableCode, String variableName)
-    {
+    private CostVariable buildFormulaVariable(Long sceneId, String variableCode, String variableName) {
         CostVariable variable = new CostVariable();
         variable.setSceneId(sceneId);
         variable.setVariableCode(variableCode);
@@ -294,8 +266,7 @@ class CostPublishControllerManualIT
         return variable;
     }
 
-    private CostRule buildFormulaRule(Long sceneId, Long feeId, String ruleCode, String ruleName)
-    {
+    private CostRule buildFormulaRule(Long sceneId, Long feeId, String ruleCode, String ruleName) {
         CostRule rule = new CostRule();
         rule.setSceneId(sceneId);
         rule.setFeeId(feeId);
@@ -313,29 +284,24 @@ class CostPublishControllerManualIT
         return rule;
     }
 
-    private void assertCheckMessageContains(JsonNode items, String code, String expectedText)
-    {
+    private void assertCheckMessageContains(JsonNode items, String code, String expectedText) {
         JsonNode matched = findCheckItem(items, code);
         assertThat(matched).as("missing publish precheck item %s", code).isNotNull();
         assertThat(matched.path("message").asText()).contains(expectedText);
     }
 
-    private JsonNode findCheckItem(JsonNode items, String code)
-    {
+    private JsonNode findCheckItem(JsonNode items, String code) {
         Iterator<JsonNode> iterator = items.iterator();
-        while (iterator.hasNext())
-        {
+        while (iterator.hasNext()) {
             JsonNode item = iterator.next();
-            if (code.equals(item.path("code").asText()))
-            {
+            if (code.equals(item.path("code").asText())) {
                 return item;
             }
         }
         return null;
     }
 
-    private String loginAndGetToken() throws Exception
-    {
+    private String loginAndGetToken() throws Exception {
         JsonNode captcha = readBody(mockMvc.perform(get("/captchaImage"))
                 .andExpect(status().isOk())
                 .andReturn());
@@ -358,13 +324,11 @@ class CostPublishControllerManualIT
         return login.path("token").asText();
     }
 
-    private JsonNode readData(MvcResult result) throws Exception
-    {
+    private JsonNode readData(MvcResult result) throws Exception {
         return readBody(result).path("data");
     }
 
-    private JsonNode readBody(MvcResult result) throws Exception
-    {
+    private JsonNode readBody(MvcResult result) throws Exception {
         String content = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
         return objectMapper.readTree(content);
     }

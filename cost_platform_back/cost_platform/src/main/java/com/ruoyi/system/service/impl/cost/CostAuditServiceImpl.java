@@ -13,11 +13,7 @@ import com.ruoyi.system.service.cost.ICostAuditService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -26,8 +22,7 @@ import java.util.stream.Collectors;
  * @author HwFan
  */
 @Service
-public class CostAuditServiceImpl implements ICostAuditService
-{
+public class CostAuditServiceImpl implements ICostAuditService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
@@ -38,8 +33,7 @@ public class CostAuditServiceImpl implements ICostAuditService
 
     @Override
     public void recordAudit(Long sceneId, String objectType, String objectCode, String actionType,
-            String actionSummary, Object beforeData, Object afterData, String requestNo)
-    {
+                            String actionSummary, Object beforeData, Object afterData, String requestNo) {
         CostAuditLog log = new CostAuditLog();
         log.setSceneId(sceneId);
         log.setObjectType(firstNonBlank(objectType, "UNKNOWN"));
@@ -56,8 +50,7 @@ public class CostAuditServiceImpl implements ICostAuditService
     }
 
     @Override
-    public List<CostAuditLog> selectAuditList(CostAuditLog query)
-    {
+    public List<CostAuditLog> selectAuditList(CostAuditLog query) {
         List<CostAuditLog> logs = auditLogMapper.selectList(Wrappers.<CostAuditLog>lambdaQuery()
                 .eq(query.getSceneId() != null, CostAuditLog::getSceneId, query.getSceneId())
                 .eq(StringUtils.isNotEmpty(query.getObjectType()), CostAuditLog::getObjectType, query.getObjectType())
@@ -71,8 +64,7 @@ public class CostAuditServiceImpl implements ICostAuditService
     }
 
     @Override
-    public Map<String, Object> selectAuditStats(CostAuditLog query)
-    {
+    public Map<String, Object> selectAuditStats(CostAuditLog query) {
         List<CostAuditLog> logs = selectAuditList(query);
         LinkedHashMap<String, Object> stats = new LinkedHashMap<>();
         stats.put("auditCount", logs.size());
@@ -84,54 +76,41 @@ public class CostAuditServiceImpl implements ICostAuditService
         return stats;
     }
 
-    private void enrichSceneInfo(List<CostAuditLog> logs)
-    {
+    private void enrichSceneInfo(List<CostAuditLog> logs) {
         Set<Long> sceneIds = logs.stream().map(CostAuditLog::getSceneId).filter(Objects::nonNull).collect(Collectors.toSet());
-        if (sceneIds.isEmpty())
-        {
+        if (sceneIds.isEmpty()) {
             return;
         }
         Map<Long, CostScene> sceneMap = sceneMapper.selectBatchIds(sceneIds).stream()
                 .collect(Collectors.toMap(CostScene::getSceneId, item -> item));
         logs.forEach(item -> {
             CostScene scene = sceneMap.get(item.getSceneId());
-            if (scene != null)
-            {
+            if (scene != null) {
                 item.setSceneCode(scene.getSceneCode());
                 item.setSceneName(scene.getSceneName());
             }
         });
     }
 
-    private String writeJson(Object value)
-    {
-        if (value == null)
-        {
+    private String writeJson(Object value) {
+        if (value == null) {
             return null;
         }
-        try
-        {
+        try {
             return objectMapper.writeValueAsString(value);
-        }
-        catch (Exception ignored)
-        {
+        } catch (Exception ignored) {
             return "{}";
         }
     }
 
-    private String firstNonBlank(String first, String second)
-    {
+    private String firstNonBlank(String first, String second) {
         return StringUtils.isNotEmpty(first) ? first : second;
     }
 
-    private String resolveOperator()
-    {
-        try
-        {
+    private String resolveOperator() {
+        try {
             return firstNonBlank(SecurityUtils.getUsername(), "system");
-        }
-        catch (Exception ignored)
-        {
+        } catch (Exception ignored) {
             return "system";
         }
     }

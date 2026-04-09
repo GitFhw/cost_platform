@@ -20,8 +20,7 @@ import java.util.List;
  * @author HwFan
  */
 @Service
-public class CostVariableGroupServiceImpl implements ICostVariableGroupService
-{
+public class CostVariableGroupServiceImpl implements ICostVariableGroupService {
     @Autowired
     private CostVariableGroupMapper groupMapper;
 
@@ -32,8 +31,7 @@ public class CostVariableGroupServiceImpl implements ICostVariableGroupService
      * 查询变量分组列表
      */
     @Override
-    public List<CostVariableGroup> selectVariableGroupList(CostVariableGroup group)
-    {
+    public List<CostVariableGroup> selectVariableGroupList(CostVariableGroup group) {
         return groupMapper.selectVariableGroupList(group);
     }
 
@@ -41,8 +39,7 @@ public class CostVariableGroupServiceImpl implements ICostVariableGroupService
      * 查询变量分组详情
      */
     @Override
-    public CostVariableGroup selectVariableGroupById(Long groupId)
-    {
+    public CostVariableGroup selectVariableGroupById(Long groupId) {
         return groupMapper.selectById(groupId);
     }
 
@@ -50,8 +47,7 @@ public class CostVariableGroupServiceImpl implements ICostVariableGroupService
      * 查询变量分组选择框
      */
     @Override
-    public List<CostVariableGroup> selectVariableGroupOptions(CostVariableGroup group)
-    {
+    public List<CostVariableGroup> selectVariableGroupOptions(CostVariableGroup group) {
         return groupMapper.selectVariableGroupOptions(group);
     }
 
@@ -59,8 +55,7 @@ public class CostVariableGroupServiceImpl implements ICostVariableGroupService
      * 校验分组编码唯一性（同一场景内唯一）
      */
     @Override
-    public boolean checkGroupCodeUnique(CostVariableGroup group)
-    {
+    public boolean checkGroupCodeUnique(CostVariableGroup group) {
         Long groupId = StringUtils.isNull(group.getGroupId()) ? -1L : group.getGroupId();
         Long count = groupMapper.selectCount(Wrappers.<CostVariableGroup>lambdaQuery()
                 .eq(CostVariableGroup::getSceneId, group.getSceneId())
@@ -73,10 +68,8 @@ public class CostVariableGroupServiceImpl implements ICostVariableGroupService
      * 新增变量分组
      */
     @Override
-    public int insertVariableGroup(CostVariableGroup group)
-    {
-        if (group.getSortNo() == null)
-        {
+    public int insertVariableGroup(CostVariableGroup group) {
+        if (group.getSortNo() == null) {
             group.setSortNo(10);
         }
         return groupMapper.insert(group);
@@ -86,8 +79,7 @@ public class CostVariableGroupServiceImpl implements ICostVariableGroupService
      * 修改变量分组
      */
     @Override
-    public int updateVariableGroup(CostVariableGroup group)
-    {
+    public int updateVariableGroup(CostVariableGroup group) {
         return groupMapper.updateById(group);
     }
 
@@ -95,14 +87,11 @@ public class CostVariableGroupServiceImpl implements ICostVariableGroupService
      * 批量删除变量分组
      */
     @Override
-    public int deleteVariableGroupByIds(Long[] groupIds)
-    {
-        for (Long groupId : groupIds)
-        {
+    public int deleteVariableGroupByIds(Long[] groupIds) {
+        for (Long groupId : groupIds) {
             Long variableCount = variableMapper.selectCount(Wrappers.lambdaQuery(com.ruoyi.system.domain.cost.CostVariable.class)
                     .eq(com.ruoyi.system.domain.cost.CostVariable::getGroupId, groupId));
-            if (variableCount != null && variableCount > 0)
-            {
+            if (variableCount != null && variableCount > 0) {
                 throw new ServiceException("当前分组下仍存在变量，请先迁移或删除变量后再删除分组");
             }
         }

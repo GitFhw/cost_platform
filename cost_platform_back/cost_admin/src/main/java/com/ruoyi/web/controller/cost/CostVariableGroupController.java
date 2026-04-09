@@ -21,8 +21,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/cost/variable/group")
-public class CostVariableGroupController extends BaseController
-{
+public class CostVariableGroupController extends BaseController {
     @Autowired
     private ICostVariableGroupService groupService;
 
@@ -31,8 +30,7 @@ public class CostVariableGroupController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/list")
-    public TableDataInfo list(CostVariableGroup group)
-    {
+    public TableDataInfo list(CostVariableGroup group) {
         startPage();
         List<CostVariableGroup> list = groupService.selectVariableGroupList(group);
         return getDataTable(list);
@@ -43,8 +41,7 @@ public class CostVariableGroupController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:list')")
     @GetMapping("/optionselect")
-    public AjaxResult optionselect(CostVariableGroup group)
-    {
+    public AjaxResult optionselect(CostVariableGroup group) {
         return success(groupService.selectVariableGroupOptions(group));
     }
 
@@ -53,8 +50,7 @@ public class CostVariableGroupController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:query')")
     @GetMapping("/{groupId}")
-    public AjaxResult getInfo(@PathVariable Long groupId)
-    {
+    public AjaxResult getInfo(@PathVariable Long groupId) {
         return success(groupService.selectVariableGroupById(groupId));
     }
 
@@ -64,10 +60,8 @@ public class CostVariableGroupController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:variable:add')")
     @Log(title = "变量分组", businessType = BusinessType.INSERT)
     @PostMapping
-    public AjaxResult add(@Validated @RequestBody CostVariableGroup group)
-    {
-        if (!groupService.checkGroupCodeUnique(group))
-        {
+    public AjaxResult add(@Validated @RequestBody CostVariableGroup group) {
+        if (!groupService.checkGroupCodeUnique(group)) {
             return error("新增分组'" + group.getGroupName() + "'失败，同场景下分组编码已存在");
         }
         return toAjax(groupService.insertVariableGroup(group));
@@ -79,10 +73,8 @@ public class CostVariableGroupController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:variable:edit')")
     @Log(title = "变量分组", businessType = BusinessType.UPDATE)
     @PutMapping
-    public AjaxResult edit(@Validated @RequestBody CostVariableGroup group)
-    {
-        if (!groupService.checkGroupCodeUnique(group))
-        {
+    public AjaxResult edit(@Validated @RequestBody CostVariableGroup group) {
+        if (!groupService.checkGroupCodeUnique(group)) {
             return error("修改分组'" + group.getGroupName() + "'失败，同场景下分组编码已存在");
         }
         return toAjax(groupService.updateVariableGroup(group));
@@ -94,8 +86,7 @@ public class CostVariableGroupController extends BaseController
     @PreAuthorize("@ss.hasPermi('cost:variable:remove')")
     @Log(title = "变量分组", businessType = BusinessType.DELETE)
     @DeleteMapping("/{groupIds}")
-    public AjaxResult remove(@PathVariable Long[] groupIds)
-    {
+    public AjaxResult remove(@PathVariable Long[] groupIds) {
         return toAjax(groupService.deleteVariableGroupByIds(groupIds));
     }
 }

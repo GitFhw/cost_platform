@@ -11,20 +11,29 @@ import lombok.Data;
  * @author HwFan
  */
 @Data
-public class CostFormulaTestBo
-{
-    /** 公式主键 */
+public class CostFormulaTestBo {
+    /**
+     * 公式主键
+     */
     private Long formulaId;
 
-    /** 所属场景主键 */
+    /**
+     * 所属场景主键
+     */
     private Long sceneId;
 
-    /** 公式编码 */
+    /**
+     * 公式编码
+     */
     private String formulaCode;
 
-    /** 临时表达式 */
+    /**
+     * 临时表达式
+     */
     private String formulaExpr;
 
-    /** 输入 JSON */
+    /**
+     * 输入 JSON
+     */
     private String inputJson;
 }

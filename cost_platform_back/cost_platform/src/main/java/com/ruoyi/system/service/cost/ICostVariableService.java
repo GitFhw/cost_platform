@@ -1,11 +1,7 @@
 package com.ruoyi.system.service.cost;
 
 import com.ruoyi.system.domain.cost.CostVariable;
-import com.ruoyi.system.domain.vo.CostVariableCopyRequest;
-import com.ruoyi.system.domain.vo.CostVariableGovernanceCheckVo;
-import com.ruoyi.system.domain.vo.CostVariableImportPreviewVo;
-import com.ruoyi.system.domain.vo.CostVariableTemplateApplyRequest;
-import com.ruoyi.system.domain.vo.CostVariableTemplateVo;
+import com.ruoyi.system.domain.vo.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -16,8 +12,7 @@ import java.util.Map;
  *
  * @author HwFan
  */
-public interface ICostVariableService
-{
+public interface ICostVariableService {
     /**
      * 查询变量列表。
      */

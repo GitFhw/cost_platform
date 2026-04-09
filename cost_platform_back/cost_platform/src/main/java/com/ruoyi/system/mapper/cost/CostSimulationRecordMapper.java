@@ -8,6 +8,5 @@ import com.ruoyi.system.domain.cost.CostSimulationRecord;
  *
  * @author HwFan
  */
-public interface CostSimulationRecordMapper extends BaseMapper<CostSimulationRecord>
-{
+public interface CostSimulationRecordMapper extends BaseMapper<CostSimulationRecord> {
 }

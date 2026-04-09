@@ -21,8 +21,7 @@ import java.util.Date;
  */
 @Data
 @TableName("cost_audit_log")
-public class CostAuditLog implements Serializable
-{
+public class CostAuditLog implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
