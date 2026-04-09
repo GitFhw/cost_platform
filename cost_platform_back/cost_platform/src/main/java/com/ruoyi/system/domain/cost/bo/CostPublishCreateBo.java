@@ -8,7 +8,7 @@ import lombok.Data;
 /**
  * 发布版本创建入参
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostPublishCreateBo

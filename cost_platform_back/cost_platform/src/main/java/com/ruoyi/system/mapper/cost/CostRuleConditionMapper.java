@@ -6,7 +6,7 @@ import com.ruoyi.system.domain.cost.CostRuleCondition;
 /**
  * 规则条件 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostRuleConditionMapper extends BaseMapper<CostRuleCondition>
 {

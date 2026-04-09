@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>线程七将公式实验室、公式变量和规则金额公式统一接到该服务，
  * 由这里负责语法校验、函数改写、缓存编译和 V/C/I/F/T 命名空间上下文收口。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Service
 public class CostExpressionServiceImpl implements ICostExpressionService

@@ -159,6 +159,20 @@ export const dynamicRoutes = [
         meta: { title: '修改生成配置', activeMenu: '/tool/gen' }
       }
     ]
+  },
+  {
+    path: '/cost/publish-audit',
+    component: Layout,
+    hidden: true,
+    permissions: ['cost:publish:list'],
+    children: [
+      {
+        path: 'index',
+        component: () => import('@/views/cost/publish/audit.vue'),
+        name: 'CostPublishAudit',
+        meta: { title: '发布审计', activeMenu: '/cost/publish' }
+      }
+    ]
   }
 ]
 

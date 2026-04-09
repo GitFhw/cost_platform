@@ -13,7 +13,7 @@ import java.util.Map;
  * 统一返回条件命中、阶梯命中、计量值和解释明细，
  * 便于规则中心工作区直接展示可读解释。
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostRuleTierPreviewVo

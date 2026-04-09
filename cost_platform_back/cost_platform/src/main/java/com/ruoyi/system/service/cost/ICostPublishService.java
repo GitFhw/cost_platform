@@ -9,7 +9,7 @@ import java.util.Map;
 /**
  * 发布中心服务接口
  *
- * @author codex
+ * @author HwFan
  */
 public interface ICostPublishService
 {

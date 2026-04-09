@@ -11,7 +11,7 @@ import java.util.Map;
 /**
  * 发布版本 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostPublishVersionMapper extends BaseMapper<CostPublishVersion>
 {

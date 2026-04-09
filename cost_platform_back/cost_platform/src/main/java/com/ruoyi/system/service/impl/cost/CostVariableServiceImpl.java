@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -47,7 +48,7 @@ import java.util.StringJoiner;
  *
  * <p>线程二重点承接变量中心、第三方接入变量和共享影响因素模板治理。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Service
 public class CostVariableServiceImpl implements ICostVariableService
@@ -273,6 +274,7 @@ public class CostVariableServiceImpl implements ICostVariableService
         templates.add(buildTemplate("SG_OPERATION_BASE", "疏港共享因素模板",
                 "适用于疏港及港口操作类费用，体现 sg.* 命名空间和港口操作公共输入。",
                 "建议使用 sg.tradeType、sg.qty、sg.weight 等路径型变量编码。", buildSgTemplateItems()));
+        populateTemplateGovernanceSummary(templates);
         return templates;
     }
 
@@ -989,6 +991,174 @@ public class CostVariableServiceImpl implements ICostVariableService
         template.setVariableCount(items.size());
         template.setItems(items);
         return template;
+    }
+
+    /**
+     * 汇总共享模板的复用治理摘要。
+     */
+    private void populateTemplateGovernanceSummary(List<CostVariableTemplateVo> templates)
+    {
+        if (templates == null || templates.isEmpty())
+        {
+            return;
+        }
+
+        LinkedHashMap<String, Set<String>> templateVariableCodeMap = new LinkedHashMap<>();
+        LinkedHashSet<String> allVariableCodes = new LinkedHashSet<>();
+        for (CostVariableTemplateVo template : templates)
+        {
+            LinkedHashSet<String> variableCodes = new LinkedHashSet<>();
+            for (Map<String, Object> item : template.getItems())
+            {
+                String variableCode = Objects.toString(item.get("variableCode"), "");
+                if (StringUtils.isNotEmpty(variableCode))
+                {
+                    variableCodes.add(variableCode);
+                    allVariableCodes.add(variableCode);
+                }
+            }
+            templateVariableCodeMap.put(template.getTemplateCode(), variableCodes);
+        }
+        if (allVariableCodes.isEmpty())
+        {
+            return;
+        }
+
+        List<CostVariable> matchedVariables = variableMapper.selectList(Wrappers.<CostVariable>lambdaQuery()
+                .in(CostVariable::getVariableCode, allVariableCodes));
+        if (matchedVariables == null || matchedVariables.isEmpty())
+        {
+            return;
+        }
+
+        LinkedHashSet<Long> sceneIds = new LinkedHashSet<>();
+        for (CostVariable variable : matchedVariables)
+        {
+            if (variable.getSceneId() != null)
+            {
+                sceneIds.add(variable.getSceneId());
+            }
+        }
+
+        Map<Long, CostScene> sceneMap = new HashMap<>();
+        if (!sceneIds.isEmpty())
+        {
+            for (CostScene scene : sceneMapper.selectBatchIds(sceneIds))
+            {
+                sceneMap.put(scene.getSceneId(), scene);
+            }
+        }
+
+        for (CostVariableTemplateVo template : templates)
+        {
+            Set<String> templateCodes = templateVariableCodeMap.getOrDefault(template.getTemplateCode(), Collections.emptySet());
+            if (templateCodes.isEmpty())
+            {
+                continue;
+            }
+
+            LinkedHashMap<Long, Set<String>> sceneCoverage = new LinkedHashMap<>();
+            LinkedHashMap<Long, Integer> sceneHitCount = new LinkedHashMap<>();
+            LinkedHashMap<Long, Date> sceneLatestAppliedTime = new LinkedHashMap<>();
+            int matchedVariableCount = 0;
+            Date latestAppliedTime = null;
+            Long latestSceneId = null;
+
+            for (CostVariable variable : matchedVariables)
+            {
+                if (!templateCodes.contains(variable.getVariableCode()))
+                {
+                    continue;
+                }
+                matchedVariableCount++;
+                if (variable.getSceneId() != null)
+                {
+                    sceneCoverage.computeIfAbsent(variable.getSceneId(), key -> new LinkedHashSet<>()).add(variable.getVariableCode());
+                    sceneHitCount.merge(variable.getSceneId(), 1, Integer::sum);
+                }
+                Date appliedTime = variable.getUpdateTime() != null ? variable.getUpdateTime() : variable.getCreateTime();
+                if (variable.getSceneId() != null && appliedTime != null)
+                {
+                    Date latestSceneAppliedTime = sceneLatestAppliedTime.get(variable.getSceneId());
+                    if (latestSceneAppliedTime == null || appliedTime.after(latestSceneAppliedTime))
+                    {
+                        sceneLatestAppliedTime.put(variable.getSceneId(), appliedTime);
+                    }
+                }
+                if (appliedTime != null && (latestAppliedTime == null || appliedTime.after(latestAppliedTime)))
+                {
+                    latestAppliedTime = appliedTime;
+                    latestSceneId = variable.getSceneId();
+                }
+            }
+
+            int fullyAppliedSceneCount = 0;
+            for (Set<String> coveredCodes : sceneCoverage.values())
+            {
+                if (coveredCodes.containsAll(templateCodes))
+                {
+                    fullyAppliedSceneCount++;
+                }
+            }
+
+            List<Map.Entry<Long, Integer>> rankedScenes = new ArrayList<>(sceneHitCount.entrySet());
+            rankedScenes.sort((left, right) -> {
+                int compare = Integer.compare(right.getValue(), left.getValue());
+                if (compare != 0)
+                {
+                    return compare;
+                }
+                return Long.compare(left.getKey(), right.getKey());
+            });
+
+            List<String> recentSceneNames = new ArrayList<>();
+            List<Map<String, Object>> sceneSummaries = new ArrayList<>();
+            for (Map.Entry<Long, Integer> entry : rankedScenes)
+            {
+                String sceneLabel = buildSceneLabel(sceneMap.get(entry.getKey()), entry.getKey());
+                if (StringUtils.isNotEmpty(sceneLabel) && recentSceneNames.size() < 3)
+                {
+                    recentSceneNames.add(sceneLabel);
+                }
+                LinkedHashMap<String, Object> sceneSummary = new LinkedHashMap<>();
+                sceneSummary.put("sceneId", entry.getKey());
+                sceneSummary.put("sceneLabel", sceneLabel);
+                sceneSummary.put("matchedCount", entry.getValue());
+                sceneSummary.put("coverageCount", sceneCoverage.getOrDefault(entry.getKey(), Collections.emptySet()).size());
+                sceneSummary.put("templateVariableCount", templateCodes.size());
+                sceneSummary.put("coverageRate", templateCodes.isEmpty()
+                        ? 0
+                        : Math.round(sceneCoverage.getOrDefault(entry.getKey(), Collections.emptySet()).size() * 1000.0 / templateCodes.size()) / 10.0);
+                sceneSummary.put("latestAppliedTime", sceneLatestAppliedTime.get(entry.getKey()));
+                sceneSummaries.add(sceneSummary);
+            }
+
+            template.setMatchedVariableCount(matchedVariableCount);
+            template.setAppliedSceneCount(sceneCoverage.size());
+            template.setFullyAppliedSceneCount(fullyAppliedSceneCount);
+            template.setRecentSceneNames(recentSceneNames);
+            template.setSceneSummaries(sceneSummaries);
+            template.setLatestAppliedTime(latestAppliedTime);
+            if (latestSceneId != null)
+            {
+                template.setLatestSceneName(buildSceneLabel(sceneMap.get(latestSceneId), latestSceneId));
+            }
+        }
+    }
+
+    private String buildSceneLabel(CostScene scene, Long sceneId)
+    {
+        if (scene == null)
+        {
+            return sceneId == null ? "" : "场景#" + sceneId;
+        }
+        String sceneCode = StringUtils.defaultString(scene.getSceneCode());
+        String sceneName = StringUtils.defaultString(scene.getSceneName());
+        if (StringUtils.isNotEmpty(sceneCode) && StringUtils.isNotEmpty(sceneName))
+        {
+            return sceneCode + " / " + sceneName;
+        }
+        return StringUtils.defaultIfEmpty(sceneName, sceneCode);
     }
 
     /**

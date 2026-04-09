@@ -23,7 +23,7 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable placeholder="请选择场景" style="width: 240px" @change="handleQuerySceneChange">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="业务域" prop="businessDomain">
@@ -58,7 +58,7 @@
         <el-form :model="publishForm" label-width="92px">
           <el-form-item label="发布场景" required>
             <el-select v-model="publishForm.sceneId" filterable placeholder="请选择要发布的场景" style="width: 100%" @change="handlePublishSceneChange">
-              <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+              <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
             </el-select>
           </el-form-item>
           <el-form-item label="发布说明" required>
@@ -104,12 +104,13 @@
       </div>
 
       <div class="publish-center__ledger">
-        <div class="publish-center__section-head">
-          <div>
-            <h3>版本台账</h3>
-            <p>查看版本详情、快照对象、差异对比、生效切换与回滚。</p>
-          </div>
+      <div class="publish-center__section-head">
+        <div>
+          <h3>版本台账</h3>
+          <p>查看版本详情、快照对象、差异对比、生效切换与回滚。</p>
         </div>
+        <el-button plain icon="Histogram" @click="handleOpenAudit" v-hasPermi="['cost:publish:list']">发布审计</el-button>
+      </div>
 
         <el-table v-loading="loading" :data="versionList">
           <el-table-column label="版本号" prop="versionNo" width="150" align="center" />
@@ -119,6 +120,12 @@
           <el-table-column label="状态" width="120" align="center">
             <template #default="scope">
               <dict-tag :options="versionStatusOptions" :value="scope.row.versionStatus" />
+            </template>
+          </el-table-column>
+          <el-table-column label="检查结果" width="170" align="center">
+            <template #default="scope">
+              <el-tag :type="resolveValidationMeta(scope.row).tag">{{ resolveValidationMeta(scope.row).label }}</el-tag>
+              <div class="publish-center__validation-note">{{ buildValidationNote(scope.row) }}</div>
             </template>
           </el-table-column>
           <el-table-column label="发布说明" prop="publishDesc" min-width="220" :show-overflow-tooltip="true" />
@@ -149,15 +156,37 @@
           <el-descriptions-item label="上一版本">{{ detailData.previousVersionNo || '首发版本' }}</el-descriptions-item>
           <el-descriptions-item label="发布时间">{{ parseTime(detailData.version.publishedTime) }}</el-descriptions-item>
           <el-descriptions-item label="发布人">{{ detailData.version.publishedBy }}</el-descriptions-item>
+          <el-descriptions-item label="检查结果">
+            <el-tag :type="detailValidationMeta.tag">{{ detailValidationMeta.label }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="检查摘要">{{ buildValidationNote(detailData.validationResult) }}</el-descriptions-item>
         </el-descriptions>
 
         <div class="publish-center__filter-row">
           <el-select v-model="detailFeeCode" clearable placeholder="按费用筛选快照对象" style="width: 280px" @change="reloadDetail">
-            <el-option v-for="item in detailData.impactedFees || []" :key="item.feeCode" :label="`${item.feeCode} / ${item.feeName}`" :value="item.feeCode" />
+            <el-option v-for="item in detailData.impactedFees || []" :key="item.feeCode" :label="`${item.feeName} / ${item.feeCode}`" :value="item.feeCode" />
           </el-select>
         </div>
 
         <el-tabs>
+          <el-tab-pane label="发布检查">
+            <div class="publish-center__precheck-summary">
+              <div class="publish-center__summary-card"><span>阻断项</span><strong>{{ detailValidationMeta.blockingCount }}</strong></div>
+              <div class="publish-center__summary-card"><span>告警项</span><strong>{{ detailValidationMeta.warningCount }}</strong></div>
+              <div class="publish-center__summary-card"><span>受影响费用</span><strong>{{ detailValidation.impactedFeeCount || (detailValidation.impactedFees || []).length || 0 }}</strong></div>
+              <div class="publish-center__summary-card"><span>发布资格</span><strong>{{ detailValidation.publishable === false ? '阻断' : '可发布' }}</strong></div>
+            </div>
+            <el-table v-if="detailValidation.items?.length" :data="detailValidation.items" size="small">
+              <el-table-column label="级别" width="100" align="center">
+                <template #default="scope">
+                  <el-tag :type="resolveCheckTag(scope.row.level)">{{ scope.row.level }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="检查项" prop="title" min-width="180" />
+              <el-table-column label="说明" prop="message" min-width="360" :show-overflow-tooltip="true" />
+            </el-table>
+            <el-empty v-else description="该版本未记录检查明细或检查项为空" />
+          </el-tab-pane>
           <el-tab-pane label="受影响费用">
             <el-table :data="detailData.impactedFees || []" size="small">
               <el-table-column label="费用编码" prop="feeCode" width="160" />
@@ -191,7 +220,7 @@
             <el-option v-for="item in diffVersionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
           </el-select>
           <el-select v-model="diffFeeCode" clearable placeholder="按费用筛选差异" style="width: 260px" :disabled="!diffForm.fromVersionId" @change="loadDiff">
-            <el-option v-for="item in diffData.feeDiffs || []" :key="item.feeCode" :label="`${item.feeCode} / ${item.feeName}`" :value="item.feeCode" />
+            <el-option v-for="item in diffData.feeDiffs || []" :key="item.feeCode" :label="`${item.feeName} / ${item.feeCode}`" :value="item.feeCode" />
           </el-select>
         </div>
 
@@ -367,6 +396,7 @@ import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
+const router = useRouter()
 
 const loading = ref(false)
 const showSearch = ref(true)
@@ -413,6 +443,8 @@ const metricItems = computed(() => [
   { label: '生效版本数', value: stats.activeVersionCount, desc: '当前处于 ACTIVE 的版本数' },
   { label: '已回滚版本', value: stats.rolledBackVersionCount, desc: '历史上被回滚替换的版本数' }
 ])
+const detailValidation = computed(() => parseValidationResult(detailData.value.validationResult))
+const detailValidationMeta = computed(() => resolveValidationMeta(detailData.value.validationResult))
 const hasAnyDiff = computed(() => {
   const summary = diffData.value.summary || {}
   return Number(summary.sceneChangeCount || 0) > 0
@@ -497,6 +529,10 @@ function resetQuery() {
 function handleQuerySceneChange(sceneId) {
   queryParams.sceneId = sceneId
   publishForm.sceneId = sceneId
+}
+
+function handleOpenAudit() {
+  router.push({ path: '/cost/publish-audit/index', query: queryParams.sceneId ? { sceneId: queryParams.sceneId } : {} })
 }
 
 function handlePublishSceneChange(sceneId) {
@@ -613,6 +649,45 @@ function resolveVersionLabel(value) {
 
 function resolveCheckTag(level) {
   return level === 'BLOCK' ? 'danger' : (level === 'WARN' ? 'warning' : 'success')
+}
+
+function parseValidationResult(value) {
+  if (!value) {
+    return {}
+  }
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return {}
+    }
+  }
+  return value
+}
+
+function resolveValidationMeta(value) {
+  const payload = parseValidationResult(value?.validationResultJson || value)
+  const items = Array.isArray(payload.items) ? payload.items : []
+  const blockingCount = Number(payload.blockingCount ?? items.filter(item => item.level === 'BLOCK').length ?? 0)
+  const warningCount = Number(payload.warningCount ?? items.filter(item => item.level === 'WARN').length ?? 0)
+  if (!Object.keys(payload).length) {
+    return { label: '未留痕', tag: 'info', blockingCount: 0, warningCount: 0 }
+  }
+  if (blockingCount > 0 || payload.publishable === false) {
+    return { label: '阻断', tag: 'danger', blockingCount, warningCount }
+  }
+  if (warningCount > 0) {
+    return { label: '告警通过', tag: 'warning', blockingCount, warningCount }
+  }
+  return { label: '通过', tag: 'success', blockingCount, warningCount }
+}
+
+function buildValidationNote(value) {
+  const meta = resolveValidationMeta(value)
+  if (meta.label === '未留痕') {
+    return '未记录检查快照'
+  }
+  return `阻断 ${meta.blockingCount} / 告警 ${meta.warningCount}`
 }
 
 function normalizeCompareValue(value) {
@@ -1066,6 +1141,13 @@ getList()
 .publish-center__summary-card strong {
   font-size: 24px;
   color: var(--el-color-primary);
+}
+
+.publish-center__validation-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.4;
 }
 
 .publish-center__impact h4 {

@@ -6,7 +6,7 @@ import com.ruoyi.system.domain.cost.CostAlarmRecord;
 /**
  * 运行告警 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostAlarmRecordMapper extends BaseMapper<CostAlarmRecord>
 {

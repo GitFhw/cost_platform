@@ -56,7 +56,7 @@ import java.util.stream.Collectors;
 /**
  * 线程六治理增强服务实现
  *
- * @author codex
+ * @author HwFan
  */
 @Service
 public class CostGovernanceServiceImpl implements ICostGovernanceService
@@ -98,6 +98,9 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     private ICostAlarmService alarmService;
     @Autowired
     private RedisCache redisCache;
+
+    @Autowired
+    private CostDistributedLockSupport distributedLockSupport;
 
     @Autowired
     public void setJdbcTemplate(@Qualifier("masterDataSource") DataSource masterDataSource)
@@ -154,11 +157,11 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
                 .eq(CostBillPeriod::getBillMonth, bo.getBillMonth())) > 0)
         {
             throw new ServiceException("当前场景账期已存在，请勿重复创建");
-        }
+                    }
         if (bo.getActiveVersionId() != null)
         {
             requireVersion(bo.getActiveVersionId());
-        }
+                    }
         CostBillPeriod period = new CostBillPeriod();
         period.setSceneId(scene.getSceneId());
         period.setBillMonth(bo.getBillMonth());
@@ -183,9 +186,9 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     {
         CostBillPeriod before = requirePeriod(periodId);
         if (PERIOD_STATUS_SEALED.equals(before.getPeriodStatus()))
-        {
+                    {
             return 0;
-        }
+                    }
         Date now = DateUtils.getNowDate();
         int rows = billPeriodMapper.update(null, Wrappers.<CostBillPeriod>lambdaUpdate()
                 .eq(CostBillPeriod::getPeriodId, periodId)
@@ -429,8 +432,11 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
     @Override
     public int refreshRuntimeCache(Long sceneId, Long versionId)
     {
-        try
-        {
+        return distributedLockSupport.executeRuntimeCacheLock(sceneId, versionId,
+                "当前正在刷新运行缓存，请稍后重试", () ->
+                {
+                    try
+                    {
             List<String> keys = new ArrayList<>();
             if (versionId != null)
             {
@@ -456,10 +462,15 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
             }
             auditService.recordAudit(sceneId, "CACHE", versionId == null ? "RUNTIME" : String.valueOf(versionId),
                     "REFRESH", "刷新运行快照缓存", null, keys, "");
-            return 1;
-        }
-        catch (Exception e)
-        {
+            if (versionId != null || sceneId != null)
+            {
+                String sourceKey = "CACHE:" + (versionId == null ? String.valueOf(sceneId) : versionId);
+                alarmService.autoResolveBySourceKey(sourceKey, "缓存刷新成功，自动关闭历史缓存告警");
+            }
+                        return 1;
+                    }
+                    catch (Exception e)
+                    {
             CostAlarmRecord alarm = new CostAlarmRecord();
             alarm.setSceneId(sceneId);
             alarm.setVersionId(versionId);
@@ -470,7 +481,8 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService
             alarm.setSourceKey("CACHE:" + (versionId == null ? String.valueOf(sceneId) : versionId));
             alarmService.createAlarm(alarm);
             throw e;
-        }
+                    }
+                });
     }
 
     /**

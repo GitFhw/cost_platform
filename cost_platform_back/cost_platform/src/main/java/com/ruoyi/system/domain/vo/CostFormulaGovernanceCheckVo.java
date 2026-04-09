@@ -5,7 +5,7 @@ import lombok.Data;
 /**
  * 公式实验室治理检查结果。
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostFormulaGovernanceCheckVo

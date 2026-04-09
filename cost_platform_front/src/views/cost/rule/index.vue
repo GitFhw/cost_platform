@@ -22,7 +22,7 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable placeholder="请选择场景" style="width: 220px" @change="handleSceneChange">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="业务域" prop="businessDomain">
@@ -215,7 +215,7 @@
           <el-col :span="8">
             <el-form-item label="计量变量" prop="quantityVariableCode">
               <el-select v-model="form.quantityVariableCode" clearable filterable style="width: 100%" placeholder="公式/阶梯规则必选">
-                <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableCode} / ${item.variableName}`" :value="item.variableCode" />
+                <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableName} / ${item.variableCode}`" :value="item.variableCode" />
               </el-select>
               <div v-if="currentFee?.unitCode" class="rule-center__field-tip">
                 <strong>计价单位：{{ resolveUnitLabel(currentFee.unitCode) }}</strong>
@@ -258,7 +258,7 @@
             <el-col :span="24">
               <el-form-item label="公式编码" prop="amountFormulaCode">
                 <el-select v-model="form.amountFormulaCode" clearable filterable style="width: 100%" placeholder="请选择公式实验室中的金额公式编码">
-                  <el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaCode} / ${item.formulaName}`" :value="item.formulaCode" />
+                  <el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaName} / ${item.formulaCode}`" :value="item.formulaCode" />
                 </el-select>
               </el-form-item>
             </el-col>
@@ -329,7 +329,7 @@
                     style="width: 100%"
                     @change="value => handleConditionVariableChange(scope.row.condition, value)"
                   >
-                    <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableCode} / ${item.variableName}`" :value="item.variableCode" />
+                    <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableName} / ${item.variableCode}`" :value="item.variableCode" />
                   </el-select>
                 </template>
               </el-table-column>

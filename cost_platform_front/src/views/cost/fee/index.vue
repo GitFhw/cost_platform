@@ -22,7 +22,7 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" placeholder="请选择场景" clearable filterable style="width: 230px" @change="handleSceneChange">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="业务域" prop="businessDomain">
@@ -78,6 +78,11 @@
       </el-table-column>
       <el-table-column label="费用编码" prop="feeCode" min-width="150" align="center" />
       <el-table-column label="费用名称" prop="feeName" min-width="160" align="center" :show-overflow-tooltip="true" />
+      <el-table-column label="对象维度" min-width="180" align="center">
+        <template #default="scope">
+          <span>{{ resolveObjectDimensionLabel(scope.row) }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="计价单位" prop="unitCode" width="120" align="center">
         <template #default="scope">
           <div class="fee-center__unit-cell">
@@ -115,7 +120,7 @@
           <el-col :span="12">
             <el-form-item label="所属场景" prop="sceneId">
               <el-select v-model="form.sceneId" placeholder="请选择场景" filterable style="width: 100%">
-                <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+                <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -155,7 +160,21 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="对象维度" prop="objectDimension">
-              <el-input v-model="form.objectDimension" placeholder="如：船舶、人员、库区" />
+              <el-select
+                v-model="form.objectDimension"
+                filterable
+                allow-create
+                clearable
+                default-first-option
+                style="width: 100%"
+                placeholder="请选择或录入对象维度"
+              >
+                <el-option v-for="item in objectDimensionOptions" :key="item" :label="item" :value="item" />
+              </el-select>
+              <div class="fee-center__field-tip">
+                <strong>{{ currentObjectDimensionHint.title }}</strong>
+                <span>{{ currentObjectDimensionHint.description }}</span>
+              </div>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -229,6 +248,7 @@ const sceneOptions = ref([])
 const businessDomainOptions = ref([])
 const feeStatusOptions = ref([])
 const unitCodeOptions = ref([])
+const objectDimensionOptions = ['协力队', '协力单位', '班组', '人员', '设备', '船舶', '库区', '订单']
 const open = ref(false)
 const loading = ref(true)
 const showSearch = ref(true)
@@ -284,6 +304,30 @@ const unitOptionsForForm = computed(() => {
   return options
 })
 const currentUnitSemantic = computed(() => resolveUnitSemantic(form.value?.unitCode))
+const currentSceneDefaultObjectDimension = computed(() => {
+  const sceneId = form.value?.sceneId
+  if (!sceneId) return ''
+  const scene = sceneOptions.value.find(item => item.sceneId === sceneId)
+  return scene?.defaultObjectDimension || ''
+})
+const currentObjectDimensionHint = computed(() => {
+  if (form.value?.objectDimension) {
+    return {
+      title: '当前费用已单独指定对象维度',
+      description: `本费用将按“${form.value.objectDimension}”执行，不再继承场景默认维度。`
+    }
+  }
+  if (currentSceneDefaultObjectDimension.value) {
+    return {
+      title: '当前费用将继承场景默认维度',
+      description: `未单独指定时，将继承场景默认对象维度“${currentSceneDefaultObjectDimension.value}”。`
+    }
+  }
+  return {
+    title: '建议场景内统一维度口径',
+    description: '推荐优先使用：协力队、协力单位、班组、人员、设备、船舶、库区、订单。'
+  }
+})
 
 const currentSceneLabel = computed(() => {
   if (!queryParams.value.sceneId) {
@@ -396,6 +440,16 @@ async function handleUpdate(row) {
 
 function handleSceneChange(sceneId) {
   queryParams.value.sceneId = sceneId
+}
+
+function resolveObjectDimensionLabel(row) {
+  if (row?.objectDimension) {
+    return row.objectDimension
+  }
+  if (row?.sceneDefaultObjectDimension) {
+    return `${row.sceneDefaultObjectDimension}（继承场景）`
+  }
+  return '-'
 }
 
 function submitForm() {

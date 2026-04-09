@@ -10,6 +10,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="sceneCode" column="scene_code" />
         <result property="sceneName" column="scene_name" />
         <result property="businessDomain" column="business_domain" />
+        <result property="sceneDefaultObjectDimension" column="scene_default_object_dimension" />
         <result property="feeCode" column="fee_code" />
         <result property="feeName" column="fee_name" />
         <result property="feeCategory" column="fee_category" />
@@ -32,6 +33,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                s.scene_code,
                s.scene_name,
                s.business_domain,
+               s.default_object_dimension as scene_default_object_dimension,
                f.fee_code,
                f.fee_name,
                f.fee_category,

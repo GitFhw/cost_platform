@@ -6,7 +6,7 @@ import com.ruoyi.system.domain.cost.CostCalcTask;
 /**
  * 核算任务 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostCalcTaskMapper extends BaseMapper<CostCalcTask>
 {

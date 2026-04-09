@@ -6,7 +6,7 @@ import com.ruoyi.system.domain.cost.CostRuleTier;
 /**
  * 规则阶梯 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostRuleTierMapper extends BaseMapper<CostRuleTier>
 {

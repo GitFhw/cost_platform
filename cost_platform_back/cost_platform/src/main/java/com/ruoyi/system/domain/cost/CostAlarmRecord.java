@@ -12,12 +12,10 @@ import lombok.ToString;
 import java.util.Date;
 
 /**
- * 运行告警对象 cost_alarm_record
+ * 运行告警对象 {@code cost_alarm_record}。
  *
- * <p>线程六先承接任务失败、重试超限、缓存刷新异常等治理级告警，
- * 后续可继续接入通知中心和订阅机制。</p>
- *
- * @author codex
+ * <p>当前主要承接任务失败、重试超限、运行缓存刷新异常等治理级告警，
+ * 同时为外部通知与运营概览提供统一数据来源。</p>
  */
 @Data
 @ToString(callSuper = true)
@@ -63,6 +61,15 @@ public class CostAlarmRecord extends BaseEntity
 
     @TableField("trigger_time")
     private Date triggerTime;
+
+    @TableField("first_trigger_time")
+    private Date firstTriggerTime;
+
+    @TableField("latest_trigger_time")
+    private Date latestTriggerTime;
+
+    @TableField("occurrence_count")
+    private Integer occurrenceCount;
 
     @TableField("ack_by")
     private String ackBy;

@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * 变量分组Mapper接口
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostVariableGroupMapper extends BaseMapper<CostVariableGroup>
 {

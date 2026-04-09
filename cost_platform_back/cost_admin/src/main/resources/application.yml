@@ -151,3 +151,9 @@ xss:
   excludes: /system/notice
   # 匹配链接
   urlPatterns: /system/*,/monitor/*,/tool/*
+
+cost:
+  dispatch:
+    dispatch-interval-seconds: 15
+    stale-timeout-seconds: 600
+    node-id:

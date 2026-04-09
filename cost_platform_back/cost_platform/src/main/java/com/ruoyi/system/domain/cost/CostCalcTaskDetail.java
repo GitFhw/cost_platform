@@ -15,7 +15,7 @@ import java.util.Date;
  *
  * <p>任务明细按业务单号拆分，便于线程五先落分页、失败重试和分片信息展示。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @TableName("cost_calc_task_detail")

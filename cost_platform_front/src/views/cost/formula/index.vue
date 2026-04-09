@@ -22,7 +22,7 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable placeholder="请选择场景" style="width: 240px" @change="handleQuerySceneChange">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="业务域" prop="businessDomain">
@@ -69,7 +69,7 @@
 
         <div class="formula-lab__toolbar">
           <el-select v-model="form.sceneId" filterable placeholder="请选择场景" style="width: 240px" @change="handleWorkbenchSceneChange">
-            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
           </el-select>
           <el-segmented v-model="workbench.mode" :options="builderModes" />
           <el-button type="primary" icon="Plus" @click="handleCreate">新建公式</el-button>
@@ -156,7 +156,7 @@
                     :placeholder="resolveVariablePlaceholder()"
                     @change="value => handleConditionVariableChange(scope.row, value)"
                   >
-                    <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableCode} / ${item.variableName}`" :value="item.variableCode" />
+                    <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableName} / ${item.variableCode}`" :value="item.variableCode" />
                   </el-select>
                 </template>
               </el-table-column>
@@ -196,7 +196,7 @@
               <div>
                 <div class="formula-lab__field-label">区间依据变量</div>
                 <el-select v-model="workbench.rangeVariableCode" filterable :placeholder="resolveVariablePlaceholder('请选择区间变量')">
-                  <el-option v-for="item in numericVariableOptions" :key="item.variableCode" :label="`${item.variableCode} / ${item.variableName}`" :value="item.variableCode" />
+                    <el-option v-for="item in numericVariableOptions" :key="item.variableCode" :label="`${item.variableName} / ${item.variableCode}`" :value="item.variableCode" />
                 </el-select>
               </div>
               <div>

@@ -17,7 +17,7 @@ import java.util.Date;
  * <p>发布快照表只保留创建审计字段，不包含 BaseEntity 默认的更新审计列，
  * 因此这里不继承 BaseEntity，避免 MyBatis-Plus 在插入时拼接不存在的 update_by/update_time 字段。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @TableName("cost_publish_snapshot")

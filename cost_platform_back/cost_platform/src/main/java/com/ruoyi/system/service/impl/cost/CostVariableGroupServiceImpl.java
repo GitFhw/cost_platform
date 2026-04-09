@@ -17,7 +17,7 @@ import java.util.List;
 /**
  * 变量分组服务实现
  *
- * @author codex
+ * @author HwFan
  */
 @Service
 public class CostVariableGroupServiceImpl implements ICostVariableGroupService

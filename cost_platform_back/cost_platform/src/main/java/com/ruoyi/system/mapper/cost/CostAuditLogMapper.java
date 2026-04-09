@@ -6,7 +6,7 @@ import com.ruoyi.system.domain.cost.CostAuditLog;
 /**
  * 审计日志 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostAuditLogMapper extends BaseMapper<CostAuditLog>
 {

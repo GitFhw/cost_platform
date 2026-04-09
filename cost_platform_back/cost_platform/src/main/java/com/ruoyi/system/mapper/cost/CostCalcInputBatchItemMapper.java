@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * 正式核算输入批次明细 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostCalcInputBatchItemMapper extends BaseMapper<CostCalcInputBatchItem>
 {

@@ -22,7 +22,7 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable style="width: 240px">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="账期" prop="billMonth">
@@ -52,7 +52,7 @@
         <el-form :model="periodForm" label-width="92px">
           <el-form-item label="所属场景" required>
             <el-select v-model="periodForm.sceneId" filterable style="width: 100%" @change="handlePeriodSceneChange">
-              <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+              <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
             </el-select>
           </el-form-item>
           <el-form-item label="账期" required>
@@ -83,7 +83,7 @@
         <el-form :model="recalcForm" label-width="92px">
           <el-form-item label="所属场景" required>
             <el-select v-model="recalcForm.sceneId" filterable style="width: 100%" @change="handleRecalcSceneChange">
-              <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+              <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
             </el-select>
           </el-form-item>
           <el-form-item label="账期" required>
@@ -121,6 +121,9 @@
             <h3>账期台账</h3>
             <p>从账期视角追踪当前默认版本、最近任务结果和重算申请状态。</p>
           </div>
+          <el-button type="warning" plain icon="Download" @click="handleExportPeriod">
+            导出账期
+          </el-button>
         </div>
 
         <el-table v-loading="loading" :data="periodList">
@@ -158,6 +161,9 @@
             <h3>重算申请台账</h3>
             <p>支持审核、执行并查看重算前后差异摘要。</p>
           </div>
+          <el-button type="warning" plain icon="Download" @click="handleExportRecalc">
+            导出差异
+          </el-button>
         </div>
 
         <el-table :data="recalcList">
@@ -364,6 +370,19 @@ async function getList() {
 function handleQuery() {
   queryParams.pageNum = 1
   getList()
+}
+
+function handleExportPeriod() {
+  proxy.download('cost/governance/period/export', {
+    ...queryParams
+  }, `cost_period_${Date.now()}.xlsx`)
+}
+
+function handleExportRecalc() {
+  proxy.download('cost/governance/recalc/export', {
+    sceneId: queryParams.sceneId,
+    billMonth: queryParams.billMonth
+  }, `cost_recalc_${Date.now()}.xlsx`)
 }
 
 function resetQuery() {

@@ -6,7 +6,7 @@ import com.ruoyi.system.domain.cost.CostRecalcOrder;
 /**
  * 重算申请 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostRecalcOrderMapper extends BaseMapper<CostRecalcOrder>
 {

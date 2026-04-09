@@ -16,7 +16,7 @@ import java.util.Date;
  * <p>线程五的试算链路只写试算记录，不写正式结果台账。
  * 该表只有创建审计字段，没有更新审计字段，因此不继承 BaseEntity。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @TableName("cost_simulation_record")

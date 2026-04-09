@@ -8,7 +8,7 @@ import lombok.Data;
  * <p>用于公式实验室测试台执行表达式验证，
  * 支持按公式主键测试，也支持直接传入表达式做草稿预验。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostFormulaTestBo

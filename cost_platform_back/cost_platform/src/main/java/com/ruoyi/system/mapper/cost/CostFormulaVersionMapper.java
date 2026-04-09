@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * 公式版本台账 Mapper。
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostFormulaVersionMapper extends BaseMapper<CostFormulaVersion>
 {

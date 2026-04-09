@@ -18,7 +18,7 @@ import java.util.Date;
  * <p>发布版本表只有 create/update 审计字段，没有 remark 字段，
  * 因此这里不继承 BaseEntity，避免默认 SQL 访问不存在的列。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @TableName("cost_publish_version")

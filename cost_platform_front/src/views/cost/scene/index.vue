@@ -56,6 +56,50 @@
       </div>
     </section>
 
+    <section v-if="currentSceneInfo.sceneId" class="scene-center__publish-summary">
+      <div class="scene-center__publish-summary-header">
+        <div>
+          <div class="scene-center__publish-summary-eyebrow">发布治理摘要</div>
+          <div class="scene-center__publish-summary-title">{{ currentSceneInfo.sceneName }} 发布概览</div>
+          <div class="scene-center__publish-summary-desc">
+            在场景中心直接查看当前工作场景的已发布版本、生效版本与最近一次发布校验结论，完整列表、详情与差异仍由发布中心承载。
+          </div>
+        </div>
+        <div class="scene-center__publish-summary-actions">
+          <el-button plain icon="Tickets" @click="handleOpenPublishCenter(currentSceneInfo)" v-hasPermi="['cost:publish:list']">
+            查看版本
+          </el-button>
+          <el-button plain icon="Document" @click="handleOpenPublishAudit" v-hasPermi="['cost:publish:list']">
+            发布审计
+          </el-button>
+        </div>
+      </div>
+      <div class="scene-center__publish-summary-grid">
+        <div class="scene-center__publish-summary-card">
+          <span>已发布版本数</span>
+          <strong>{{ publishSummary.publishedVersionCount }}</strong>
+          <small>当前工作场景累计沉淀的正式发布版本</small>
+        </div>
+        <div class="scene-center__publish-summary-card">
+          <span>当前生效版本</span>
+          <strong>{{ publishSummary.activeVersionNo || '未生效' }}</strong>
+          <small>{{ currentSceneInfo.sceneCode }}</small>
+        </div>
+        <div class="scene-center__publish-summary-card">
+          <span>最近发布版本</span>
+          <strong>{{ publishSummary.latestVersionNo || '暂无版本' }}</strong>
+          <small>{{ publishSummary.latestPublishedTime || '尚未产生发布时间' }}</small>
+        </div>
+        <div class="scene-center__publish-summary-card">
+          <span>最近校验结果</span>
+          <div class="scene-center__publish-summary-status">
+            <el-tag :type="publishSummary.validationTag">{{ publishSummary.validationLabel }}</el-tag>
+            <small>{{ publishSummary.validationNote }}</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
       <el-alert
       title="核算相关字典统一维护在系统字典中心，便于业务域、场景、费用、变量和规则共享同一套基础口径。"
       type="info"
@@ -112,12 +156,16 @@
         </el-select>
       </el-form-item>
       <el-form-item label="适用组织" prop="orgCode">
-        <el-input
+        <el-tree-select
           v-model="queryParams.orgCode"
-          placeholder="请输入组织编码"
+          :data="deptOptions"
+          :props="{ value: 'id', label: 'label', children: 'children' }"
+          value-key="id"
+          placeholder="请选择适用组织"
           clearable
+          check-strictly
+          filterable
           style="width: 220px"
-          @keyup.enter="handleQuery"
         />
       </el-form-item>
       <el-form-item label="状态" prop="status">
@@ -206,7 +254,16 @@
           <dict-tag :options="sceneTypeOptions" :value="scope.row.sceneType" />
         </template>
       </el-table-column>
-      <el-table-column label="适用组织" align="center" prop="orgCode" min-width="140" :show-overflow-tooltip="true" />
+      <el-table-column label="适用组织" align="center" prop="orgCode" min-width="160" :show-overflow-tooltip="true">
+        <template #default="scope">
+          <span>{{ resolveOrgLabel(scope.row.orgCode) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="默认对象维度" align="center" prop="defaultObjectDimension" min-width="160" :show-overflow-tooltip="true">
+        <template #default="scope">
+          <span>{{ scope.row.defaultObjectDimension || '-' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="当前生效版本" align="center" prop="activeVersionId" width="140">
         <template #default="scope">
           <el-tag v-if="scope.row.activeVersionNo" type="success">{{ scope.row.activeVersionNo }}</el-tag>
@@ -259,6 +316,12 @@
         <div class="scene-center__dialog-tip">
           场景是平台第一层业务组织边界，可理解为合同、核算主题、业务方案或公司级核算域。
         </div>
+        <el-alert
+          title="当前阶段业务域用于表达行业/业务归属，场景类型用于表达配置组织方式，两者默认不做强绑定约束；只有后续明确存在固定组合时，再补专门映射规则。"
+          type="info"
+          :closable="false"
+          class="scene-center__dialog-alert"
+        />
         <el-row :gutter="18">
           <el-col :span="12">
             <el-form-item label="场景编码" prop="sceneCode">
@@ -296,7 +359,31 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="适用组织" prop="orgCode">
-              <el-input v-model="form.orgCode" placeholder="请输入组织编码，如 ORG_PORT_001" />
+              <el-tree-select
+                v-model="form.orgCode"
+                :data="deptOptions"
+                :props="{ value: 'id', label: 'label', children: 'children' }"
+                value-key="id"
+                placeholder="请选择适用组织"
+                check-strictly
+                clearable
+                filterable
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="默认对象维度" prop="defaultObjectDimension">
+              <el-select
+                v-model="form.defaultObjectDimension"
+                filterable
+                allow-create
+                clearable
+                default-first-option
+                style="width: 100%"
+                placeholder="请选择或录入默认对象维度"
+              >
+                <el-option v-for="item in objectDimensionOptions" :key="item" :label="item" :value="item" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -396,17 +483,23 @@
 
 <script setup name="CostScene">
 import { ElMessageBox } from 'element-plus'
+import { listPublish } from '@/api/cost/publish'
 import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listScene, updateScene } from '@/api/cost/scene'
+import { deptTreeSelect } from '@/api/system/user'
 import { getCostSceneContextId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { formatLegacyOrgLabel } from '@/utils/costOptionLabel'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
 const router = useRouter()
 
 const sceneList = ref([])
+const deptOptions = ref([])
+const deptLabelMap = ref({})
 const businessDomainOptions = ref([])
 const sceneStatusOptions = ref([])
 const sceneTypeOptions = ref([])
+const objectDimensionOptions = ['协力队', '协力单位', '班组', '人员', '设备', '船舶', '库区', '订单']
 const open = ref(false)
 const loading = ref(true)
 const showSearch = ref(true)
@@ -420,6 +513,7 @@ const governanceLoading = ref(false)
 const initialStatus = ref(undefined)
 const governanceInfo = ref({})
 const currentSceneInfo = ref({})
+const publishSummary = reactive(createEmptyPublishSummary())
 const statistics = reactive({
   sceneCount: 0,
   enabledSceneCount: 0,
@@ -458,11 +552,11 @@ const filterStatusText = computed(() => {
 
 const filterDomainText = computed(() => {
   if (!queryParams.value.businessDomain) {
-    return queryParams.value.orgCode ? `业务域：全部 · 组织：${queryParams.value.orgCode}` : '业务域：全部'
+    return queryParams.value.orgCode ? `业务域：全部 · 组织：${resolveOrgLabel(queryParams.value.orgCode)}` : '业务域：全部'
   }
   const option = businessDomainOptions.value.find(item => item.value === queryParams.value.businessDomain)
   const domainText = `业务域：${option ? option.label : queryParams.value.businessDomain}`
-  return queryParams.value.orgCode ? `${domainText} · 组织：${queryParams.value.orgCode}` : domainText
+  return queryParams.value.orgCode ? `${domainText} · 组织：${resolveOrgLabel(queryParams.value.orgCode)}` : domainText
 })
 
 const metricItems = computed(() => [
@@ -480,6 +574,11 @@ const metricItems = computed(() => [
     label: '业务域覆盖数',
     value: statistics.businessDomainCount,
     desc: '当前结果覆盖的业务域种类'
+  },
+  {
+    label: '默认对象维度',
+    value: currentSceneInfo.value.defaultObjectDimension || '-',
+    desc: currentSceneInfo.value.sceneId ? '当前工作场景的默认计费对象维度' : '设置工作场景后可查看默认维度'
   },
   {
     label: '当前筛选状态',
@@ -507,11 +606,18 @@ async function loadSceneDictOptions() {
   sceneTypeOptions.value = dictMap.cost_scene_type || []
 }
 
+async function loadDeptOptions() {
+  const response = await deptTreeSelect()
+  deptOptions.value = normalizeDeptTreeOptions(response.data || [])
+  deptLabelMap.value = buildDeptLabelMap(deptOptions.value)
+}
+
 async function getList() {
   loading.value = true
   try {
-    const [, listResponse, statsResponse] = await Promise.all([
+    const [, , listResponse, statsResponse] = await Promise.all([
       loadSceneDictOptions(),
+      loadDeptOptions(),
       listScene(queryParams.value),
       getSceneStats(queryParams.value)
     ])
@@ -528,18 +634,22 @@ async function syncCurrentSceneInfo() {
   const currentSceneId = getCostSceneContextId()
   if (!currentSceneId) {
     currentSceneInfo.value = {}
+    resetPublishSummary()
     return
   }
   const matched = sceneList.value.find(item => item.sceneId === currentSceneId)
   if (matched) {
     currentSceneInfo.value = matched
+    await loadCurrentScenePublishSummary(matched)
     return
   }
   try {
     const response = await getScene(currentSceneId)
     currentSceneInfo.value = response.data || {}
+    await loadCurrentScenePublishSummary(currentSceneInfo.value)
   } catch (error) {
     currentSceneInfo.value = {}
+    resetPublishSummary()
   }
 }
 
@@ -554,8 +664,9 @@ function reset() {
     sceneCode: undefined,
     sceneName: undefined,
     businessDomain: undefined,
-    orgCode: '',
+    orgCode: undefined,
     sceneType: 'CONTRACT',
+    defaultObjectDimension: undefined,
     status: '0',
     remark: undefined
   }
@@ -597,7 +708,8 @@ async function handleUpdate(row) {
   ])
   form.value = {
     ...response.data,
-    orgCode: response.data?.orgCode || ''
+    defaultObjectDimension: response.data?.defaultObjectDimension || undefined,
+    orgCode: response.data?.orgCode ? String(response.data.orgCode) : undefined
   }
   initialStatus.value = response.data?.status
   open.value = true
@@ -688,15 +800,29 @@ function handleOpenPublishCenter(row) {
   })
 }
 
+function handleOpenPublishAudit() {
+  if (!currentSceneInfo.value.sceneId) {
+    return
+  }
+  router.push({
+    path: '/cost/publish-audit/index',
+    query: {
+      sceneId: currentSceneInfo.value.sceneId
+    }
+  })
+}
+
 function handleSetCurrentScene(row) {
   setCostSceneContextId(row.sceneId)
   currentSceneInfo.value = row
+  loadCurrentScenePublishSummary(row)
   proxy.$modal.msgSuccess(`已将 ${row.sceneName} 设为当前工作场景`)
 }
 
 function handleClearCurrentScene() {
   setCostSceneContextId(undefined)
   currentSceneInfo.value = {}
+  resetPublishSummary()
   proxy.$modal.msgSuccess('已清除当前工作场景')
 }
 
@@ -743,6 +869,122 @@ function normalizeGovernanceInfo(data = {}) {
   }
 }
 
+async function loadCurrentScenePublishSummary(scene) {
+  const sceneId = scene?.sceneId
+  if (!sceneId) {
+    resetPublishSummary()
+    return
+  }
+  try {
+    const [governance, publishResponse] = await Promise.all([
+      fetchSceneGovernance(sceneId),
+      listPublish({
+        sceneId,
+        pageNum: 1,
+        pageSize: 1
+      })
+    ])
+    const latestVersion = Array.isArray(publishResponse?.rows) ? publishResponse.rows[0] : undefined
+    const validationMeta = resolveValidationMeta(latestVersion?.validationResultJson)
+    Object.assign(publishSummary, {
+      sceneId,
+      publishedVersionCount: Number(governance.publishedVersionCount || 0),
+      activeVersionNo: scene?.activeVersionNo || '',
+      latestVersionNo: latestVersion?.versionNo || '',
+      latestPublishedTime: latestVersion?.publishedTime ? proxy.parseTime(latestVersion.publishedTime) : '',
+      validationLabel: validationMeta.label,
+      validationTag: validationMeta.tag,
+      validationNote: buildValidationNote(latestVersion?.validationResultJson)
+    })
+  } catch (error) {
+    Object.assign(publishSummary, {
+      sceneId,
+      publishedVersionCount: 0,
+      activeVersionNo: scene?.activeVersionNo || '',
+      latestVersionNo: '',
+      latestPublishedTime: '',
+      validationLabel: '未留痕',
+      validationTag: 'info',
+      validationNote: '暂未获取到发布校验信息'
+    })
+  }
+}
+
+function createEmptyPublishSummary() {
+  return {
+    sceneId: undefined,
+    publishedVersionCount: 0,
+    activeVersionNo: '',
+    latestVersionNo: '',
+    latestPublishedTime: '',
+    validationLabel: '未留痕',
+    validationTag: 'info',
+    validationNote: '请先设置工作场景'
+  }
+}
+
+function resetPublishSummary() {
+  Object.assign(publishSummary, createEmptyPublishSummary())
+}
+
+function parseValidationResult(value) {
+  if (!value) {
+    return {}
+  }
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return {}
+    }
+  }
+  return value
+}
+
+function resolveValidationMeta(value) {
+  const payload = parseValidationResult(value?.validationResultJson || value)
+  const items = Array.isArray(payload.items) ? payload.items : []
+  const blockingCount = Number(payload.blockingCount ?? items.filter(item => item.level === 'BLOCK').length ?? 0)
+  const warningCount = Number(payload.warningCount ?? items.filter(item => item.level === 'WARN').length ?? 0)
+  if (!Object.keys(payload).length) {
+    return { label: '未留痕', tag: 'info', blockingCount: 0, warningCount: 0 }
+  }
+  if (blockingCount > 0 || payload.publishable === false) {
+    return { label: '阻断', tag: 'danger', blockingCount, warningCount }
+  }
+  if (warningCount > 0) {
+    return { label: '告警通过', tag: 'warning', blockingCount, warningCount }
+  }
+  return { label: '通过', tag: 'success', blockingCount, warningCount }
+}
+
+function buildValidationNote(value) {
+  const meta = resolveValidationMeta(value)
+  if (meta.label === '未留痕') {
+    return '未记录检查快照'
+  }
+  return `阻断 ${meta.blockingCount} / 告警 ${meta.warningCount}`
+}
+
+function normalizeDeptTreeOptions(nodes = []) {
+  return nodes.map(node => ({
+    id: String(node.id),
+    label: node.label,
+    disabled: Boolean(node.disabled),
+    children: Array.isArray(node.children) ? normalizeDeptTreeOptions(node.children) : []
+  }))
+}
+
+function buildDeptLabelMap(nodes = [], bucket = {}) {
+  nodes.forEach(node => {
+    bucket[node.id] = node.label
+    if (Array.isArray(node.children) && node.children.length) {
+      buildDeptLabelMap(node.children, bucket)
+    }
+  })
+  return bucket
+}
+
 function resolveTargetRows(row) {
   if (row?.sceneId) {
     return [row]
@@ -754,6 +996,13 @@ function resolveDictLabel(optionsRef, value) {
   const options = Array.isArray(optionsRef) ? optionsRef : (optionsRef?.value || [])
   const match = options.find(item => item.value === value)
   return match ? match.label : value || '-'
+}
+
+function resolveOrgLabel(value) {
+  if (value === null || value === undefined || value === '') {
+    return '-'
+  }
+  return deptLabelMap.value[String(value)] || formatLegacyOrgLabel(value)
 }
 
 async function ensureDisableAllowed() {
@@ -884,6 +1133,79 @@ getList()
   font-weight: 700;
 }
 
+.scene-center__publish-summary {
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 18px;
+  background: var(--el-bg-color-overlay);
+}
+
+.scene-center__publish-summary-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.scene-center__publish-summary-eyebrow {
+  color: var(--el-color-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scene-center__publish-summary-title {
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.scene-center__publish-summary-desc {
+  margin-top: 8px;
+  max-width: 720px;
+  color: var(--el-text-color-regular);
+  line-height: 1.8;
+}
+
+.scene-center__publish-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.scene-center__publish-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.scene-center__publish-summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--el-border-color-light);
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 14%, var(--el-bg-color-overlay));
+}
+
+.scene-center__publish-summary-card span,
+.scene-center__publish-summary-card small {
+  color: var(--el-text-color-secondary);
+}
+
+.scene-center__publish-summary-card strong {
+  color: var(--el-text-color-primary);
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+.scene-center__publish-summary-status {
+  display: grid;
+  gap: 8px;
+}
+
 .scene-center__alert,
 .scene-center__query {
   margin-bottom: 0;
@@ -896,6 +1218,10 @@ getList()
   color: var(--el-text-color-regular);
   background: color-mix(in srgb, var(--el-color-primary-light-9) 32%, var(--el-bg-color-overlay));
   line-height: 1.8;
+}
+
+.scene-center__dialog-alert {
+  margin-bottom: 18px;
 }
 
 .scene-center__muted {
@@ -977,12 +1303,17 @@ getList()
 
 @media (max-width: 1200px) {
   .scene-center__hero,
-  .scene-center__metrics {
+  .scene-center__metrics,
+  .scene-center__publish-summary-grid {
     grid-template-columns: 1fr;
   }
 
   .scene-governance__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scene-center__publish-summary-header {
+    flex-direction: column;
   }
 }
 </style>

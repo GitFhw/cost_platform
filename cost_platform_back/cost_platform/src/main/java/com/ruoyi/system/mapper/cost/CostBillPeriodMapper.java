@@ -6,7 +6,7 @@ import com.ruoyi.system.domain.cost.CostBillPeriod;
 /**
  * 账期治理 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostBillPeriodMapper extends BaseMapper<CostBillPeriod>
 {

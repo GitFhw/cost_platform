@@ -22,7 +22,7 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable style="width: 220px" @change="handleSceneChange">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="版本号" prop="versionId">
@@ -62,7 +62,12 @@
           <h3>结果台账</h3>
           <p>列表用于快速定位任务、费用和业务对象，详情用于查看结果和追溯解释。</p>
         </div>
-        <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+        <div class="result-page__section-actions">
+          <el-button type="warning" plain icon="Download" @click="handleExport">
+            导出结果
+          </el-button>
+          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+        </div>
       </div>
 
       <el-alert
@@ -250,6 +255,12 @@ function handleQuery() {
   getList()
 }
 
+function handleExport() {
+  proxy.download('cost/run/result/export', {
+    ...queryParams
+  }, `cost_result_${Date.now()}.xlsx`)
+}
+
 function resetQuery() {
   proxy.resetForm('queryRef')
   queryParams.pageNum = 1
@@ -349,6 +360,7 @@ onActivated(async () => {
 .result-page__metric-card strong { font-size: 26px; color: var(--el-color-success-dark-2); }
 .result-page__table { padding: 16px; }
 .result-page__section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.result-page__section-actions { display: flex; align-items: center; gap: 10px; }
 .result-page__section-head h3 { margin: 0; font-size: 18px; }
 .result-page__section-head p { margin: 6px 0 0; color: var(--el-text-color-secondary); font-size: 13px; }
 .result-page__tabs pre { margin: 0; white-space: pre-wrap; word-break: break-all; }

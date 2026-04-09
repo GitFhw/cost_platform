@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * 结果追溯 Mapper
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostResultTraceMapper extends BaseMapper<CostResultTrace>
 {

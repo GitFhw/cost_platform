@@ -15,7 +15,7 @@ import lombok.ToString;
 /**
  * 场景主数据对象 cost_scene
  * 
- * @author codex
+ * @author HwFan
  */
 @Data
 @ToString(callSuper = true)
@@ -66,6 +66,12 @@ public class CostScene extends BaseEntity
     @NotBlank(message = "场景类型不能为空")
     @Size(min = 0, max = 32, message = "场景类型长度不能超过32个字符")
     private String sceneType;
+
+    /** 默认对象维度 */
+    @Excel(name = "默认对象维度")
+    @TableField("default_object_dimension")
+    @Size(min = 0, max = 64, message = "默认对象维度长度不能超过64个字符")
+    private String defaultObjectDimension;
 
     /** 当前生效版本主键 */
     @Excel(name = "当前生效版本")

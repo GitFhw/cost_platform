@@ -21,7 +21,7 @@ import java.util.Date;
  * <p>线程七开始将“公式”从变量和规则中的零散表达式提升为可治理的独立资产，
  * 后续变量中心、规则中心、发布快照和运行链均通过 formulaCode 进行引用。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @ToString(callSuper = true)

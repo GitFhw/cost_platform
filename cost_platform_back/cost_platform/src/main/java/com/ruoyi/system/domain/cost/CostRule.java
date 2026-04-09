@@ -19,7 +19,7 @@ import lombok.ToString;
  * 线程三以“费用 -> 规则 -> 阶梯”为维护主线，因此规则对象除了保存规则本身字段，
  * 还会承接费用、变量、条件摘要等工作台展示字段。
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @ToString(callSuper = true)

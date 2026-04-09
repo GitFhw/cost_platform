@@ -15,7 +15,7 @@ import java.util.Date;
  *
  * <p>用于记录公式资产每次保存后的快照，支持历史版本回看与按版本重新装载。</p>
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @TableName("cost_formula_version")

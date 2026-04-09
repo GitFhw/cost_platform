@@ -5,7 +5,7 @@ import lombok.Data;
 /**
  * 变量导入校验问题。
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostVariableImportIssueVo

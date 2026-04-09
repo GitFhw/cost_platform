@@ -7,7 +7,7 @@ import lombok.Data;
 /**
  * 核算任务发起请求
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 public class CostCalcTaskSubmitBo

@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * 变量中心Mapper接口
  *
- * @author codex
+ * @author HwFan
  */
 public interface CostVariableMapper extends BaseMapper<CostVariable>
 {

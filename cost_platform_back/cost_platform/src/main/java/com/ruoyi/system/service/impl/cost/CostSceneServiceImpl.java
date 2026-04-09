@@ -21,7 +21,7 @@ import com.ruoyi.system.service.cost.ICostSceneService;
 /**
  * 场景中心服务实现
  * 
- * @author codex
+ * @author HwFan
  */
 @Service
 public class CostSceneServiceImpl implements ICostSceneService
@@ -154,6 +154,7 @@ public class CostSceneServiceImpl implements ICostSceneService
     @Override
     public int insertScene(CostScene scene)
     {
+        normalizeSceneDimension(scene);
         validateSceneDictValue(scene);
         return sceneMapper.insert(scene);
     }
@@ -167,9 +168,19 @@ public class CostSceneServiceImpl implements ICostSceneService
     @Override
     public int updateScene(CostScene scene)
     {
+        normalizeSceneDimension(scene);
         validateSceneDictValue(scene);
         validateDisableBeforeUpdate(scene);
         return sceneMapper.updateById(scene);
+    }
+
+    private void normalizeSceneDimension(CostScene scene)
+    {
+        if (scene == null)
+        {
+            return;
+        }
+        scene.setDefaultObjectDimension(StringUtils.trim(scene.getDefaultObjectDimension()));
     }
 
     /**

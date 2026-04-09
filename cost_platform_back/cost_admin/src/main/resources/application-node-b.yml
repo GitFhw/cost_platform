@@ -1,0 +1,8 @@
+server:
+  port: 18081
+
+cost:
+  dispatch:
+    dispatch-interval-seconds: 5
+    node-id: COST-NODE-B
+    stale-timeout-seconds: 20

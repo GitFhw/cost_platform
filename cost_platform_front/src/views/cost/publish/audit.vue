@@ -25,7 +25,7 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable placeholder="请选择场景" style="width: 240px">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneCode} / ${item.sceneName}`" :value="item.sceneId" />
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
         </el-select>
       </el-form-item>
       <el-form-item label="业务域" prop="businessDomain">
@@ -66,6 +66,12 @@
             <dict-tag :options="versionStatusOptions" :value="scope.row.versionStatus" />
           </template>
         </el-table-column>
+        <el-table-column label="检查结果" width="170" align="center">
+          <template #default="scope">
+            <el-tag :type="resolveValidationMeta(scope.row).tag">{{ resolveValidationMeta(scope.row).label }}</el-tag>
+            <div class="publish-audit__validation-note">{{ buildValidationNote(scope.row) }}</div>
+          </template>
+        </el-table-column>
         <el-table-column label="发布说明" prop="publishDesc" min-width="220" :show-overflow-tooltip="true" />
         <el-table-column label="发布人" prop="publishedBy" width="120" align="center" />
         <el-table-column label="发布时间" width="180" align="center">
@@ -92,15 +98,37 @@
           <el-descriptions-item label="发布时间">{{ parseTime(detailData.version.publishedTime) }}</el-descriptions-item>
           <el-descriptions-item label="发布人">{{ detailData.version.publishedBy }}</el-descriptions-item>
           <el-descriptions-item label="发布说明" :span="2">{{ detailData.version.publishDesc || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="检查结果">
+            <el-tag :type="detailValidationMeta.tag">{{ detailValidationMeta.label }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="检查摘要">{{ buildValidationNote(detailData.validationResult) }}</el-descriptions-item>
         </el-descriptions>
 
         <div class="publish-audit__filter-row">
           <el-select v-model="detailFeeCode" clearable placeholder="按费用筛选快照对象" style="width: 280px" @change="reloadDetail">
-            <el-option v-for="item in detailData.impactedFees || []" :key="item.feeCode" :label="`${item.feeCode} / ${item.feeName}`" :value="item.feeCode" />
+            <el-option v-for="item in detailData.impactedFees || []" :key="item.feeCode" :label="`${item.feeName} / ${item.feeCode}`" :value="item.feeCode" />
           </el-select>
         </div>
 
         <el-tabs>
+          <el-tab-pane label="发布检查">
+            <div class="publish-audit__summary-grid">
+              <div class="publish-audit__summary-card"><span>阻断项</span><strong>{{ detailValidationMeta.blockingCount }}</strong></div>
+              <div class="publish-audit__summary-card"><span>告警项</span><strong>{{ detailValidationMeta.warningCount }}</strong></div>
+              <div class="publish-audit__summary-card"><span>受影响费用</span><strong>{{ detailValidation.impactedFeeCount || (detailValidation.impactedFees || []).length || 0 }}</strong></div>
+              <div class="publish-audit__summary-card"><span>发布资格</span><strong>{{ detailValidation.publishable === false ? '阻断' : '可发布' }}</strong></div>
+            </div>
+            <el-table v-if="detailValidation.items?.length" :data="detailValidation.items" size="small">
+              <el-table-column label="级别" width="100" align="center">
+                <template #default="scope">
+                  <el-tag :type="resolveCheckTag(scope.row.level)">{{ scope.row.level }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="检查项" prop="title" min-width="180" />
+              <el-table-column label="说明" prop="message" min-width="360" :show-overflow-tooltip="true" />
+            </el-table>
+            <el-empty v-else description="该版本未记录检查明细或检查项为空" />
+          </el-tab-pane>
           <el-tab-pane label="受影响费用">
             <el-table :data="detailData.impactedFees || []" size="small">
               <el-table-column label="费用编码" prop="feeCode" width="160" />
@@ -135,7 +163,7 @@
             <el-option v-for="item in diffVersionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
           </el-select>
           <el-select v-model="diffFeeCode" clearable placeholder="按费用筛选差异" style="width: 260px" :disabled="!diffForm.fromVersionId" @change="loadDiff">
-            <el-option v-for="item in diffData.feeDiffs || []" :key="item.feeCode" :label="`${item.feeCode} / ${item.feeName}`" :value="item.feeCode" />
+            <el-option v-for="item in diffData.feeDiffs || []" :key="item.feeCode" :label="`${item.feeName} / ${item.feeCode}`" :value="item.feeCode" />
           </el-select>
         </div>
 
@@ -340,6 +368,8 @@ const metricItems = computed(() => [
   { label: '已回滚版本', value: stats.rolledBackVersionCount, desc: '历史上被回滚替换的版本数' }
 ])
 
+const detailValidation = computed(() => parseValidationResult(detailData.value.validationResult))
+const detailValidationMeta = computed(() => resolveValidationMeta(detailData.value.validationResult))
 const hasAnyDiff = computed(() => {
   const summary = diffData.value.summary || {}
   return Number(summary.sceneChangeCount || 0) > 0
@@ -484,6 +514,49 @@ function handleRuleDiffRowChange(row) {
 
 function resolveVersionLabel(value) {
   return versionStatusOptions.value.find(item => item.value === value)?.label || value
+}
+
+function resolveCheckTag(level) {
+  return level === 'BLOCK' ? 'danger' : (level === 'WARN' ? 'warning' : 'success')
+}
+
+function parseValidationResult(value) {
+  if (!value) {
+    return {}
+  }
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return {}
+    }
+  }
+  return value
+}
+
+function resolveValidationMeta(value) {
+  const payload = parseValidationResult(value?.validationResultJson || value)
+  const items = Array.isArray(payload.items) ? payload.items : []
+  const blockingCount = Number(payload.blockingCount ?? items.filter(item => item.level === 'BLOCK').length ?? 0)
+  const warningCount = Number(payload.warningCount ?? items.filter(item => item.level === 'WARN').length ?? 0)
+  if (!Object.keys(payload).length) {
+    return { label: '未留痕', tag: 'info', blockingCount: 0, warningCount: 0 }
+  }
+  if (blockingCount > 0 || payload.publishable === false) {
+    return { label: '阻断', tag: 'danger', blockingCount, warningCount }
+  }
+  if (warningCount > 0) {
+    return { label: '告警通过', tag: 'warning', blockingCount, warningCount }
+  }
+  return { label: '通过', tag: 'success', blockingCount, warningCount }
+}
+
+function buildValidationNote(value) {
+  const meta = resolveValidationMeta(value)
+  if (meta.label === '未留痕') {
+    return '未记录检查快照'
+  }
+  return `阻断 ${meta.blockingCount} / 告警 ${meta.warningCount}`
 }
 
 function formatJson(value) {
@@ -635,6 +708,38 @@ onMounted(() => {
     small {
       color: #7c8798;
     }
+  }
+
+  &__summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  &__summary-card {
+    display: grid;
+    gap: 6px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid #dbe6f4;
+    background: #f8fbff;
+
+    strong {
+      color: #3c8cff;
+      font-size: 24px;
+    }
+
+    span {
+      color: #7c8798;
+    }
+  }
+
+  &__validation-note {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #64748b;
   }
 
   &__section-head {

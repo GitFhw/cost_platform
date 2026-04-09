@@ -19,7 +19,7 @@ import lombok.ToString;
  * 条件编辑由变量元数据驱动，compareValue 统一按字符串落库，
  * 由前端和值编辑器按变量类型解释展示。
  *
- * @author codex
+ * @author HwFan
  */
 @Data
 @ToString(callSuper = true)
