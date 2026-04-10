@@ -20,10 +20,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="sourceSystem" column="source_system" />
         <result property="dictType" column="dict_type" />
         <result property="remoteApi" column="remote_api" />
+        <result property="requestMethod" column="request_method" />
+        <result property="contentType" column="content_type" />
+        <result property="queryConfigJson" column="query_config_json" />
+        <result property="requestHeadersJson" column="request_headers_json" />
+        <result property="bodyTemplateJson" column="body_template_json" />
         <result property="authType" column="auth_type" />
         <result property="authConfigJson" column="auth_config_json" />
         <result property="dataPath" column="data_path" />
+        <result property="responseConfigJson" column="response_config_json" />
         <result property="mappingConfigJson" column="mapping_config_json" />
+        <result property="pageConfigJson" column="page_config_json" />
+        <result property="adapterType" column="adapter_type" />
+        <result property="adapterConfigJson" column="adapter_config_json" />
         <result property="syncMode" column="sync_mode" />
         <result property="cachePolicy" column="cache_policy" />
         <result property="fallbackPolicy" column="fallback_policy" />
@@ -59,10 +68,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                v.source_system,
                v.dict_type,
                v.remote_api,
+               v.request_method,
+               v.content_type,
+               v.query_config_json,
+               v.request_headers_json,
+               v.body_template_json,
                v.auth_type,
                v.auth_config_json,
                v.data_path,
+               v.response_config_json,
                v.mapping_config_json,
+               v.page_config_json,
+               v.adapter_type,
+               v.adapter_config_json,
                v.sync_mode,
                v.cache_policy,
                v.fallback_policy,

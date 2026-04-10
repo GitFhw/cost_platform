@@ -72,4 +72,53 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where task_id = #{taskId}
     </select>
 
+    <select id="selectStats" resultType="java.util.HashMap">
+        select count(1) as resultCount,
+               count(distinct task_id) as taskCount,
+               count(distinct trace_id) as traceCount,
+               coalesce(sum(amount_value), 0) as amountTotal
+        from cost_result_ledger
+        <where>
+            <if test="query.taskId != null">
+                and task_id = #{query.taskId}
+            </if>
+            <if test="requestTaskIds != null and requestTaskIds.size() > 0">
+                and task_id in
+                <foreach collection="requestTaskIds" item="taskId" open="(" separator="," close=")">
+                    #{taskId}
+                </foreach>
+            </if>
+            <if test="query.sceneId != null">
+                and scene_id = #{query.sceneId}
+            </if>
+            <if test="query.versionId != null">
+                and version_id = #{query.versionId}
+            </if>
+            <if test="query.feeId != null">
+                and fee_id = #{query.feeId}
+            </if>
+            <if test="query.billMonth != null and query.billMonth != ''">
+                and bill_month = #{query.billMonth}
+            </if>
+            <if test="query.taskNo != null and query.taskNo != ''">
+                and task_no = #{query.taskNo}
+            </if>
+            <if test="query.feeCode != null and query.feeCode != ''">
+                and fee_code = #{query.feeCode}
+            </if>
+            <if test="query.objectCode != null and query.objectCode != ''">
+                and object_code = #{query.objectCode}
+            </if>
+            <if test="query.objectName != null and query.objectName != ''">
+                and object_name like concat('%', #{query.objectName}, '%')
+            </if>
+            <if test="query.bizNo != null and query.bizNo != ''">
+                and biz_no = #{query.bizNo}
+            </if>
+            <if test="query.resultStatus != null and query.resultStatus != ''">
+                and result_status = #{query.resultStatus}
+            </if>
+        </where>
+    </select>
+
 </mapper>

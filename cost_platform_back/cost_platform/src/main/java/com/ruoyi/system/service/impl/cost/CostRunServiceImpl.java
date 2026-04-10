@@ -54,9 +54,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 绾跨▼浜旇繍琛岄摼鏈嶅姟瀹炵幇
+ * 成本核算主链服务实现
  *
- * <p>璇ユ湇鍔″洿缁曗€滃彂甯冨揩鐓?-> 璇曠畻/姝ｅ紡浠诲姟 -> 缁撴灉鍙拌处 -> 杩芥函瑙ｉ噴鈥濈殑涓婚摼璺睍寮€锛? * 1. 杩愯鏃跺彧瑁呰浇鍦烘櫙鍙戝竷蹇収锛屼笉鐩存帴璇诲彇鑽夌閰嶇疆锛? * 2. 璇曠畻涓庢寮忔牳绠楀叡鐢ㄥ悓涓€濂楀尮閰嶄笌瀹氫环鍐呮牳锛屼絾钀藉簱鐩爣涓嶅悓锛? * 3. 姝ｅ紡浠诲姟鎷嗘垚浠诲姟澶淬€佷换鍔℃槑缁嗐€佺粨鏋滃彴璐﹀拰杩芥函璁板綍锛屼究浜庡悗缁嚎绋嬪叚缁х画澧炲己骞傜瓑銆佸苟鍙戝拰 Redis 閿併€?/p>
+ * <p>该服务围绕“发布快照 -> 试算/正式任务 -> 结果台账 -> 追溯解释”的主链路展开。</p>
  *
  * @author HwFan
  */
@@ -158,7 +158,7 @@ public class CostRunServiceImpl implements ICostRunService {
     private static final int DEFAULT_ACCESS_FETCH_MAX_PAGES = 200;
     private static final int DEFAULT_ACCESS_PREVIEW_RECORD_LIMIT = 20;
     private static final int REMOTE_CACHE_TTL_MINUTES = 30;
-    private static final String DRAFT_VERSION_LABEL = "鑽夌閰嶇疆";
+    private static final String DRAFT_VERSION_LABEL = "草稿版本";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AtomicBoolean taskDispatchCoordinatorStarted = new AtomicBoolean(false);
@@ -504,7 +504,7 @@ public class CostRunServiceImpl implements ICostRunService {
         item.put("simulationNo", record.getSimulationNo());
         item.put("billMonth", firstNonBlank(record.getBillMonth(), ""));
         item.put("status", record.getStatus());
-        item.put("bizNo", resolveString(parseObjectJson(record.getInputJson(), "璇曠畻杈撳叆蹇呴』鏄?JSON 瀵硅薄"), "bizNo", "biz_no"));
+        item.put("bizNo", resolveString(parseObjectJson(record.getInputJson(), "试算输入必须是 JSON 对象"), "bizNo", "biz_no"));
         item.put("errorMessage", record.getErrorMessage());
         item.put("simulationTime", record.getCreateTime());
         return item;
@@ -514,7 +514,7 @@ public class CostRunServiceImpl implements ICostRunService {
     public Map<String, Object> selectSimulationDetail(Long simulationId) {
         CostSimulationRecord record = simulationRecordMapper.selectById(simulationId);
         if (record == null) {
-            throw new ServiceException("璇曠畻璁板綍涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("试算记录不存在，请刷新后重试");
         }
         enrichSimulationRecords(Collections.singletonList(record));
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
@@ -617,7 +617,7 @@ public class CostRunServiceImpl implements ICostRunService {
                         markInputBatchSubmitted(task.getSourceBatchNo(), operator);
                     }
                     auditService.recordAudit(snapshot.sceneId, "CALC_TASK", task.getTaskNo(),
-                            "SUBMIT", "鎻愪氦姝ｅ紡鏍哥畻浠诲姟", null, task, task.getRequestNo());
+                            "SUBMIT", "提交正式核算任务", null, task, task.getRequestNo());
                     dispatchTaskAfterCommit(task.getTaskId());
                     return selectTaskDetail(task.getTaskId(), 1, 10);
                 });
@@ -676,7 +676,7 @@ public class CostRunServiceImpl implements ICostRunService {
         CostCalcInputBatch batch = calcInputBatchMapper.selectById(batchId);
         enrichInputBatches(Collections.singletonList(batch));
         if (batch == null) {
-            throw new ServiceException("杈撳叆鎵规涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("输入批次不存在，请刷新后重试");
         }
         int normalizedPageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
         int normalizedPageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
@@ -704,7 +704,7 @@ public class CostRunServiceImpl implements ICostRunService {
     public Map<String, Object> selectTaskDetail(Long taskId, Integer pageNum, Integer pageSize) {
         CostCalcTask task = calcTaskMapper.selectById(taskId);
         if (task == null) {
-            throw new ServiceException("鏍哥畻浠诲姟涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("核算任务不存在，请刷新后重试");
         }
         enrichTasks(Collections.singletonList(task));
         List<CostCalcTaskPartition> partitions = calcTaskPartitionMapper.selectList(Wrappers.<CostCalcTaskPartition>lambdaQuery()
@@ -778,7 +778,7 @@ public class CostRunServiceImpl implements ICostRunService {
     public int retryTaskDetail(Long detailId) {
         CostCalcTaskDetail detail = calcTaskDetailMapper.selectById(detailId);
         if (detail == null) {
-            throw new ServiceException("浠诲姟鏄庣粏涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("任务明细不存在，请刷新后重试");
         }
         CostCalcTask task = calcTaskMapper.selectById(detail.getTaskId());
         if (task == null) {
@@ -791,7 +791,7 @@ public class CostRunServiceImpl implements ICostRunService {
                 .set(CostCalcTaskDetail::getRetryCount, nextRetryCount)
                 .set(CostCalcTaskDetail::getErrorMessage, ""));
         auditService.recordAudit(task.getSceneId(), "CALC_TASK_DETAIL", detail.getBizNo(),
-                "RETRY", "閲嶈瘯姝ｅ紡鏍哥畻鏄庣粏", detail, calcTaskDetailMapper.selectById(detailId), task.getRequestNo());
+                "RETRY", "重试正式核算明细", detail, calcTaskDetailMapper.selectById(detailId), task.getRequestNo());
         if (nextRetryCount >= 3) {
             createTaskAlarm(task, detail, "TASK_DETAIL_RETRY_LIMIT", "WARN",
                     "任务明细重试次数达到阈值", "业务单号 " + detail.getBizNo() + " 的重试次数已达到 " + nextRetryCount + " 次");
@@ -804,7 +804,7 @@ public class CostRunServiceImpl implements ICostRunService {
     public int retryTaskPartition(Long partitionId) {
         CostCalcTaskPartition partition = calcTaskPartitionMapper.selectById(partitionId);
         if (partition == null) {
-            throw new ServiceException("浠诲姟鍒嗙墖涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("任务分片不存在，请刷新后重试");
         }
         CostCalcTask task = calcTaskMapper.selectById(partition.getTaskId());
         if (task == null) {
@@ -840,7 +840,7 @@ public class CostRunServiceImpl implements ICostRunService {
                 .set(CostCalcTaskPartition::getDurationMs, 0)
                 .set(CostCalcTaskPartition::getLastError, ""));
         auditService.recordAudit(task.getSceneId(), "CALC_TASK_PARTITION", task.getTaskNo() + "#" + partition.getPartitionNo(),
-                "RETRY", "閲嶈瘯姝ｅ紡鏍哥畻鍒嗙墖", partition, calcTaskPartitionMapper.selectById(partitionId), task.getRequestNo());
+                "RETRY", "重试正式核算分片", partition, calcTaskPartitionMapper.selectById(partitionId), task.getRequestNo());
         dispatchTaskAfterCommit(task.getTaskId());
         return 1;
     }
@@ -849,7 +849,7 @@ public class CostRunServiceImpl implements ICostRunService {
     public int cancelTask(Long taskId) {
         CostCalcTask task = calcTaskMapper.selectById(taskId);
         if (task == null) {
-            throw new ServiceException("鏍哥畻浠诲姟涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("核算任务不存在，请刷新后重试");
         }
         if (!TASK_STATUS_INIT.equals(task.getTaskStatus()) && !TASK_STATUS_RUNNING.equals(task.getTaskStatus())) {
             return 0;
@@ -872,27 +872,35 @@ public class CostRunServiceImpl implements ICostRunService {
         refreshBillPeriod(task.getSceneId(), task.getBillMonth(), task);
         syncRecalcByTask(task, TASK_STATUS_CANCELLED);
         auditService.recordAudit(task.getSceneId(), "CALC_TASK", task.getTaskNo(),
-                "CANCEL", "鍙栨秷姝ｅ紡鏍哥畻浠诲姟", task, calcTaskMapper.selectById(taskId), task.getRequestNo());
+                "CANCEL", "取消正式核算任务", task, calcTaskMapper.selectById(taskId), task.getRequestNo());
         return rows;
     }
 
     @Override
     public Map<String, Object> selectResultStats(CostResultLedger query) {
-        List<CostResultLedger> results = selectResultListInternal(query);
-        BigDecimal totalAmount = results.stream()
-                .map(CostResultLedger::getAmountValue)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        validateResultQueryScope(query);
+        List<Long> requestTaskIds = resolveResultRequestTaskIds(query.getRequestNo());
+        if (StringUtils.isNotEmpty(query.getRequestNo()) && requestTaskIds.isEmpty()) {
+            LinkedHashMap<String, Object> empty = new LinkedHashMap<>();
+            empty.put("resultCount", 0L);
+            empty.put("taskCount", 0L);
+            empty.put("traceCount", 0L);
+            empty.put("amountTotal", BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            return empty;
+        }
+        Map<String, Object> rawStats = resultLedgerMapper.selectStats(query, requestTaskIds);
         LinkedHashMap<String, Object> stats = new LinkedHashMap<>();
-        stats.put("resultCount", results.size());
-        stats.put("taskCount", results.stream().map(CostResultLedger::getTaskId).filter(Objects::nonNull).distinct().count());
-        stats.put("traceCount", results.stream().map(CostResultLedger::getTraceId).filter(Objects::nonNull).distinct().count());
-        stats.put("amountTotal", totalAmount.setScale(2, RoundingMode.HALF_UP));
+        stats.put("resultCount", toLong(rawStats.get("resultCount")));
+        stats.put("taskCount", toLong(rawStats.get("taskCount")));
+        stats.put("traceCount", toLong(rawStats.get("traceCount")));
+        BigDecimal amountTotal = toBigDecimal(rawStats.get("amountTotal"));
+        stats.put("amountTotal", (amountTotal == null ? BigDecimal.ZERO : amountTotal).setScale(2, RoundingMode.HALF_UP));
         return stats;
     }
 
     @Override
     public List<CostResultLedger> selectResultList(CostResultLedger query) {
+        validateResultQueryScope(query);
         List<CostResultLedger> results = selectResultListInternal(query);
         enrichResults(results);
         return results;
@@ -902,7 +910,7 @@ public class CostRunServiceImpl implements ICostRunService {
     public Map<String, Object> selectResultDetail(Long resultId) {
         CostResultLedger ledger = resultLedgerMapper.selectById(resultId);
         if (ledger == null) {
-            throw new ServiceException("缁撴灉鍙拌处涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("结果台账不存在，请刷新后重试");
         }
         enrichResults(Collections.singletonList(ledger));
         CostResultTrace trace = ledger.getTraceId() == null ? null : resultTraceMapper.selectById(ledger.getTraceId());
@@ -916,7 +924,7 @@ public class CostRunServiceImpl implements ICostRunService {
     public Map<String, Object> selectTraceDetail(Long traceId) {
         CostResultTrace trace = resultTraceMapper.selectById(traceId);
         if (trace == null) {
-            throw new ServiceException("杩芥函璁板綍涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("追溯记录不存在，请刷新后重试");
         }
         return buildTraceView(trace);
     }
@@ -1175,8 +1183,8 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 浠诲姟寮傛鎵ц涓婚摼璺€?     *
-     * <p>褰撳墠闃舵鍏堥噰鐢ㄧ嚎绋嬫睜寮傛鎵ц锛屾弧瓒崇嚎绋嬩簲鈥滄寮忔牳绠椾笌鎵归噺浠诲姟寮傛鍖栤€濈殑鍩虹瑕佹眰锛?     * 鍚庣画绾跨▼鍏啀鍦ㄦ鍩虹涓婂寮哄垎鐗囧苟鍙戙€丷edis 閿佸拰鍒嗗竷寮忚妭鐐瑰崗璋冦€?/p>
+     * 任务异步执行主链路。
+     * <p>当前阶段先使用线程池异步执行，后续再在此基础上增强分片并发、Redis 锁与分布式协调。</p>
      */
     private void runTaskAsync(Long taskId) {
         if (taskId == null) {
@@ -1260,13 +1268,13 @@ public class CostRunServiceImpl implements ICostRunService {
                 refreshBillPeriod(latest.getSceneId(), latest.getBillMonth(), latest);
                 syncRecalcByTask(latest, TASK_STATUS_FAILED);
                 createTaskAlarm(latest, null, "TASK_FAILED", "ERROR",
-                        "姝ｅ紡鏍哥畻浠诲姟鎵ц澶辫触", limitLength(e.getMessage(), 500));
+                        "正式核算任务执行失败", limitLength(e.getMessage(), 500));
             }
         }
     }
 
     /**
-     * 鍦ㄤ簨鍔℃彁浜ゅ悗鍐嶈Е鍙戝紓姝ヤ换鍔★紝閬垮厤鏂板缓浠诲姟灏氭湭鎻愪氦鏃跺伐浣滅嚎绋嬭涓嶅埌鏁版嵁銆?
+     * 在事务提交后尝试认领任务执行权，避免新建任务尚未落库时工作线程读取不到数据。
      */
     private TaskClaimResult tryClaimTaskExecution(CostCalcTask task, Date startedTime) {
         if (task == null || task.getTaskId() == null) {
@@ -1564,10 +1572,10 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鎵ц鍗曟潯涓氬姟瀵硅薄鐨勭粺涓€鏍哥畻鍐呮牳銆?     *
-     * <p>璇ユ柟娉曞悓鏃舵湇鍔¤瘯绠楀拰姝ｅ紡鏍哥畻锛?     * 1. 鍏堝熀浜庡彂甯冨揩鐓ф瀯寤哄彧璇昏繍琛岃鍥撅紱
-     * 2. 鍐嶈绠楀彉閲忥紱
-     * 3. 閫愯垂鐢ㄧ瓫閫夊懡涓鍒欏拰闃舵锛?     * 4. 浜у嚭璐圭敤缁撴灉銆佽В閲婅鍥惧拰鏃堕棿绾裤€?/p>
+     * 执行单条业务对象的统一核算内核。
+     * <p>该方法同时服务试算和正式核算。</p>
+     * 1. 基于发布快照构建只读运行视图。
+     * 2. 逐费用匹配规则、阶梯并生成结果与追溯信息。
      */
     private ExecutionResult executeSingle(RuntimeSnapshot snapshot, String taskNo, String billMonth, Map<String, Object> input) {
         return executeSingle(snapshot, taskNo, billMonth, input, snapshot.fees, false);
@@ -1906,7 +1914,7 @@ public class CostRunServiceImpl implements ICostRunService {
             result.pricingExplain.put("tierNo", tier == null ? null : tier.tierNo);
             result.pricingExplain.put("tierRange", tier == null ? null : tier.buildRangeSummary());
         } else {
-            throw new ServiceException("鏆備笉鏀寔鐨勮鍒欑被鍨嬶細" + rule.ruleType);
+            throw new ServiceException("暂不支持的规则类型: " + rule.ruleType);
         }
         result.pricingExplain.put("unitPrice", result.unitPrice);
         result.pricingExplain.put("amountValue", result.amountValue);
@@ -1939,10 +1947,10 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private List<Map<String, Object>> buildFeeTimeline(RuntimeFee fee, RuleMatchResult matchResult, PricingResult pricingResult) {
         List<Map<String, Object>> steps = new ArrayList<>();
-        steps.add(buildStep("FEE", fee.feeCode, fee.feeName, "杩涘叆璐圭敤璁＄畻"));
-        steps.add(buildStep("RULE", matchResult.rule.ruleCode, matchResult.rule.ruleName, "鍛戒腑瑙勫垯"));
+        steps.add(buildStep("FEE", fee.feeCode, fee.feeName, "进入费用计算"));
+        steps.add(buildStep("RULE", matchResult.rule.ruleCode, matchResult.rule.ruleName, "命中规则"));
         if (matchResult.tier != null) {
-            steps.add(buildStep("TIER", String.valueOf(matchResult.tier.tierNo), matchResult.tier.buildRangeSummary(), "鍛戒腑闃舵鍖洪棿"));
+            steps.add(buildStep("TIER", String.valueOf(matchResult.tier.tierNo), matchResult.tier.buildRangeSummary(), "命中阶梯区间"));
         }
         steps.add(buildStep("PRICING", fee.feeCode, fee.feeName,
                 buildPricingStepSummary(fee.unitCode, pricingResult)));
@@ -1950,7 +1958,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鏋勫缓甯﹁浠峰崟浣嶈涔夌殑瀹氫环鎽樿锛屼究浜庣粨鏋滆拷婧拰涓氬姟澶嶆牳銆?
+     * 构建带计价单位语义的定价摘要，便于结果追溯和业务复核。
      */
     private String buildPricingStepSummary(String unitCode, PricingResult pricingResult) {
         String pricingSource = pricingResult.pricingExplain == null ? "" : stringValue(pricingResult.pricingExplain.get("pricingSource"));
@@ -2263,7 +2271,7 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private RuntimeFee resolveRuntimeFee(RuntimeSnapshot snapshot, Long feeId, String feeCode) {
         if (feeId == null && StringUtils.isEmpty(feeCode)) {
-            throw new ServiceException("璇锋寚瀹氳垂鐢?ID 鎴?feeCode");
+            throw new ServiceException("请提供费用ID或feeCode");
         }
         if (feeId != null) {
             for (RuntimeFee fee : snapshot.fees) {
@@ -2326,7 +2334,7 @@ public class CostRunServiceImpl implements ICostRunService {
                                                 boolean preferDraftWhenVersionMissing) {
         CostScene scene = sceneMapper.selectById(sceneId);
         if (scene == null) {
-            throw new ServiceException("鍦烘櫙涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("场景不存在，请刷新后重试");
         }
         if (!requireFormalVersion && preferDraftWhenVersionMissing && versionId == null) {
             return buildDraftRuntimeSnapshot(scene);
@@ -2340,7 +2348,7 @@ public class CostRunServiceImpl implements ICostRunService {
         }
         CostPublishVersion version = publishVersionMapper.selectPublishVersionDetail(targetVersionId);
         if (version == null) {
-            throw new ServiceException("鍙戝竷鐗堟湰涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("发布版本不存在，请刷新后重试");
         }
         if (requireFormalVersion && versionId == null && !"ACTIVE".equals(version.getVersionStatus())) {
             throw new ServiceException("正式核算默认只能按当前生效版本执行");
@@ -2355,7 +2363,7 @@ public class CostRunServiceImpl implements ICostRunService {
         }
         List<CostPublishSnapshot> snapshots = publishVersionMapper.selectSnapshotList(targetVersionId, null);
         if (snapshots == null || snapshots.isEmpty()) {
-            throw new ServiceException("鍙戝竷蹇収涓虹┖锛屾棤娉曟墽琛岃瘯绠楁垨姝ｅ紡鏍哥畻");
+            throw new ServiceException("发布快照为空，无法执行试算或正式核算");
         }
 
         RuntimeSnapshot snapshot = new RuntimeSnapshot();
@@ -2861,6 +2869,24 @@ public class CostRunServiceImpl implements ICostRunService {
                 .collect(Collectors.toList());
     }
 
+    private void validateResultQueryScope(CostResultLedger query) {
+        if (query == null) {
+            return;
+        }
+        boolean hasPrimaryScope = query.getTaskId() != null
+                || StringUtils.isNotEmpty(query.getTaskNo())
+                || StringUtils.isNotEmpty(query.getRequestNo());
+        boolean hasBusinessScope = StringUtils.isNotEmpty(query.getBillMonth())
+                || StringUtils.isNotEmpty(query.getBizNo());
+        if (!hasPrimaryScope && !hasBusinessScope) {
+            throw new ServiceException("结果台账数据量较大，请至少补充账期、任务ID、任务号或业务单号后再查询");
+        }
+    }
+
+    private long toLong(Object value) {
+        return value instanceof Number ? ((Number) value).longValue() : 0L;
+    }
+
     private Map<Long, CostPublishVersion> selectVersionMap(Set<Long> versionIds) {
         if (versionIds == null || versionIds.isEmpty()) {
             return Collections.emptyMap();
@@ -2952,7 +2978,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鎸変换鍔￠泦鍚堜竴娆℃€у姞杞藉垎鐗囧彴璐︼紝閬垮厤浠诲姟鎬昏鎸変换鍔￠€愪釜鏌ュ垎鐗囥€?
+     * 按任务集合一次性加载分片台账，避免任务总览逐个查询分片。
      */
     private List<CostCalcTaskPartition> selectTaskPartitions(List<CostCalcTask> tasks) {
         if (tasks == null || tasks.isEmpty()) {
@@ -2968,7 +2994,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鏋勫缓鏈€杩?N 澶╀换鍔¤秼鍔匡紝甯姪浠庝换鍔＄骇鍒瀵熻繍琛屾尝鍔ㄣ€?
+     * 构建最近 N 天的任务趋势。
      */
     private List<Map<String, Object>> buildTaskTrend(List<CostCalcTask> tasks, int recentDays) {
         ZoneId zoneId = ZoneId.systemDefault();
@@ -2993,7 +3019,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鏋勫缓鏈€杩?N 澶╁垎鐗囪秼鍔匡紝渚夸簬鍒ゆ柇鏄惁瀛樺湪鍒嗙墖绾уけ璐ラ泦涓垎鍙戙€?
+     * 构建最近 N 天的分片趋势。
      */
     private List<Map<String, Object>> buildPartitionTrend(List<CostCalcTaskPartition> partitions, int recentDays) {
         ZoneId zoneId = ZoneId.systemDefault();
@@ -3023,7 +3049,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鏋勫缓楂橀闄╀换鍔℃帓琛岋紝浼樺厛鏆撮湶澶辫触閲忛珮銆佸け璐ュ垎鐗囧鐨勪换鍔°€?
+     * 构建失败优先的高风险任务视图。
      */
     private List<Map<String, Object>> buildTopRiskTasks(List<CostCalcTask> tasks, List<CostCalcTaskPartition> partitions, int limit) {
         Map<Long, List<CostCalcTaskPartition>> partitionMap = partitions.stream()
@@ -3053,7 +3079,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鏋勫缓浠诲姟鐘舵€佸垎甯冿紝甯姪蹇€熷垽鏂换鍔℃洿澶氬仠鐣欏湪鍝釜闃舵銆?
+     * 构建任务状态分布，帮助快速判断任务停留阶段。
      */
     private List<Map<String, Object>> buildTaskStatusDistribution(List<CostCalcTask> tasks) {
         return tasks.stream()
@@ -3071,7 +3097,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鏋勫缓杈撳叆鏉ユ簮鍒嗗竷锛屽府鍔╁垽鏂綋鍓嶆寮忔牳绠楁洿鍋?JSON 杩樻槸瀵煎叆鎵规銆?
+     * 构建输入来源分布，区分 JSON 直传与批次导入。
      */
     private List<Map<String, Object>> buildInputSourceDistribution(List<CostCalcTask> tasks) {
         return tasks.stream()
@@ -3295,12 +3321,12 @@ public class CostRunServiceImpl implements ICostRunService {
         if (TASK_TYPE_FORMAL_BATCH.equals(bo.getTaskType())) {
             List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "鎵归噺浠诲姟杈撳叆蹇呴』鏄?JSON 鏁扮粍");
             if (inputs.isEmpty()) {
-                throw new ServiceException("鎵归噺浠诲姟杈撳叆涓嶈兘涓虹┖鏁扮粍");
+                throw new ServiceException("批量任务输入不能为空数组");
             }
             validateDuplicateBizNo(inputs);
             return inputs;
         }
-        throw new ServiceException("鏆備笉鏀寔鐨勪换鍔＄被鍨嬶細" + bo.getTaskType());
+        throw new ServiceException("暂不支持的任务类型: " + bo.getTaskType());
     }
 
     private String resolveInputSourceType(CostCalcTaskSubmitBo bo) {
@@ -3318,24 +3344,24 @@ public class CostRunServiceImpl implements ICostRunService {
                 .eq(CostCalcInputBatch::getBatchNo, bo.getSourceBatchNo())
                 .last("limit 1"));
         if (batch == null) {
-            throw new ServiceException("鏉ユ簮杈撳叆鎵规涓嶅瓨鍦紝璇峰埛鏂板悗閲嶈瘯");
+            throw new ServiceException("来源输入批次不存在，请刷新后重试");
         }
         if (!Objects.equals(batch.getSceneId(), bo.getSceneId())) {
-            throw new ServiceException("鏉ユ簮杈撳叆鎵规涓庡綋鍓嶅満鏅笉鍖归厤");
+            throw new ServiceException("来源输入批次与当前场景不匹配");
         }
         if (StringUtils.isNotEmpty(bo.getBillMonth()) && !Objects.equals(batch.getBillMonth(), bo.getBillMonth())) {
-            throw new ServiceException("鏉ユ簮杈撳叆鎵规涓庡綋鍓嶈处鏈熶笉鍖归厤");
+            throw new ServiceException("来源输入批次与当前账期不匹配");
         }
         List<CostCalcInputBatchItem> items = calcInputBatchItemMapper.selectList(Wrappers.<CostCalcInputBatchItem>lambdaQuery()
                 .eq(CostCalcInputBatchItem::getBatchId, batch.getBatchId())
                 .orderByAsc(CostCalcInputBatchItem::getItemNo)
                 .orderByAsc(CostCalcInputBatchItem::getItemId));
         if (items.isEmpty()) {
-            throw new ServiceException("鏉ユ簮杈撳叆鎵规娌℃湁鍙敤鏄庣粏");
+            throw new ServiceException("来源输入批次暂无可用明细");
         }
         List<Map<String, Object>> inputs = new ArrayList<>();
         for (CostCalcInputBatchItem item : items) {
-            inputs.add(parseObjectJson(item.getInputJson(), "杈撳叆鎵规鏄庣粏蹇呴』鏄?JSON 瀵硅薄"));
+            inputs.add(parseObjectJson(item.getInputJson(), "批次明细必须是 JSON 对象"));
         }
         validateDuplicateBizNo(inputs);
         return inputs;
@@ -3370,7 +3396,7 @@ public class CostRunServiceImpl implements ICostRunService {
         if (parsed instanceof List) {
             List<Map<String, Object>> inputs = parseArrayJson(inputJson, "费用计算输入必须是 JSON 对象或对象数组");
             if (inputs.isEmpty()) {
-                throw new ServiceException("璐圭敤璁＄畻杈撳叆涓嶈兘涓虹┖鏁扮粍");
+                throw new ServiceException("费用计算输入不能为空数组");
             }
             validateDuplicateBizNo(inputs);
             return inputs;
@@ -3380,7 +3406,7 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private void validateBillMonth(String billMonth) {
         if (!billMonth.matches("\\d{4}-\\d{2}")) {
-            throw new ServiceException("璐︽湡鏍煎紡蹇呴』涓?yyyy-MM");
+            throw new ServiceException("账期格式必须为 yyyy-MM");
         }
     }
 
@@ -3503,7 +3529,7 @@ public class CostRunServiceImpl implements ICostRunService {
             return "未命中任何费用规则";
         }
         BigDecimal total = ledgers.stream().map(CostResultLedger::getAmountValue).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return String.format(Locale.ROOT, "宸茬敓鎴?%d 鏉¤垂鐢ㄧ粨鏋滐紝閲戦鍚堣 %s", ledgers.size(), total.setScale(2, RoundingMode.HALF_UP));
+        return String.format(Locale.ROOT, "共命中 %d 条费用结果，累计金额 %s", ledgers.size(), total.setScale(2, RoundingMode.HALF_UP));
     }
 
     private List<CostCalcTaskDetail> buildTaskDetails(CostCalcTask task, List<Map<String, Object>> inputs) {
@@ -3527,7 +3553,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鏍规嵁浠诲姟鏄庣粏鐢熸垚鍒嗙墖鍙拌处锛屼负鍒嗙墖绾х洃鎺с€侀噸璇曚笌澶辫触瀹氫綅鎻愪緵鍩虹銆?
+     * 根据任务明细生成分片台账，为分片级监控、重试和失败定位提供基础。
      */
     private List<CostCalcTaskPartition> buildTaskPartitions(CostCalcTask task, List<CostCalcTaskDetail> details) {
         List<CostCalcTaskPartition> partitions = new ArrayList<>();
@@ -3652,7 +3678,7 @@ public class CostRunServiceImpl implements ICostRunService {
                 itemNo++;
                 String bizNo = resolveBizNo(input, itemNo);
                 if (!bizNoSet.add(bizNo)) {
-                    throw new ServiceException("鎵归噺杈撳叆瀛樺湪閲嶅涓氬姟鍗曞彿: " + bizNo);
+                    throw new ServiceException("导入批次输入存在重复业务单号: " + bizNo);
                 }
                 CostCalcInputBatchItem item = new CostCalcInputBatchItem();
                 item.setBatchId(batch.getBatchId());
@@ -3697,7 +3723,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鍒嗙墖杩涘叆鎵ц鍓嶅厛钀借繍琛屾€侊紝渚夸簬浠诲姟涓績瑙傚療鍒嗙墖瀹炴椂杩涘害銆?
+     * 分片进入执行前先落运行态，便于任务中心观察分片实时进度。
      */
     private PartitionClaimToken markPartitionRunning(Long taskId, List<CostCalcTaskDetail> partitionDetails) {
         if (partitionDetails == null || partitionDetails.isEmpty()) {
@@ -3756,7 +3782,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 鍒嗙墖瀹屾垚鍚庡洖鍐欑粺璁′笌閿欒鎽樿锛屾敮鎾戝悗缁垎鐗囩骇閲嶈瘯鍜岀洃鎺с€?
+     * 分片完成后回写统计与错误摘要，支撑后续分片重试和监控。
      */
     private void finishPartition(Long taskId, List<CostCalcTaskDetail> partitionDetails, PartitionClaimToken claimToken,
                                  PartitionExecutionResult result, Throwable throwable) {
@@ -3848,7 +3874,7 @@ public class CostRunServiceImpl implements ICostRunService {
             bundle.successCount++;
         } catch (Exception e) {
             String errorMessage = limitLength(e.getMessage(), 1000);
-            bundle.detailUpdates.add(buildTaskDetailUpdate(detail, DETAIL_STATUS_FAILED, "鎵ц澶辫触", errorMessage));
+            bundle.detailUpdates.add(buildTaskDetailUpdate(detail, DETAIL_STATUS_FAILED, "执行失败", errorMessage));
             bundle.failures.add(new TaskDetailFailure(detail, errorMessage));
             bundle.processedCount++;
             bundle.failedCount++;
@@ -3992,9 +4018,9 @@ public class CostRunServiceImpl implements ICostRunService {
         if (task == null || partition == null || partition.isEmpty() || !isPartitionClaimOwned(claimToken)) {
             return new PartitionExecutionResult();
         }
-        String errorMessage = limitLength(throwable == null ? "鍒嗙墖鎵ц澶辫触" : throwable.getMessage(), 1000);
+        String errorMessage = limitLength(throwable == null ? "分片执行失败" : throwable.getMessage(), 1000);
         List<CostCalcTaskDetail> updates = partition.stream()
-                .map(detail -> buildTaskDetailUpdate(detail, DETAIL_STATUS_FAILED, "鍒嗙墖鎵ц澶辫触", errorMessage))
+                .map(detail -> buildTaskDetailUpdate(detail, DETAIL_STATUS_FAILED, "分片执行失败", errorMessage))
                 .collect(Collectors.toList());
         transactionTemplate.executeWithoutResult(status -> calcTaskDetailMapper.updateBatchResult(updates));
         for (CostCalcTaskDetail detail : partition) {
@@ -4097,7 +4123,7 @@ public class CostRunServiceImpl implements ICostRunService {
             List<Map<String, Object>> records = new ArrayList<>();
             for (Object item : (List<?>) recordPayload) {
                 if (!(item instanceof Map)) {
-                    throw new ServiceException("鐩磋繛涓氬姟鎺ュ彛杩斿洖鐨勮褰曢泦鍚堝繀椤绘槸 JSON 瀵硅薄鏁扮粍");
+                    throw new ServiceException("预演输入数组中的每一项都必须是 JSON 对象");
                 }
                 records.add(castMap(item));
             }
@@ -4802,7 +4828,7 @@ public class CostRunServiceImpl implements ICostRunService {
             return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {
             });
         } catch (JsonProcessingException e) {
-            throw new ServiceException("鍙戝竷蹇収 JSON 瑙ｆ瀽澶辫触");
+            throw new ServiceException("发布快照解析 JSON 失败");
         }
     }
 

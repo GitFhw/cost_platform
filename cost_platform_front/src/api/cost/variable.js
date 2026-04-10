@@ -129,6 +129,7 @@ export function testVariableRemote(data) {
   return request({
     url: '/cost/variable/remote/test',
     method: 'post',
+    timeout: 90000,
     data
   })
 }
@@ -138,6 +139,7 @@ export function previewVariableRemote(data) {
   return request({
     url: '/cost/variable/remote/preview',
     method: 'post',
+    timeout: 90000,
     data
   })
 }

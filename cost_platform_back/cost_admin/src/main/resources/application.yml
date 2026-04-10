@@ -66,7 +66,7 @@ spring:
       # 热部署开关
       enabled: true
   flyway:
-    enabled: true
+    enabled: false
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 20260330.000

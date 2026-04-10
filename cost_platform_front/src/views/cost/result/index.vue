@@ -22,7 +22,12 @@
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable style="width: 220px" @change="handleSceneChange">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
+          <el-option
+            v-for="item in sceneOptions"
+            :key="item.sceneId"
+            :label="`${item.sceneName} / ${item.sceneCode}`"
+            :value="item.sceneId"
+          />
         </el-select>
       </el-form-item>
       <el-form-item label="版本号" prop="versionId">
@@ -56,6 +61,14 @@
       </el-form-item>
     </el-form>
 
+    <el-alert
+      v-if="queryGuardTip"
+      class="result-page__guard"
+      type="warning"
+      :closable="false"
+      :title="queryGuardTip"
+    />
+
     <div class="result-page__table">
       <div class="result-page__section-head">
         <div>
@@ -63,9 +76,7 @@
           <p>列表用于快速定位任务、费用和业务对象，详情用于查看结果和追溯解释。</p>
         </div>
         <div class="result-page__section-actions">
-          <el-button type="warning" plain icon="Download" @click="handleExport">
-            导出结果
-          </el-button>
+          <el-button type="warning" plain icon="Download" @click="handleExport">导出结果</el-button>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
         </div>
       </div>
@@ -75,7 +86,7 @@
         class="result-page__context"
         type="info"
         :closable="false"
-        :title="`当前正在查看任务 ${routeContext.taskId} 的结果台账，已自动带入场景与账期过滤。`"
+        :title="`当前正在查看任务 ${routeContext.taskId} 的结果台账，已自动带入路由中的过滤条件。`"
       />
 
       <el-table v-loading="loading" :data="resultList">
@@ -110,12 +121,27 @@
         <el-table-column label="操作" width="170" fixed="right" align="center">
           <template #default="scope">
             <el-button link type="primary" icon="View" @click="handleDetail(scope.row)">详情</el-button>
-            <el-button link type="success" icon="Connection" @click="handleTrace(scope.row)" :disabled="!scope.row.traceId" v-hasPermi="['cost:result:trace']">追溯</el-button>
+            <el-button
+              link
+              type="success"
+              icon="Connection"
+              @click="handleTrace(scope.row)"
+              :disabled="!scope.row.traceId"
+              v-hasPermi="['cost:result:trace']"
+            >
+              追溯
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+      <pagination
+        v-show="total > 0"
+        :total="total"
+        v-model:page="queryParams.pageNum"
+        v-model:limit="queryParams.pageSize"
+        @pagination="getList"
+      />
     </div>
 
     <el-drawer v-model="detailOpen" title="结果详情" size="980px" append-to-body>
@@ -168,7 +194,6 @@ import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
-const router = useRouter()
 const { proxy } = getCurrentInstance()
 
 const loading = ref(false)
@@ -184,6 +209,7 @@ const traceOpen = ref(false)
 const detailData = ref({})
 const traceData = ref({})
 const stats = reactive({ resultCount: 0, taskCount: 0, traceCount: 0, amountTotal: 0 })
+const resultQueryGuardMessage = '结果台账数据量较大，请至少补充账期、任务ID、任务号或业务单号后再查询'
 const routeContext = reactive({
   taskId: route.query.taskId ? Number(route.query.taskId) : undefined
 })
@@ -209,6 +235,8 @@ const metricItems = computed(() => [
   { label: '金额合计', value: stats.amountTotal, desc: '当前筛选结果的金额汇总' }
 ])
 
+const queryGuardTip = computed(() => (shouldBlockBroadResultQuery() ? resultQueryGuardMessage : ''))
+
 async function loadBaseOptions() {
   const [dictMap, sceneResp] = await Promise.all([
     getRemoteDictOptionMap(['cost_result_status', 'cost_unit_code']),
@@ -233,11 +261,31 @@ async function loadVersionOptions(sceneId) {
   versionOptions.value = resp.data || []
 }
 
-async function getList() {
+function shouldBlockBroadResultQuery() {
+  return !queryParams.billMonth
+    && !queryParams.taskId
+    && !queryParams.taskNo
+    && !queryParams.bizNo
+}
+
+function clearResultView() {
+  resultList.value = []
+  total.value = 0
+  Object.assign(stats, { resultCount: 0, taskCount: 0, traceCount: 0, amountTotal: 0 })
+}
+
+async function getList(showWarning = false) {
   loading.value = true
   try {
     await loadBaseOptions()
     await loadVersionOptions(queryParams.sceneId)
+    if (shouldBlockBroadResultQuery()) {
+      clearResultView()
+      if (showWarning) {
+        proxy.$modal.msgWarning(resultQueryGuardMessage)
+      }
+      return
+    }
     const [listResp, statsResp] = await Promise.all([
       listResult(queryParams),
       getResultStats(queryParams)
@@ -252,13 +300,21 @@ async function getList() {
 
 function handleQuery() {
   queryParams.pageNum = 1
-  getList()
+  getList(true)
 }
 
 function handleExport() {
-  proxy.download('cost/run/result/export', {
-    ...queryParams
-  }, `cost_result_${Date.now()}.xlsx`)
+  if (shouldBlockBroadResultQuery()) {
+    proxy.$modal.msgWarning(resultQueryGuardMessage)
+    return
+  }
+  proxy.download(
+    'cost/run/result/export',
+    {
+      ...queryParams
+    },
+    `cost_result_${Date.now()}.xlsx`
+  )
 }
 
 function resetQuery() {
@@ -266,10 +322,15 @@ function resetQuery() {
   queryParams.pageNum = 1
   queryParams.pageSize = 10
   queryParams.taskId = routeContext.taskId
+  queryParams.taskNo = ''
+  queryParams.versionId = undefined
+  queryParams.feeCode = ''
+  queryParams.bizNo = ''
+  queryParams.resultStatus = undefined
   queryParams.sceneId = route.query.sceneId ? Number(route.query.sceneId) : queryParams.sceneId
   queryParams.billMonth = route.query.billMonth || ''
   versionOptions.value = []
-  getList()
+  getList(false)
 }
 
 async function handleSceneChange(sceneId) {
@@ -338,33 +399,121 @@ watch(
 )
 
 onMounted(async () => {
-  await getList()
+  await getList(false)
   await openFirstResultByRouteContext()
 })
 
 onActivated(async () => {
-  await getList()
+  await getList(false)
   await openFirstResultByRouteContext()
 })
 </script>
 
 <style scoped lang="scss">
-.result-page { display: grid; gap: 16px; }
-.result-page__hero, .result-page__metric-card, .result-page__table { border: 1px solid var(--el-border-color); border-radius: 16px; background: var(--el-bg-color-overlay); }
-.result-page__hero { display: flex; justify-content: space-between; gap: 16px; padding: 22px 24px; background: linear-gradient(135deg, color-mix(in srgb, var(--el-color-success-light-8) 56%, var(--el-bg-color-overlay)), var(--el-bg-color-overlay)); }
-.result-page__eyebrow { font-size: 12px; color: var(--el-color-success-dark-2); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.result-page__title { margin: 8px 0 0; font-size: 28px; }
-.result-page__subtitle { margin: 10px 0 0; color: var(--el-text-color-regular); line-height: 1.8; }
-.result-page__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-.result-page__metric-card { display: grid; gap: 6px; padding: 14px 16px; }
-.result-page__metric-card strong { font-size: 26px; color: var(--el-color-success-dark-2); }
-.result-page__table { padding: 16px; }
-.result-page__section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
-.result-page__section-actions { display: flex; align-items: center; gap: 10px; }
-.result-page__section-head h3 { margin: 0; font-size: 18px; }
-.result-page__section-head p { margin: 6px 0 0; color: var(--el-text-color-secondary); font-size: 13px; }
-.result-page__tabs pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+.result-page {
+  display: grid;
+  gap: 16px;
+}
+
+.result-page__hero,
+.result-page__metric-card,
+.result-page__table {
+  border: 1px solid var(--el-border-color);
+  border-radius: 16px;
+  background: var(--el-bg-color-overlay);
+}
+
+.result-page__hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--el-color-success-light-8) 56%, var(--el-bg-color-overlay)),
+    var(--el-bg-color-overlay)
+  );
+}
+
+.result-page__eyebrow {
+  font-size: 12px;
+  color: var(--el-color-success-dark-2);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.result-page__title {
+  margin: 8px 0 0;
+  font-size: 28px;
+}
+
+.result-page__subtitle {
+  margin: 10px 0 0;
+  color: var(--el-text-color-regular);
+  line-height: 1.8;
+}
+
+.result-page__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.result-page__metric-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+}
+
+.result-page__metric-card strong {
+  font-size: 26px;
+  color: var(--el-color-success-dark-2);
+}
+
+.result-page__guard,
+.result-page__context {
+  margin-top: -4px;
+}
+
+.result-page__table {
+  padding: 16px;
+}
+
+.result-page__section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.result-page__section-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.result-page__section-head h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.result-page__section-head p {
+  margin: 6px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.result-page__tabs pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 @media (max-width: 1200px) {
-  .result-page__metrics { grid-template-columns: 1fr; }
+  .result-page__metrics {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

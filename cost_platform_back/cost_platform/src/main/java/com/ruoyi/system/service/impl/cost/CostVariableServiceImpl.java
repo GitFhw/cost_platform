@@ -1,6 +1,11 @@
 package com.ruoyi.system.service.impl.cost;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ruoyi.common.constant.UserConstants;
 import com.ruoyi.common.core.domain.entity.SysDictData;
 import com.ruoyi.common.core.domain.entity.SysDictType;
@@ -20,10 +25,21 @@ import com.ruoyi.system.mapper.cost.CostVariableGroupMapper;
 import com.ruoyi.system.mapper.cost.CostVariableMapper;
 import com.ruoyi.system.service.cost.ICostExpressionService;
 import com.ruoyi.system.service.cost.ICostVariableService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 import java.util.*;
 
 /**
@@ -35,6 +51,7 @@ import java.util.*;
  */
 @Service
 public class CostVariableServiceImpl implements ICostVariableService {
+    private static final Logger log = LoggerFactory.getLogger(CostVariableServiceImpl.class);
     private static final String DICT_TYPE_VARIABLE_TYPE = "cost_variable_type";
     private static final String DICT_TYPE_SOURCE_TYPE = "cost_variable_source_type";
     private static final String DICT_TYPE_DATA_TYPE = "cost_variable_data_type";
@@ -43,6 +60,19 @@ public class CostVariableServiceImpl implements ICostVariableService {
     private static final String DICT_TYPE_SYNC_MODE = "cost_variable_sync_mode";
     private static final String DICT_TYPE_CACHE_POLICY = "cost_variable_cache_policy";
     private static final String DICT_TYPE_FALLBACK_POLICY = "cost_variable_fallback_policy";
+    private static final Set<String> SUPPORTED_REMOTE_METHODS = Set.of("GET", "POST", "PUT", "DELETE");
+    private static final Set<String> SUPPORTED_REMOTE_ADAPTERS = Set.of("STANDARD", "ROOT_ARRAY", "PAGE_ENVELOPE", "SINGLE_OBJECT");
+    private static final String REMOTE_ADAPTER_STANDARD = "STANDARD";
+    private static final String REMOTE_ADAPTER_ROOT_ARRAY = "ROOT_ARRAY";
+    private static final String REMOTE_ADAPTER_PAGE = "PAGE_ENVELOPE";
+    private static final String REMOTE_ADAPTER_SINGLE = "SINGLE_OBJECT";
+    private static final int REMOTE_PREVIEW_ROW_LIMIT = 20;
+    private static final List<String> DEFAULT_REMOTE_LIST_PATHS = List.of("rows", "list", "items", "data.rows", "data.list", "data.items", "data.records", "records", "data");
+    private static final List<String> DEFAULT_REMOTE_MESSAGE_PATHS = List.of("msg", "message", "data.msg", "data.message");
+    private static final List<String> DEFAULT_REMOTE_TOTAL_PATHS = List.of("total", "data.total", "count", "data.count", "totalCount", "data.totalCount");
+    private static final List<String> DEFAULT_REMOTE_SUCCESS_VALUES = List.of("0", "200", "true", "success", "ok");
+    private static final String REMOTE_TOKEN_PLACEHOLDER = "__PASTE_TOKEN_HERE__";
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
     private CostVariableMapper variableMapper;
@@ -64,6 +94,10 @@ public class CostVariableServiceImpl implements ICostVariableService {
 
     @Autowired
     private ICostExpressionService expressionService;
+
+    @Autowired
+    @Qualifier("costAccessRestTemplate")
+    private RestTemplate costAccessRestTemplate;
 
     @Override
     public List<CostVariable> selectVariableList(CostVariable variable) {
@@ -285,18 +319,30 @@ public class CostVariableServiceImpl implements ICostVariableService {
 
     @Override
     public Map<String, Object> testRemoteConnection(Map<String, Object> request) {
-        String remoteApi = Objects.toString(request.get("remoteApi"), "").trim();
-        String authType = Objects.toString(request.get("authType"), "NONE").trim();
-        String sourceSystem = Objects.toString(request.get("sourceSystem"), "").trim();
-        boolean available = StringUtils.isNotEmpty(remoteApi)
-                && (remoteApi.startsWith("http://") || remoteApi.startsWith("https://"));
+        RemoteVariableConfig config = resolveRemoteVariableConfig(request, null);
+        RemoteInvokeResult invokeResult = invokeRemoteEndpoint(config);
 
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
-        result.put("success", available);
-        result.put("message", available ? "接口地址格式合法，已通过基础连通性预检查。" : "接口地址不能为空，且需以 http:// 或 https:// 开头。");
-        result.put("remoteApi", remoteApi);
-        result.put("sourceSystem", sourceSystem);
-        result.put("authType", StringUtils.isEmpty(authType) ? "NONE" : authType);
+        result.put("success", invokeResult.success);
+        result.put("message", invokeResult.message);
+        result.put("remoteApi", config.remoteApi);
+        result.put("sourceSystem", config.sourceSystem);
+        result.put("authType", config.authType);
+        result.put("requestMethod", config.requestMethod);
+        result.put("adapterType", config.adapterType);
+        result.put("contentType", config.contentType);
+        result.put("statusCode", invokeResult.statusCode);
+        result.put("rowCount", invokeResult.rowCount());
+        result.put("elapsedMs", invokeResult.elapsedMs);
+        result.put("requestUrl", invokeResult.requestUrl);
+        result.put("requestHeaderNames", invokeResult.requestHeaderNames);
+        result.put("authHeaderApplied", invokeResult.authHeaderApplied);
+        result.put("authHeaderName", invokeResult.authHeaderName);
+        result.put("authTokenPresent", invokeResult.authTokenPresent);
+        result.put("responsePreview", invokeResult.responsePreview());
+        result.put("failureStage", invokeResult.failureStage);
+        result.put("errorType", invokeResult.errorType);
+        result.put("diagnosticMessage", invokeResult.diagnosticMessage);
         result.put("checkedAt", new Date());
         return result;
     }
@@ -305,41 +351,34 @@ public class CostVariableServiceImpl implements ICostVariableService {
     public Map<String, Object> previewRemoteData(Map<String, Object> request) {
         Long variableId = parseLong(request.get("variableId"));
         CostVariable variable = variableId == null ? null : selectVariableById(variableId);
-
-        String dataPath = variable == null ? Objects.toString(request.get("dataPath"), "") : variable.getDataPath();
-        String variableCode = variable == null ? Objects.toString(request.get("variableCode"), "REMOTE_SAMPLE") : variable.getVariableCode();
-        String sourceSystem = variable == null ? Objects.toString(request.get("sourceSystem"), "") : variable.getSourceSystem();
-        String syncMode = variable == null ? Objects.toString(request.get("syncMode"), "REALTIME") : variable.getSyncMode();
-        String cachePolicy = variable == null ? Objects.toString(request.get("cachePolicy"), "MANUAL_REFRESH") : variable.getCachePolicy();
-        String fallbackPolicy = variable == null ? Objects.toString(request.get("fallbackPolicy"), "FAIL_FAST") : variable.getFallbackPolicy();
-
-        List<Map<String, Object>> rawRows = new ArrayList<>();
-        rawRows.add(buildRawRow("A01", "散货", "PORT", 1280));
-        rawRows.add(buildRawRow("A02", "煤炭", "PORT", 2560));
-        rawRows.add(buildRawRow("B11", "普通员工", "SALARY", 26));
-
-        List<Map<String, Object>> mappedRows = new ArrayList<>();
-        for (Map<String, Object> rawRow : rawRows) {
-            LinkedHashMap<String, Object> mapped = new LinkedHashMap<>();
-            mapped.put("variableCode", variableCode);
-            mapped.put("sourceCode", rawRow.get("sourceCode"));
-            mapped.put("sourceName", rawRow.get("sourceName"));
-            mapped.put("businessDomain", rawRow.get("businessDomain"));
-            mapped.put("mappedValue", rawRow.get("value"));
-            mapped.put("dataPath", StringUtils.isEmpty(dataPath) ? "value" : dataPath);
-            mapped.put("sourceSystem", sourceSystem);
-            mappedRows.add(mapped);
-        }
+        RemoteVariableConfig config = resolveRemoteVariableConfig(request, variable);
+        RemoteInvokeResult invokeResult = invokeRemoteEndpoint(config);
+        List<Map<String, Object>> rawRows = buildPreviewRawRows(invokeResult.items);
+        List<Map<String, Object>> mappedRows = buildPreviewMappedRows(config, invokeResult.items);
 
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
-        result.put("success", true);
-        result.put("message", "已生成第三方变量样例预览，请核对字段映射口径。");
+        result.put("success", invokeResult.success);
+        result.put("message", invokeResult.message);
         result.put("rawRows", rawRows);
         result.put("mappedRows", mappedRows);
-        result.put("sourceSystem", sourceSystem);
-        result.put("syncMode", syncMode);
-        result.put("cachePolicy", cachePolicy);
-        result.put("fallbackPolicy", fallbackPolicy);
+        result.put("sourceSystem", config.sourceSystem);
+        result.put("syncMode", config.syncMode);
+        result.put("cachePolicy", config.cachePolicy);
+        result.put("fallbackPolicy", config.fallbackPolicy);
+        result.put("requestMethod", config.requestMethod);
+        result.put("adapterType", config.adapterType);
+        result.put("statusCode", invokeResult.statusCode);
+        result.put("elapsedMs", invokeResult.elapsedMs);
+        result.put("rowCount", invokeResult.rowCount());
+        result.put("responseMessage", invokeResult.responseMessage());
+        result.put("requestUrl", invokeResult.requestUrl);
+        result.put("requestHeaderNames", invokeResult.requestHeaderNames);
+        result.put("authHeaderApplied", invokeResult.authHeaderApplied);
+        result.put("authHeaderName", invokeResult.authHeaderName);
+        result.put("authTokenPresent", invokeResult.authTokenPresent);
+        result.put("failureStage", invokeResult.failureStage);
+        result.put("errorType", invokeResult.errorType);
+        result.put("diagnosticMessage", invokeResult.diagnosticMessage);
         result.put("previewAt", new Date());
         return result;
     }
@@ -620,13 +659,32 @@ public class CostVariableServiceImpl implements ICostVariableService {
         }
         if (!"REMOTE".equals(sourceType)) {
             variable.setRemoteApi("");
+            variable.setRequestMethod("GET");
+            variable.setContentType("application/json");
+            variable.setQueryConfigJson(null);
+            variable.setRequestHeadersJson(null);
+            variable.setBodyTemplateJson(null);
             variable.setAuthType("NONE");
             variable.setAuthConfigJson(null);
             variable.setDataPath("");
+            variable.setResponseConfigJson(null);
             variable.setMappingConfigJson(null);
+            variable.setPageConfigJson(null);
+            variable.setAdapterType(REMOTE_ADAPTER_STANDARD);
+            variable.setAdapterConfigJson(null);
             variable.setSyncMode("REALTIME");
             variable.setCachePolicy("MANUAL_REFRESH");
             variable.setFallbackPolicy("FAIL_FAST");
+        } else {
+            variable.setRemoteApi(StringUtils.trim(variable.getRemoteApi()));
+            variable.setRequestMethod(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getRequestMethod()), "GET").toUpperCase(Locale.ROOT));
+            variable.setContentType(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getContentType()), MediaType.APPLICATION_JSON_VALUE));
+            variable.setDataPath(StringUtils.trim(variable.getDataPath()));
+            variable.setAuthType(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getAuthType()), "NONE"));
+            variable.setSyncMode(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getSyncMode()), "REALTIME"));
+            variable.setCachePolicy(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getCachePolicy()), "MANUAL_REFRESH"));
+            variable.setFallbackPolicy(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getFallbackPolicy()), "FAIL_FAST"));
+            variable.setAdapterType(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getAdapterType()), REMOTE_ADAPTER_STANDARD));
         }
         if (!"FORMULA".equals(sourceType)) {
             variable.setFormulaExpr(null);
@@ -707,6 +765,743 @@ public class CostVariableServiceImpl implements ICostVariableService {
         row.put("businessDomain", businessDomain);
         row.put("value", value);
         return row;
+    }
+
+    private RemoteVariableConfig resolveRemoteVariableConfig(Map<String, Object> request, CostVariable variable) {
+        CostVariable configSource = variable == null ? new CostVariable() : variable;
+        if (variable == null) {
+            configSource.setVariableCode(Objects.toString(request.get("variableCode"), "REMOTE_SAMPLE"));
+            configSource.setSourceSystem(Objects.toString(request.get("sourceSystem"), ""));
+            configSource.setRemoteApi(Objects.toString(request.get("remoteApi"), ""));
+            configSource.setRequestMethod(Objects.toString(request.get("requestMethod"), "GET"));
+            configSource.setContentType(Objects.toString(request.get("contentType"), MediaType.APPLICATION_JSON_VALUE));
+            configSource.setQueryConfigJson(Objects.toString(request.get("queryConfigJson"), null));
+            configSource.setRequestHeadersJson(Objects.toString(request.get("requestHeadersJson"), null));
+            configSource.setBodyTemplateJson(Objects.toString(request.get("bodyTemplateJson"), null));
+            configSource.setAuthType(Objects.toString(request.get("authType"), "NONE"));
+            configSource.setAuthConfigJson(Objects.toString(request.get("authConfigJson"), null));
+            configSource.setDataPath(Objects.toString(request.get("dataPath"), ""));
+            configSource.setResponseConfigJson(Objects.toString(request.get("responseConfigJson"), null));
+            configSource.setMappingConfigJson(Objects.toString(request.get("mappingConfigJson"), null));
+            configSource.setPageConfigJson(Objects.toString(request.get("pageConfigJson"), null));
+            configSource.setAdapterType(Objects.toString(request.get("adapterType"), REMOTE_ADAPTER_STANDARD));
+            configSource.setAdapterConfigJson(Objects.toString(request.get("adapterConfigJson"), null));
+            configSource.setSyncMode(Objects.toString(request.get("syncMode"), "REALTIME"));
+            configSource.setCachePolicy(Objects.toString(request.get("cachePolicy"), "MANUAL_REFRESH"));
+            configSource.setFallbackPolicy(Objects.toString(request.get("fallbackPolicy"), "FAIL_FAST"));
+            configSource.setSourceType("REMOTE");
+        } else {
+            applyRequestOverrides(configSource, request);
+        }
+        normalizeVariableSourceFields(configSource);
+        validateRemoteVariableConfig(configSource);
+
+        ObjectNode responseConfig = parseJsonObject(configSource.getResponseConfigJson(), "响应提取配置JSON");
+        ObjectNode authConfig = parseJsonObject(configSource.getAuthConfigJson(), "鉴权配置JSON");
+        normalizeAuthConfig(configSource.getAuthType(), authConfig);
+        String listPath = firstNonBlank(textValue(responseConfig, "listPath"), configSource.getDataPath());
+        if (responseConfig != null && StringUtils.isNotEmpty(listPath) && !responseConfig.has("listPath")) {
+            responseConfig.put("listPath", listPath);
+        }
+
+        return new RemoteVariableConfig(
+                firstNonBlank(configSource.getVariableCode(), "REMOTE_SAMPLE"),
+                configSource.getRemoteApi(),
+                configSource.getSourceSystem(),
+                StringUtils.defaultIfEmpty(configSource.getRequestMethod(), "GET"),
+                StringUtils.defaultIfEmpty(configSource.getContentType(), MediaType.APPLICATION_JSON_VALUE),
+                parseJsonObject(configSource.getQueryConfigJson(), "查询参数配置JSON"),
+                parseJsonObject(configSource.getRequestHeadersJson(), "请求头配置JSON"),
+                parseJsonNode(configSource.getBodyTemplateJson(), "请求体模板"),
+                StringUtils.defaultIfEmpty(configSource.getAuthType(), "NONE"),
+                authConfig,
+                configSource.getDataPath(),
+                responseConfig,
+                parseJsonObject(configSource.getMappingConfigJson(), "字段映射配置JSON"),
+                parseJsonObject(configSource.getPageConfigJson(), "分页策略配置JSON"),
+                StringUtils.defaultIfEmpty(configSource.getAdapterType(), REMOTE_ADAPTER_STANDARD),
+                parseJsonObject(configSource.getAdapterConfigJson(), "适配器配置JSON"),
+                StringUtils.defaultIfEmpty(configSource.getSyncMode(), "REALTIME"),
+                StringUtils.defaultIfEmpty(configSource.getCachePolicy(), "MANUAL_REFRESH"),
+                StringUtils.defaultIfEmpty(configSource.getFallbackPolicy(), "FAIL_FAST")
+        );
+    }
+
+    private void applyRequestOverrides(CostVariable variable, Map<String, Object> request) {
+        if (request == null || request.isEmpty()) {
+            return;
+        }
+        if (request.containsKey("variableCode")) {
+            variable.setVariableCode(Objects.toString(request.get("variableCode"), variable.getVariableCode()));
+        }
+        if (request.containsKey("sourceSystem")) {
+            variable.setSourceSystem(Objects.toString(request.get("sourceSystem"), variable.getSourceSystem()));
+        }
+        if (request.containsKey("remoteApi")) {
+            variable.setRemoteApi(Objects.toString(request.get("remoteApi"), variable.getRemoteApi()));
+        }
+        if (request.containsKey("requestMethod")) {
+            variable.setRequestMethod(Objects.toString(request.get("requestMethod"), variable.getRequestMethod()));
+        }
+        if (request.containsKey("contentType")) {
+            variable.setContentType(Objects.toString(request.get("contentType"), variable.getContentType()));
+        }
+        if (request.containsKey("queryConfigJson")) {
+            variable.setQueryConfigJson(Objects.toString(request.get("queryConfigJson"), variable.getQueryConfigJson()));
+        }
+        if (request.containsKey("requestHeadersJson")) {
+            variable.setRequestHeadersJson(Objects.toString(request.get("requestHeadersJson"), variable.getRequestHeadersJson()));
+        }
+        if (request.containsKey("bodyTemplateJson")) {
+            variable.setBodyTemplateJson(Objects.toString(request.get("bodyTemplateJson"), variable.getBodyTemplateJson()));
+        }
+        if (request.containsKey("authType")) {
+            variable.setAuthType(Objects.toString(request.get("authType"), variable.getAuthType()));
+        }
+        if (request.containsKey("authConfigJson")) {
+            variable.setAuthConfigJson(Objects.toString(request.get("authConfigJson"), variable.getAuthConfigJson()));
+        }
+        if (request.containsKey("dataPath")) {
+            variable.setDataPath(Objects.toString(request.get("dataPath"), variable.getDataPath()));
+        }
+        if (request.containsKey("responseConfigJson")) {
+            variable.setResponseConfigJson(Objects.toString(request.get("responseConfigJson"), variable.getResponseConfigJson()));
+        }
+        if (request.containsKey("mappingConfigJson")) {
+            variable.setMappingConfigJson(Objects.toString(request.get("mappingConfigJson"), variable.getMappingConfigJson()));
+        }
+        if (request.containsKey("pageConfigJson")) {
+            variable.setPageConfigJson(Objects.toString(request.get("pageConfigJson"), variable.getPageConfigJson()));
+        }
+        if (request.containsKey("adapterType")) {
+            variable.setAdapterType(Objects.toString(request.get("adapterType"), variable.getAdapterType()));
+        }
+        if (request.containsKey("adapterConfigJson")) {
+            variable.setAdapterConfigJson(Objects.toString(request.get("adapterConfigJson"), variable.getAdapterConfigJson()));
+        }
+        if (request.containsKey("syncMode")) {
+            variable.setSyncMode(Objects.toString(request.get("syncMode"), variable.getSyncMode()));
+        }
+        if (request.containsKey("cachePolicy")) {
+            variable.setCachePolicy(Objects.toString(request.get("cachePolicy"), variable.getCachePolicy()));
+        }
+        if (request.containsKey("fallbackPolicy")) {
+            variable.setFallbackPolicy(Objects.toString(request.get("fallbackPolicy"), variable.getFallbackPolicy()));
+        }
+    }
+
+    private RemoteInvokeResult invokeRemoteEndpoint(RemoteVariableConfig config) {
+        long startedAt = System.nanoTime();
+        URI uri = buildRemoteUri(config);
+        HttpHeaders headers = buildRemoteHeaders(config);
+        String authHeaderName = resolveAuthHeaderName(config);
+        boolean authHeaderApplied = StringUtils.isNotEmpty(authHeaderName) && headers.containsKey(authHeaderName);
+        boolean authTokenPresent = hasConfiguredAuthToken(config);
+        log.info("第三方变量开始调用: variableCode={}, method={}, uri={}, authType={}, authHeaderApplied={}, authTokenPresent={}",
+                config.variableCode, config.requestMethod, uri, config.authType, authHeaderApplied, authTokenPresent);
+        try {
+            HttpMethod httpMethod = HttpMethod.valueOf(config.requestMethod);
+            HttpEntity<?> entity = buildRemoteHttpEntity(config, headers);
+            ResponseEntity<String> response = costAccessRestTemplate.exchange(uri, httpMethod, entity, String.class);
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+            JsonNode bodyNode = parseResponseBody(response.getBody());
+            ObjectNode responseConfig = config.responseConfig;
+            List<JsonNode> items = extractItemNodes(bodyNode, config);
+            boolean success = isRemoteResponseSuccess(response, bodyNode, responseConfig);
+            String message = firstNonBlank(extractFirstText(bodyNode, textValue(responseConfig, "messagePath"), DEFAULT_REMOTE_MESSAGE_PATHS), response.getStatusCode().is2xxSuccessful() ? "接口调用成功" : "接口调用失败");
+            log.info("第三方变量调用完成: variableCode={}, statusCode={}, elapsedMs={}, rowCount={}, success={}",
+                    config.variableCode, response.getStatusCodeValue(), elapsedMs, items == null ? 0 : items.size(), success);
+            return new RemoteInvokeResult(success, message, response.getStatusCodeValue(), elapsedMs, bodyNode, items,
+                    uri.toString(), new ArrayList<>(headers.keySet()), authHeaderApplied, authHeaderName, authTokenPresent,
+                    "", "", "");
+        } catch (RestClientResponseException ex) {
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+            JsonNode bodyNode = parseResponseBody(ex.getResponseBodyAsString());
+            ObjectNode responseConfig = config.responseConfig;
+            String message = firstNonBlank(
+                    extractFirstText(bodyNode, textValue(responseConfig, "messagePath"), DEFAULT_REMOTE_MESSAGE_PATHS),
+                    ex.getStatusText(),
+                    "第三方接口返回异常");
+            log.warn("第三方变量调用返回异常响应: variableCode={}, statusCode={}, elapsedMs={}, uri={}, message={}",
+                    config.variableCode, ex.getRawStatusCode(), elapsedMs, uri, message);
+            return new RemoteInvokeResult(false, message, ex.getRawStatusCode(), elapsedMs, bodyNode, Collections.emptyList(),
+                    uri.toString(), new ArrayList<>(headers.keySet()), authHeaderApplied, authHeaderName, authTokenPresent,
+                    "REMOTE_RESPONSE", ex.getClass().getSimpleName(), firstNonBlank(ex.getResponseBodyAsString(), ex.getMessage()));
+        } catch (RestClientException ex) {
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+            Throwable rootCause = rootCauseOf(ex);
+            String diagnosticMessage = firstNonBlank(rootCause == null ? "" : rootCause.getMessage(), ex.getMessage(), "远程服务不可用");
+            String failureStage = determineFailureStage(ex, rootCause);
+            log.warn("第三方变量调用网络异常: variableCode={}, elapsedMs={}, uri={}, failureStage={}, errorType={}, message={}",
+                    config.variableCode, elapsedMs, uri, failureStage, ex.getClass().getSimpleName(), diagnosticMessage);
+            return new RemoteInvokeResult(false, "第三方接口调用失败：" + diagnosticMessage, 0, elapsedMs,
+                    JsonNodeFactory.instance.objectNode(), Collections.emptyList(), uri.toString(), new ArrayList<>(headers.keySet()),
+                    authHeaderApplied, authHeaderName, authTokenPresent, failureStage, ex.getClass().getSimpleName(), diagnosticMessage);
+        }
+    }
+
+    private Throwable rootCauseOf(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null && current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private String determineFailureStage(RestClientException ex, Throwable rootCause) {
+        String message = firstNonBlank(rootCause == null ? "" : rootCause.getMessage(), ex.getMessage()).toLowerCase(Locale.ROOT);
+        if (message.contains("connect timed out") || message.contains("connection timed out")) {
+            return "CONNECT_TIMEOUT";
+        }
+        if (message.contains("read timed out") || message.contains("socket timeout")) {
+            return "READ_TIMEOUT";
+        }
+        if (message.contains("connection refused")) {
+            return "CONNECTION_REFUSED";
+        }
+        if (message.contains("no route to host")) {
+            return "NO_ROUTE";
+        }
+        return "REMOTE_IO";
+    }
+
+    private String resolveAuthHeaderName(RemoteVariableConfig config) {
+        if (config.authConfig == null || config.authConfig.isNull()) {
+            return "";
+        }
+        if ("BEARER".equals(config.authType)) {
+            return firstNonBlank(textValue(config.authConfig, "headerName"), HttpHeaders.AUTHORIZATION);
+        }
+        if (!"API_KEY".equals(config.authType)) {
+            return "";
+        }
+        String location = firstNonBlank(textValue(config.authConfig, "location"), "HEADER");
+        if (!"HEADER".equalsIgnoreCase(location)) {
+            return "";
+        }
+        return firstNonBlank(textValue(config.authConfig, "keyName"), textValue(config.authConfig, "headerName"));
+    }
+
+    private boolean hasConfiguredAuthToken(RemoteVariableConfig config) {
+        if (config.authConfig == null || config.authConfig.isNull()) {
+            return false;
+        }
+        return switch (config.authType) {
+            case "BEARER" -> StringUtils.isNotEmpty(firstNonBlank(textValue(config.authConfig, "token"), textValue(config.authConfig, "accessToken")));
+            case "BASIC" -> StringUtils.isNotEmpty(textValue(config.authConfig, "username"));
+            case "API_KEY" -> StringUtils.isNotEmpty(textValue(config.authConfig, "keyValue"));
+            case "COOKIE" -> StringUtils.isNotEmpty(firstNonBlank(textValue(config.authConfig, "rawCookie"), textValue(config.authConfig, "cookie")))
+                    || (StringUtils.isNotEmpty(textValue(config.authConfig, "cookieName"))
+                    && StringUtils.isNotEmpty(textValue(config.authConfig, "cookieValue")));
+            default -> false;
+        };
+    }
+
+    private URI buildRemoteUri(RemoteVariableConfig config) {
+        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(config.remoteApi);
+        appendConfiguredQueryParams(builder, config.queryConfig);
+        appendConfiguredPagination(builder, config.pageConfig);
+        appendAuthQueryParams(builder, config);
+        return builder.build(true).toUri();
+    }
+
+    private void appendConfiguredQueryParams(UriComponentsBuilder builder, ObjectNode queryConfig) {
+        if (queryConfig == null) {
+            return;
+        }
+        Iterator<Map.Entry<String, JsonNode>> fields = queryConfig.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> field = fields.next();
+            JsonNode value = field.getValue();
+            if (value == null || value.isNull()) {
+                continue;
+            }
+            if (value.isArray()) {
+                value.forEach(item -> builder.queryParam(field.getKey(), toHttpParamValue(item)));
+                continue;
+            }
+            builder.queryParam(field.getKey(), toHttpParamValue(value));
+        }
+    }
+
+    private void appendConfiguredPagination(UriComponentsBuilder builder, ObjectNode pageConfig) {
+        if (pageConfig == null) {
+            return;
+        }
+        String pageNumKey = firstNonBlank(textValue(pageConfig, "pageNumKey"), textValue(pageConfig, "currentKey"));
+        String pageSizeKey = firstNonBlank(textValue(pageConfig, "pageSizeKey"), textValue(pageConfig, "sizeKey"));
+        JsonNode previewPageNum = pageConfig.get("previewPageNum");
+        JsonNode previewPageSize = pageConfig.get("previewPageSize");
+        if (StringUtils.isNotEmpty(pageNumKey) && previewPageNum != null && !previewPageNum.isNull()) {
+            builder.replaceQueryParam(pageNumKey, toHttpParamValue(previewPageNum));
+        }
+        if (StringUtils.isNotEmpty(pageSizeKey) && previewPageSize != null && !previewPageSize.isNull()) {
+            builder.replaceQueryParam(pageSizeKey, toHttpParamValue(previewPageSize));
+        }
+    }
+
+    private void appendAuthQueryParams(UriComponentsBuilder builder, RemoteVariableConfig config) {
+        if (!"API_KEY".equals(config.authType) || config.authConfig == null || config.authConfig.isNull()) {
+            return;
+        }
+        String location = firstNonBlank(textValue((ObjectNode) config.authConfig, "location"), "HEADER");
+        if (!"QUERY".equalsIgnoreCase(location)) {
+            return;
+        }
+        String keyName = firstNonBlank(textValue((ObjectNode) config.authConfig, "keyName"), textValue((ObjectNode) config.authConfig, "queryName"));
+        String keyValue = textValue((ObjectNode) config.authConfig, "keyValue");
+        if (StringUtils.isNotEmpty(keyName) && StringUtils.isNotEmpty(keyValue)) {
+            builder.replaceQueryParam(keyName, keyValue);
+        }
+    }
+
+    private HttpHeaders buildRemoteHeaders(RemoteVariableConfig config) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN, MediaType.ALL));
+        if (StringUtils.isNotEmpty(config.contentType)) {
+            headers.setContentType(MediaType.parseMediaType(config.contentType));
+        }
+        if (config.requestHeaders != null) {
+            Iterator<Map.Entry<String, JsonNode>> fields = config.requestHeaders.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                JsonNode value = field.getValue();
+                if (value == null || value.isNull()) {
+                    continue;
+                }
+                if (value.isArray()) {
+                    value.forEach(item -> headers.add(field.getKey(), toHttpParamValue(item)));
+                    continue;
+                }
+                headers.set(field.getKey(), toHttpParamValue(value));
+            }
+        }
+        applyAuthHeaders(headers, config);
+        return headers;
+    }
+
+    private void applyAuthHeaders(HttpHeaders headers, RemoteVariableConfig config) {
+        JsonNode authConfig = config.authConfig;
+        String authType = StringUtils.defaultIfEmpty(config.authType, "NONE");
+        if ("NONE".equals(authType) || authConfig == null || authConfig.isNull()) {
+            return;
+        }
+        switch (authType) {
+            case "BASIC" -> {
+                String username = textValue(authConfig, "username");
+                String password = textValue(authConfig, "password");
+                if (StringUtils.isNotEmpty(username)) {
+                    headers.setBasicAuth(StringUtils.defaultString(username), StringUtils.defaultString(password), StandardCharsets.UTF_8);
+                }
+            }
+            case "BEARER" -> {
+                String headerName = firstNonBlank(textValue(authConfig, "headerName"), HttpHeaders.AUTHORIZATION);
+                String prefix = normalizeBearerPrefix(firstNonBlank(textValue(authConfig, "prefix"), "Bearer"));
+                String token = firstNonBlank(textValue(authConfig, "token"), textValue(authConfig, "accessToken"));
+                if (StringUtils.isNotEmpty(token)) {
+                    headers.set(headerName, prefix + token);
+                }
+            }
+            case "API_KEY" -> {
+                String location = firstNonBlank(textValue(authConfig, "location"), "HEADER");
+                String keyName = firstNonBlank(textValue(authConfig, "keyName"), textValue(authConfig, "headerName"));
+                String keyValue = textValue(authConfig, "keyValue");
+                if ("HEADER".equalsIgnoreCase(location) && StringUtils.isNotEmpty(keyName) && StringUtils.isNotEmpty(keyValue)) {
+                    headers.set(keyName, keyValue);
+                }
+            }
+            case "COOKIE" -> {
+                String rawCookie = firstNonBlank(textValue(authConfig, "rawCookie"), textValue(authConfig, "cookie"));
+                if (StringUtils.isNotEmpty(rawCookie)) {
+                    headers.set(HttpHeaders.COOKIE, rawCookie);
+                } else {
+                    String cookieName = textValue(authConfig, "cookieName");
+                    String cookieValue = textValue(authConfig, "cookieValue");
+                    if (StringUtils.isNotEmpty(cookieName) && StringUtils.isNotEmpty(cookieValue)) {
+                        headers.set(HttpHeaders.COOKIE, cookieName + "=" + cookieValue);
+                    }
+                }
+            }
+            default -> {
+            }
+        }
+    }
+
+    private HttpEntity<?> buildRemoteHttpEntity(RemoteVariableConfig config, HttpHeaders headers) {
+        if ("GET".equals(config.requestMethod) || "DELETE".equals(config.requestMethod)) {
+            return new HttpEntity<>(headers);
+        }
+        if (config.bodyTemplate == null || config.bodyTemplate.isNull()) {
+            return new HttpEntity<>(headers);
+        }
+        if (MediaType.APPLICATION_JSON_VALUE.equalsIgnoreCase(config.contentType)) {
+            return new HttpEntity<>(config.bodyTemplate.toString(), headers);
+        }
+        return new HttpEntity<>(config.bodyTemplate.isTextual() ? config.bodyTemplate.asText() : config.bodyTemplate.toString(), headers);
+    }
+
+    private JsonNode parseResponseBody(String responseBody) {
+        if (StringUtils.isEmpty(responseBody)) {
+            return JsonNodeFactory.instance.objectNode();
+        }
+        try {
+            return objectMapper.readTree(responseBody);
+        } catch (Exception ex) {
+            ObjectNode wrapper = JsonNodeFactory.instance.objectNode();
+            wrapper.put("rawBody", responseBody);
+            return wrapper;
+        }
+    }
+
+    private boolean isRemoteResponseSuccess(ResponseEntity<String> response, JsonNode bodyNode, ObjectNode responseConfig) {
+        if (!response.getStatusCode().is2xxSuccessful()) {
+            return false;
+        }
+        String successPath = textValue(responseConfig, "successPath");
+        if (StringUtils.isEmpty(successPath)) {
+            return true;
+        }
+        String actual = normalizeComparableValue(extractFirstText(bodyNode, successPath, Collections.emptyList()));
+        if (StringUtils.isEmpty(actual)) {
+            return false;
+        }
+        List<String> expectedValues = extractExpectedSuccessValues(responseConfig);
+        return expectedValues.stream().map(this::normalizeComparableValue).anyMatch(actual::equals);
+    }
+
+    private List<String> extractExpectedSuccessValues(ObjectNode responseConfig) {
+        if (responseConfig == null) {
+            return DEFAULT_REMOTE_SUCCESS_VALUES;
+        }
+        JsonNode successValues = responseConfig.get("successValues");
+        if (successValues == null || successValues.isNull()) {
+            return DEFAULT_REMOTE_SUCCESS_VALUES;
+        }
+        List<String> values = new ArrayList<>();
+        if (successValues.isArray()) {
+            successValues.forEach(item -> values.add(item.isTextual() ? item.asText() : item.toString()));
+        } else {
+            values.add(successValues.isTextual() ? successValues.asText() : successValues.toString());
+        }
+        return values.isEmpty() ? DEFAULT_REMOTE_SUCCESS_VALUES : values;
+    }
+
+    private List<JsonNode> extractItemNodes(JsonNode bodyNode, RemoteVariableConfig config) {
+        if (bodyNode == null || bodyNode.isNull()) {
+            return Collections.emptyList();
+        }
+        if (REMOTE_ADAPTER_ROOT_ARRAY.equals(config.adapterType) && bodyNode.isArray()) {
+            return limitPreviewRows(bodyNode);
+        }
+        if (REMOTE_ADAPTER_SINGLE.equals(config.adapterType)) {
+            return List.of(bodyNode);
+        }
+        String configuredListPath = firstNonBlank(textValue(config.responseConfig, "listPath"), config.dataPath);
+        List<String> candidates = new ArrayList<>();
+        if (StringUtils.isNotEmpty(configuredListPath)) {
+            candidates.add(configuredListPath);
+        }
+        if (config.adapterConfig != null) {
+            JsonNode listCandidates = config.adapterConfig.get("listPathCandidates");
+            if (listCandidates != null && listCandidates.isArray()) {
+                listCandidates.forEach(item -> {
+                    if (item != null && !item.isNull() && StringUtils.isNotEmpty(item.asText())) {
+                        candidates.add(item.asText());
+                    }
+                });
+            }
+        }
+        if (REMOTE_ADAPTER_PAGE.equals(config.adapterType)) {
+            candidates.addAll(List.of("data.rows", "data.list", "rows", "list"));
+        }
+        candidates.addAll(DEFAULT_REMOTE_LIST_PATHS);
+        for (String candidate : candidates) {
+            List<JsonNode> nodes = extractNodes(bodyNode, candidate);
+            if (!nodes.isEmpty()) {
+                JsonNode first = nodes.get(0);
+                if (first.isArray()) {
+                    return limitPreviewRows(first);
+                }
+                return nodes.size() > REMOTE_PREVIEW_ROW_LIMIT ? nodes.subList(0, REMOTE_PREVIEW_ROW_LIMIT) : nodes;
+            }
+        }
+        if (bodyNode.isArray()) {
+            return limitPreviewRows(bodyNode);
+        }
+        return List.of(bodyNode);
+    }
+
+    private List<JsonNode> limitPreviewRows(JsonNode arrayNode) {
+        List<JsonNode> rows = new ArrayList<>();
+        int size = Math.min(arrayNode.size(), REMOTE_PREVIEW_ROW_LIMIT);
+        for (int i = 0; i < size; i++) {
+            rows.add(arrayNode.get(i));
+        }
+        return rows;
+    }
+
+    private List<Map<String, Object>> buildPreviewRawRows(List<JsonNode> itemNodes) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (JsonNode itemNode : itemNodes) {
+            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+            row.put("sourceCode", extractFirstText(itemNode, "", List.of("sourceCode", "code", "id", "bizNo")));
+            row.put("sourceName", extractFirstText(itemNode, "", List.of("sourceName", "name", "label", "title")));
+            row.put("businessDomain", extractFirstText(itemNode, "", List.of("businessDomain", "companyCode", "domain")));
+            row.put("value", extractFirstText(itemNode, "", List.of("value", "amount", "code", "id")));
+            row.put("rawJson", toCompactJson(itemNode));
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private List<Map<String, Object>> buildPreviewMappedRows(RemoteVariableConfig config, List<JsonNode> itemNodes) {
+        List<Map<String, Object>> mappedRows = new ArrayList<>();
+        ObjectNode mappingConfig = config.mappingConfig;
+        for (JsonNode itemNode : itemNodes) {
+            LinkedHashMap<String, Object> mapped = new LinkedHashMap<>();
+            mapped.put("variableCode", config.variableCode);
+            mapped.put("sourceCode", resolveMappedValue(itemNode, mappingConfig, "sourceCode", List.of("sourceCode", "code", "id", "bizNo")));
+            mapped.put("sourceName", resolveMappedValue(itemNode, mappingConfig, "sourceName", List.of("sourceName", "name", "label", "title")));
+            mapped.put("businessDomain", resolveMappedValue(itemNode, mappingConfig, "businessDomain", List.of("businessDomain", "companyCode", "domain")));
+            mapped.put("mappedValue", resolveMappedValue(itemNode, mappingConfig, "mappedValue", List.of("value", "amount", "code", "id")));
+            mapped.put("dataPath", firstNonBlank(textValue(config.responseConfig, "listPath"), config.dataPath));
+            mapped.put("sourceSystem", config.sourceSystem);
+            mapped.put("rawJson", toCompactJson(itemNode));
+            mappedRows.add(mapped);
+        }
+        return mappedRows;
+    }
+
+    private String resolveMappedValue(JsonNode itemNode, ObjectNode mappingConfig, String fieldName, List<String> fallbackPaths) {
+        if (mappingConfig != null) {
+            JsonNode mappedNode = mappingConfig.get(fieldName);
+            if (mappedNode == null && mappingConfig.has("fields")) {
+                JsonNode fieldsNode = mappingConfig.get("fields");
+                if (fieldsNode != null && fieldsNode.isObject()) {
+                    mappedNode = fieldsNode.get(fieldName);
+                }
+            }
+            if (mappedNode != null && !mappedNode.isNull()) {
+                String path = mappedNode.isTextual() ? mappedNode.asText() : mappedNode.toString();
+                String value = extractFirstText(itemNode, path, Collections.emptyList());
+                if (StringUtils.isNotEmpty(value)) {
+                    return value;
+                }
+            }
+        }
+        return extractFirstText(itemNode, "", fallbackPaths);
+    }
+
+    private List<JsonNode> extractNodes(JsonNode root, String path) {
+        if (root == null || root.isNull()) {
+            return Collections.emptyList();
+        }
+        if (StringUtils.isEmpty(path)) {
+            return List.of(root);
+        }
+        List<JsonNode> current = new ArrayList<>();
+        current.add(root);
+        for (String rawSegment : path.split("\\.")) {
+            if (StringUtils.isEmpty(rawSegment)) {
+                continue;
+            }
+            List<JsonNode> next = new ArrayList<>();
+            for (JsonNode node : current) {
+                next.addAll(traverseSegment(node, rawSegment));
+            }
+            current = next;
+            if (current.isEmpty()) {
+                return Collections.emptyList();
+            }
+        }
+        return current;
+    }
+
+    private List<JsonNode> traverseSegment(JsonNode node, String segment) {
+        if (node == null || node.isNull()) {
+            return Collections.emptyList();
+        }
+        String fieldName = segment;
+        String arrayMarker = null;
+        int bracketIndex = segment.indexOf('[');
+        if (bracketIndex >= 0) {
+            fieldName = segment.substring(0, bracketIndex);
+            arrayMarker = segment.substring(bracketIndex);
+        }
+        JsonNode current = StringUtils.isEmpty(fieldName) ? node : node.get(fieldName);
+        if (current == null || current.isNull()) {
+            return Collections.emptyList();
+        }
+        if (arrayMarker == null) {
+            return List.of(current);
+        }
+        if (!current.isArray()) {
+            return Collections.emptyList();
+        }
+        if ("[]".equals(arrayMarker)) {
+            List<JsonNode> nodes = new ArrayList<>();
+            current.forEach(nodes::add);
+            return nodes;
+        }
+        if (arrayMarker.startsWith("[") && arrayMarker.endsWith("]")) {
+            String indexText = arrayMarker.substring(1, arrayMarker.length() - 1);
+            Integer index = parseInteger(indexText, -1);
+            if (index != null && index >= 0 && index < current.size()) {
+                return List.of(current.get(index));
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    private String extractFirstText(JsonNode root, String primaryPath, List<String> fallbackPaths) {
+        if (StringUtils.isNotEmpty(primaryPath)) {
+            List<JsonNode> nodes = extractNodes(root, primaryPath);
+            if (!nodes.isEmpty()) {
+                return toHttpParamValue(nodes.get(0));
+            }
+        }
+        for (String fallbackPath : fallbackPaths) {
+            List<JsonNode> nodes = extractNodes(root, fallbackPath);
+            if (!nodes.isEmpty()) {
+                return toHttpParamValue(nodes.get(0));
+            }
+        }
+        return "";
+    }
+
+    private String toHttpParamValue(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return "";
+        }
+        if (node.isTextual()) {
+            return node.asText();
+        }
+        if (node.isNumber() || node.isBoolean()) {
+            return node.asText();
+        }
+        return node.toString();
+    }
+
+    private String normalizeComparableValue(String value) {
+        return StringUtils.isEmpty(value) ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String toCompactJson(JsonNode node) {
+        try {
+            return objectMapper.writeValueAsString(node);
+        } catch (Exception ex) {
+            return node == null ? "" : node.toString();
+        }
+    }
+
+    private String textValue(JsonNode objectNode, String fieldName) {
+        if (objectNode == null || objectNode.isNull() || StringUtils.isEmpty(fieldName)) {
+            return "";
+        }
+        JsonNode node = objectNode.get(fieldName);
+        if (node == null || node.isNull()) {
+            return "";
+        }
+        return node.isTextual() ? node.asText() : node.toString();
+    }
+
+    private ObjectNode parseJsonObject(String json, String fieldLabel) {
+        JsonNode node = parseJsonNode(json, fieldLabel);
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (!node.isObject()) {
+            throw new ServiceException(fieldLabel + "必须是JSON对象");
+        }
+        return (ObjectNode) node;
+    }
+
+    private JsonNode parseJsonNode(String json, String fieldLabel) {
+        if (StringUtils.isEmpty(json)) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(json);
+        } catch (Exception ex) {
+            throw new ServiceException(fieldLabel + "格式不合法，请输入有效JSON")
+                    .setDetailMessage(ex.getMessage());
+        }
+    }
+
+    private void validateRemoteAuthConfig(String authType, String authConfigJson) {
+        String normalizedAuthType = StringUtils.defaultIfEmpty(authType, "NONE");
+        if ("NONE".equals(normalizedAuthType)) {
+            return;
+        }
+        ObjectNode authConfig = parseJsonObject(authConfigJson, "鉴权配置JSON");
+        if (authConfig == null || authConfig.isNull()) {
+            throw new ServiceException("第三方接口变量已启用鉴权，必须配置鉴权配置JSON");
+        }
+        normalizeAuthConfig(normalizedAuthType, authConfig);
+        switch (normalizedAuthType) {
+            case "BASIC" -> {
+                if (StringUtils.isEmpty(textValue(authConfig, "username"))) {
+                    throw new ServiceException("Basic鉴权必须配置 username");
+                }
+            }
+            case "BEARER" -> {
+                String token = firstNonBlank(textValue(authConfig, "token"), textValue(authConfig, "accessToken"));
+                if (StringUtils.isEmpty(token) || REMOTE_TOKEN_PLACEHOLDER.equals(token)) {
+                    throw new ServiceException("Bearer鉴权必须配置 token");
+                }
+            }
+            case "API_KEY" -> {
+                if (StringUtils.isEmpty(textValue(authConfig, "keyValue"))) {
+                    throw new ServiceException("API Key鉴权必须配置 keyValue");
+                }
+            }
+            case "COOKIE" -> {
+                boolean hasRawCookie = StringUtils.isNotEmpty(firstNonBlank(textValue(authConfig, "rawCookie"), textValue(authConfig, "cookie")));
+                boolean hasCookiePair = StringUtils.isNotEmpty(textValue(authConfig, "cookieName"))
+                        && StringUtils.isNotEmpty(textValue(authConfig, "cookieValue"));
+                if (!hasRawCookie && !hasCookiePair) {
+                    throw new ServiceException("Cookie鉴权必须配置 rawCookie 或 cookieName/cookieValue");
+                }
+            }
+            default -> {
+            }
+        }
+    }
+
+    private void normalizeAuthConfig(String authType, ObjectNode authConfig) {
+        if (authConfig == null || authConfig.isNull()) {
+            return;
+        }
+        if ("BEARER".equalsIgnoreCase(StringUtils.defaultIfEmpty(authType, "NONE"))) {
+            String token = firstNonBlank(textValue(authConfig, "token"), textValue(authConfig, "accessToken"));
+            if (StringUtils.startsWithIgnoreCase(token, "Bearer ")) {
+                String normalizedToken = StringUtils.trim(token.substring("Bearer ".length()));
+                authConfig.put("token", normalizedToken);
+                if (authConfig.has("accessToken")) {
+                    authConfig.put("accessToken", normalizedToken);
+                }
+            }
+        }
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (StringUtils.isNotEmpty(StringUtils.trim(value))) {
+                return StringUtils.trim(value);
+            }
+        }
+        return "";
+    }
+
+    private String normalizeBearerPrefix(String prefix) {
+        String normalized = StringUtils.trimToEmpty(prefix);
+        if (StringUtils.isEmpty(normalized)) {
+            return "";
+        }
+        return normalized.endsWith(" ") ? normalized : normalized + " ";
     }
 
     /**
@@ -792,10 +1587,25 @@ public class CostVariableServiceImpl implements ICostVariableService {
         if (StringUtils.isEmpty(variable.getSourceSystem())) {
             throw new ServiceException("第三方接口变量必须配置来源系统标识");
         }
+        if (!SUPPORTED_REMOTE_METHODS.contains(StringUtils.defaultIfEmpty(variable.getRequestMethod(), "GET").toUpperCase(Locale.ROOT))) {
+            throw new ServiceException("第三方接口变量的请求方式仅支持 GET、POST、PUT、DELETE");
+        }
+        if (!SUPPORTED_REMOTE_ADAPTERS.contains(StringUtils.defaultIfEmpty(variable.getAdapterType(), REMOTE_ADAPTER_STANDARD))) {
+            throw new ServiceException("第三方接口变量的适配器类型无效");
+        }
         validateDictValueExists(DICT_TYPE_AUTH_TYPE, StringUtils.defaultIfEmpty(variable.getAuthType(), "NONE"), "鉴权方式");
         validateDictValueExists(DICT_TYPE_SYNC_MODE, StringUtils.defaultIfEmpty(variable.getSyncMode(), "REALTIME"), "同步方式");
         validateDictValueExists(DICT_TYPE_CACHE_POLICY, StringUtils.defaultIfEmpty(variable.getCachePolicy(), "MANUAL_REFRESH"), "缓存策略");
         validateDictValueExists(DICT_TYPE_FALLBACK_POLICY, StringUtils.defaultIfEmpty(variable.getFallbackPolicy(), "FAIL_FAST"), "失败兜底策略");
+        parseJsonObject(variable.getQueryConfigJson(), "查询参数配置JSON");
+        parseJsonObject(variable.getRequestHeadersJson(), "请求头配置JSON");
+        parseJsonNode(variable.getAuthConfigJson(), "鉴权配置JSON");
+        parseJsonNode(variable.getBodyTemplateJson(), "请求体模板");
+        parseJsonObject(variable.getResponseConfigJson(), "响应提取配置JSON");
+        parseJsonObject(variable.getMappingConfigJson(), "字段映射配置JSON");
+        parseJsonObject(variable.getPageConfigJson(), "分页策略配置JSON");
+        parseJsonObject(variable.getAdapterConfigJson(), "适配器配置JSON");
+        validateRemoteAuthConfig(variable.getAuthType(), variable.getAuthConfigJson());
     }
 
     /**
@@ -1081,6 +1891,103 @@ public class CostVariableServiceImpl implements ICostVariableService {
         item.put("precisionScale", 2);
         item.put("sortNo", sortNo);
         return item;
+    }
+
+    private static final class RemoteVariableConfig {
+        private final String variableCode;
+        private final String remoteApi;
+        private final String sourceSystem;
+        private final String requestMethod;
+        private final String contentType;
+        private final ObjectNode queryConfig;
+        private final ObjectNode requestHeaders;
+        private final JsonNode bodyTemplate;
+        private final String authType;
+        private final JsonNode authConfig;
+        private final String dataPath;
+        private final ObjectNode responseConfig;
+        private final ObjectNode mappingConfig;
+        private final ObjectNode pageConfig;
+        private final String adapterType;
+        private final ObjectNode adapterConfig;
+        private final String syncMode;
+        private final String cachePolicy;
+        private final String fallbackPolicy;
+
+        private RemoteVariableConfig(String variableCode, String remoteApi, String sourceSystem, String requestMethod, String contentType,
+                                     ObjectNode queryConfig, ObjectNode requestHeaders, JsonNode bodyTemplate, String authType,
+                                     JsonNode authConfig, String dataPath, ObjectNode responseConfig, ObjectNode mappingConfig,
+                                     ObjectNode pageConfig, String adapterType, ObjectNode adapterConfig, String syncMode,
+                                     String cachePolicy, String fallbackPolicy) {
+            this.variableCode = variableCode;
+            this.remoteApi = remoteApi;
+            this.sourceSystem = sourceSystem;
+            this.requestMethod = requestMethod;
+            this.contentType = contentType;
+            this.queryConfig = queryConfig;
+            this.requestHeaders = requestHeaders;
+            this.bodyTemplate = bodyTemplate;
+            this.authType = authType;
+            this.authConfig = authConfig;
+            this.dataPath = dataPath;
+            this.responseConfig = responseConfig;
+            this.mappingConfig = mappingConfig;
+            this.pageConfig = pageConfig;
+            this.adapterType = adapterType;
+            this.adapterConfig = adapterConfig;
+            this.syncMode = syncMode;
+            this.cachePolicy = cachePolicy;
+            this.fallbackPolicy = fallbackPolicy;
+        }
+    }
+
+    private static final class RemoteInvokeResult {
+        private final boolean success;
+        private final String message;
+        private final int statusCode;
+        private final long elapsedMs;
+        private final JsonNode responseBody;
+        private final List<JsonNode> items;
+        private final String requestUrl;
+        private final List<String> requestHeaderNames;
+        private final boolean authHeaderApplied;
+        private final String authHeaderName;
+        private final boolean authTokenPresent;
+        private final String failureStage;
+        private final String errorType;
+        private final String diagnosticMessage;
+
+        private RemoteInvokeResult(boolean success, String message, int statusCode, long elapsedMs, JsonNode responseBody, List<JsonNode> items,
+                                   String requestUrl, List<String> requestHeaderNames, boolean authHeaderApplied, String authHeaderName, boolean authTokenPresent,
+                                   String failureStage, String errorType, String diagnosticMessage) {
+            this.success = success;
+            this.message = message;
+            this.statusCode = statusCode;
+            this.elapsedMs = elapsedMs;
+            this.responseBody = responseBody;
+            this.items = items;
+            this.requestUrl = requestUrl;
+            this.requestHeaderNames = requestHeaderNames;
+            this.authHeaderApplied = authHeaderApplied;
+            this.authHeaderName = authHeaderName;
+            this.authTokenPresent = authTokenPresent;
+            this.failureStage = failureStage;
+            this.errorType = errorType;
+            this.diagnosticMessage = diagnosticMessage;
+        }
+
+        int rowCount() {
+            return items == null ? 0 : items.size();
+        }
+
+        String responseMessage() {
+            return responseBody == null ? "" : responseBody.toString();
+        }
+
+        String responsePreview() {
+            String body = responseMessage();
+            return body.length() <= 400 ? body : body.substring(0, 400) + "...";
+        }
     }
 
     /**
