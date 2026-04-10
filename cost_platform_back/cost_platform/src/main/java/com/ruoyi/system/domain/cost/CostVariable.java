@@ -148,6 +148,43 @@ public class CostVariable extends BaseEntity {
     private String remoteApi;
 
     /**
+     * 请求方式
+     */
+    @Excel(name = "请求方式")
+    @TableField("request_method")
+    @Size(max = 16, message = "请求方式长度不能超过16个字符")
+    private String requestMethod;
+
+    /**
+     * 请求内容类型
+     */
+    @Excel(name = "内容类型")
+    @TableField("content_type")
+    @Size(max = 128, message = "内容类型长度不能超过128个字符")
+    private String contentType;
+
+    /**
+     * 查询参数JSON
+     */
+    @Excel(name = "查询参数配置")
+    @TableField("query_config_json")
+    private String queryConfigJson;
+
+    /**
+     * 自定义请求头JSON
+     */
+    @Excel(name = "请求头配置")
+    @TableField("request_headers_json")
+    private String requestHeadersJson;
+
+    /**
+     * 请求体模板JSON
+     */
+    @Excel(name = "请求体模板")
+    @TableField("body_template_json")
+    private String bodyTemplateJson;
+
+    /**
      * 鉴权方式
      */
     @Excel(name = "鉴权方式", dictType = "cost_variable_auth_type")
@@ -171,11 +208,40 @@ public class CostVariable extends BaseEntity {
     private String dataPath;
 
     /**
+     * 响应提取配置JSON
+     */
+    @Excel(name = "响应提取配置")
+    @TableField("response_config_json")
+    private String responseConfigJson;
+
+    /**
      * 字段映射配置JSON
      */
     @Excel(name = "字段映射配置")
     @TableField("mapping_config_json")
     private String mappingConfigJson;
+
+    /**
+     * 分页策略配置JSON
+     */
+    @Excel(name = "分页策略配置")
+    @TableField("page_config_json")
+    private String pageConfigJson;
+
+    /**
+     * 特殊适配器类型
+     */
+    @Excel(name = "适配器类型")
+    @TableField("adapter_type")
+    @Size(max = 32, message = "适配器类型长度不能超过32个字符")
+    private String adapterType;
+
+    /**
+     * 特殊适配器配置JSON
+     */
+    @Excel(name = "适配器配置")
+    @TableField("adapter_config_json")
+    private String adapterConfigJson;
 
     /**
      * 同步方式

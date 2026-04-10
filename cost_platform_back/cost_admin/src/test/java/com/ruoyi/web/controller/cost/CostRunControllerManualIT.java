@@ -1782,7 +1782,7 @@ class CostRunControllerManualIT {
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
         String stamp = LocalTime.now().format(STAMP_FORMATTER);
-        Long versionId = publishScene(sceneId, authorization, "婵犵妲呴崑鎾跺緤妤ｅ啯鍋嬮柣妯款嚙缁犵増淇婇妶鍛櫤闁稿孩鍨块弻锝夊籍閸偅顥栭梺鍝勵槷缁瑩骞冭ぐ鎺戠疀妞ゆ帊娴囩涵鈧梻?婵犵數濞€濞佳囧磹閹间礁鐤柟绋块椤曢亶鏌熼幍顔碱暭闁搞倕鍊块弻锟犲礃閵婏箑绐涘┑?" + stamp);
+        Long versionId = publishScene(sceneId, authorization, "结果台账详情与追溯查询回归-" + stamp);
         String billMonth = YearMonth.now().plusMonths(2).toString();
 
         JsonNode simulationTemplate = readData(mockMvc.perform(get("/cost/run/input-template")
@@ -2049,7 +2049,7 @@ class CostRunControllerManualIT {
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
         String stamp = LocalTime.now().format(STAMP_FORMATTER);
-        Long versionId = publishScene(sceneId, authorization, "婵犵妲呴崑鎾跺緤妤ｅ啯鍋嬮柣妯款嚙缁犵増淇婇妶鍛櫤闁稿孩鍨块弻锝夊籍閸偅顥栭梺鍝勵槷缁瑩骞冭ぐ鎺戠疀妞ゆ帊娴囩涵鈧梻?缂傚倸鍊搁崐椋庣矆娴ｈ　鍋撳鐓庡⒋妤犵偛鍟幆鏃堟晲閸屾矮澹曢柣鐔哥懃鐎氼噣鎮￠鐐寸厽婵犲﹤楠搁悘锕傛煙閾忣偅绀嬬€殿噮鍣ｅ畷鍫曞煛閸屻倕鏅?" + stamp);
+        Long versionId = publishScene(sceneId, authorization, "结果台账大表防宽查回归-" + stamp);
         String billMonth = YearMonth.now().plusMonths(2).toString();
 
         JsonNode publishDetail = readData(mockMvc.perform(get("/cost/publish/{versionId}", versionId)

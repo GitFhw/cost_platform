@@ -239,13 +239,27 @@
           </div>
         </el-form-item>
         <template v-if="form.sourceType === 'REMOTE'">
+          <el-alert title="第三方接口变量采用六层配置模型：请求定义、鉴权定义、响应提取、字段映射、分页策略、特殊适配。" type="info" :closable="false" show-icon class="mb12" />
+          <div class="variable-center__drawer-actions variable-center__drawer-actions--remote">
+            <el-button type="primary" plain icon="Connection" @click="handleTestRemoteDraft">测试接口</el-button>
+            <el-button type="success" plain icon="View" @click="handlePreviewRemoteDraft">预览数据</el-button>
+          </div>
           <el-row :gutter="14">
-            <el-col :span="12"><el-form-item label="来源系统" prop="sourceSystem"><el-input v-model="form.sourceSystem" placeholder="如 WMS / ERP / TMS" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="鉴权方式" prop="authType"><el-select v-model="form.authType" style="width: 100%"><el-option v-for="item in authTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="来源系统" prop="sourceSystem"><el-input v-model="form.sourceSystem" placeholder="如 WMS / ERP / TMS" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="请求方式" prop="requestMethod"><el-select v-model="form.requestMethod" style="width: 100%"><el-option v-for="item in requestMethodOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="适配器类型" prop="adapterType"><el-select v-model="form.adapterType" style="width: 100%"><el-option v-for="item in adapterTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="第三方接口" prop="remoteApi"><el-input v-model="form.remoteApi" placeholder="http/https 接口地址" /></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="鉴权配置JSON" prop="authConfigJson"><el-input v-model="form.authConfigJson" type="textarea" :rows="3" /></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="字段映射路径" prop="dataPath"><el-input v-model="form.dataPath" placeholder="如 data.items[].value" /></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="映射配置JSON" prop="mappingConfigJson"><el-input v-model="form.mappingConfigJson" type="textarea" :rows="4" /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="内容类型" prop="contentType"><el-select v-model="form.contentType" style="width: 100%" filterable allow-create default-first-option><el-option v-for="item in contentTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="查询参数JSON" prop="queryConfigJson"><el-input v-model="form.queryConfigJson" type="textarea" :rows="3" placeholder='如 {"pageNum":1,"pageSize":20}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="请求头JSON" prop="requestHeadersJson"><el-input v-model="form.requestHeadersJson" type="textarea" :rows="4" placeholder='如 {"Referer":"...","User-Agent":"...","Cookie":"..."}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="请求体模板" prop="bodyTemplateJson"><el-input v-model="form.bodyTemplateJson" type="textarea" :rows="4" placeholder='POST/PUT 时可配置 JSON 请求体或原始文本模板' /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="鉴权方式" prop="authType"><el-select v-model="form.authType" style="width: 100%"><el-option v-for="item in authTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="字段映射路径" prop="dataPath"><el-input v-model="form.dataPath" placeholder="如 rows / data.items[]" /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="鉴权配置JSON" prop="authConfigJson"><el-input v-model="form.authConfigJson" type="textarea" :rows="4" placeholder='如 {"token":"..."} / {"username":"...","password":"..."}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="响应提取配置JSON" prop="responseConfigJson"><el-input v-model="form.responseConfigJson" type="textarea" :rows="4" placeholder='如 {"successPath":"code","successValues":[200],"messagePath":"msg","listPath":"rows","totalPath":"total"}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="映射配置JSON" prop="mappingConfigJson"><el-input v-model="form.mappingConfigJson" type="textarea" :rows="4" placeholder='如 {"sourceCode":"code","sourceName":"name","mappedValue":"price"}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="分页策略JSON" prop="pageConfigJson"><el-input v-model="form.pageConfigJson" type="textarea" :rows="3" placeholder='如 {"pageNumKey":"pageNum","pageSizeKey":"pageSize","previewPageNum":1,"previewPageSize":20}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="适配器配置JSON" prop="adapterConfigJson"><el-input v-model="form.adapterConfigJson" type="textarea" :rows="3" placeholder='如 {"listPathCandidates":["data.rows","rows"]}' /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="同步方式" prop="syncMode"><el-select v-model="form.syncMode" style="width: 100%"><el-option v-for="item in syncModeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="缓存策略" prop="cachePolicy"><el-select v-model="form.cachePolicy" style="width: 100%"><el-option v-for="item in cachePolicyOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="失败兜底" prop="fallbackPolicy"><el-select v-model="form.fallbackPolicy" style="width: 100%"><el-option v-for="item in fallbackPolicyOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
@@ -277,14 +291,25 @@
       </template>
     </el-drawer>
 
-    <el-dialog title="接口测试" v-model="testOpen" width="480px" append-to-body>
-      <el-descriptions :column="1" border v-if="testResult">
-        <el-descriptions-item label="结果"><el-tag :type="testResult.success ? 'success' : 'danger'">{{ testResult.success ? '通过' : '失败' }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="说明">{{ testResult.message }}</el-descriptions-item>
-        <el-descriptions-item label="来源系统">{{ testResult.sourceSystem || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="接口地址">{{ testResult.remoteApi || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="鉴权方式">{{ resolveDictLabel(authTypeOptions, testResult.authType) }}</el-descriptions-item>
-      </el-descriptions>
+    <el-dialog title="接口测试" v-model="testOpen" width="520px" append-to-body>
+      <div v-if="testResult" class="variable-center__test-dialog">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="结果"><el-tag :type="testResult.success ? 'success' : 'danger'">{{ testResult.success ? '通过' : '失败' }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="说明">{{ testResult.message }}</el-descriptions-item>
+          <el-descriptions-item label="来源系统">{{ testResult.sourceSystem || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="接口地址">{{ testResult.remoteApi || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="请求方式">{{ resolveRemoteOptionLabel(requestMethodOptions, testResult.requestMethod) }}</el-descriptions-item>
+          <el-descriptions-item label="鉴权方式">{{ resolveDictLabel(authTypeOptions, testResult.authType) }}</el-descriptions-item>
+          <el-descriptions-item label="HTTP状态">{{ testResult.statusCode ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="耗时">{{ testResult.elapsedMs != null ? `${testResult.elapsedMs} ms` : '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="!testResult.success" label="失败阶段">{{ testResult.failureStage || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="!testResult.success" label="诊断信息">{{ testResult.diagnosticMessage || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <div v-if="testResult.responsePreview" class="variable-center__test-preview">
+          <div class="variable-center__test-preview-label">响应预览</div>
+          <pre class="variable-center__test-preview-content">{{ testResult.responsePreview }}</pre>
+        </div>
+      </div>
     </el-dialog>
 
     <el-dialog title="数据预览" v-model="previewOpen" width="880px" append-to-body>
@@ -294,6 +319,7 @@
             <el-table-column prop="sourceCode" label="源编码" />
             <el-table-column prop="sourceName" label="源名称" />
             <el-table-column prop="value" label="源值" />
+            <el-table-column prop="rawJson" label="原始JSON" min-width="220" show-overflow-tooltip />
           </el-table>
         </el-col>
         <el-col :span="12">
@@ -301,14 +327,21 @@
             <el-table-column prop="variableCode" label="变量编码" />
             <el-table-column prop="mappedValue" label="映射值" />
             <el-table-column prop="dataPath" label="映射路径" />
+            <el-table-column prop="rawJson" label="映射依据" min-width="220" show-overflow-tooltip />
           </el-table>
         </el-col>
       </el-row>
       <el-descriptions v-if="previewResult" :column="2" border class="mt12">
         <el-descriptions-item label="来源系统">{{ previewResult.sourceSystem || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="请求方式">{{ resolveRemoteOptionLabel(requestMethodOptions, previewResult.requestMethod) }}</el-descriptions-item>
         <el-descriptions-item label="同步方式">{{ resolveDictLabel(syncModeOptions, previewResult.syncMode) }}</el-descriptions-item>
+        <el-descriptions-item label="适配器类型">{{ resolveRemoteOptionLabel(adapterTypeOptions, previewResult.adapterType) }}</el-descriptions-item>
         <el-descriptions-item label="缓存策略">{{ resolveDictLabel(cachePolicyOptions, previewResult.cachePolicy) }}</el-descriptions-item>
         <el-descriptions-item label="失败兜底">{{ resolveDictLabel(fallbackPolicyOptions, previewResult.fallbackPolicy) }}</el-descriptions-item>
+        <el-descriptions-item label="HTTP状态">{{ previewResult.statusCode ?? '-' }}</el-descriptions-item>
+        <el-descriptions-item label="返回行数">{{ previewResult.rowCount ?? 0 }}</el-descriptions-item>
+        <el-descriptions-item label="耗时">{{ previewResult.elapsedMs != null ? `${previewResult.elapsedMs} ms` : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="响应提示">{{ previewResult.responseMessage || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
 
@@ -557,6 +590,9 @@
           <el-descriptions-item label="来源系统">{{ detailInfo.sourceSystem || '-' }}</el-descriptions-item>
           <el-descriptions-item label="字典类型">{{ resolveDictTypeLabel(detailInfo.dictType) }}</el-descriptions-item>
           <el-descriptions-item label="第三方接口">{{ detailInfo.remoteApi || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="请求方式">{{ resolveRemoteOptionLabel(requestMethodOptions, detailInfo.requestMethod) }}</el-descriptions-item>
+          <el-descriptions-item label="内容类型">{{ detailInfo.contentType || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="适配器类型">{{ resolveRemoteOptionLabel(adapterTypeOptions, detailInfo.adapterType) }}</el-descriptions-item>
           <el-descriptions-item label="鉴权方式">{{ resolveDictLabel(authTypeOptions, detailInfo.authType) }}</el-descriptions-item>
           <el-descriptions-item label="数据路径">{{ detailInfo.dataPath || '-' }}</el-descriptions-item>
           <el-descriptions-item label="同步方式">{{ resolveDictLabel(syncModeOptions, detailInfo.syncMode) }}</el-descriptions-item>
@@ -566,8 +602,14 @@
           <el-descriptions-item label="公式编码">{{ detailInfo.formulaCode || '-' }}</el-descriptions-item>
           <el-descriptions-item label="中文公式">{{ detailInfo.businessFormula || '-' }}</el-descriptions-item>
           <el-descriptions-item label="公式表达式">{{ detailInfo.formulaExpr || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="查询参数JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.queryConfigJson) }}</pre></el-descriptions-item>
+          <el-descriptions-item label="请求头JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.requestHeadersJson) }}</pre></el-descriptions-item>
+          <el-descriptions-item label="请求体模板"><pre class="variable-detail__json">{{ formatJson(detailInfo.bodyTemplateJson) }}</pre></el-descriptions-item>
           <el-descriptions-item label="鉴权配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.authConfigJson) }}</pre></el-descriptions-item>
+          <el-descriptions-item label="响应提取配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.responseConfigJson) }}</pre></el-descriptions-item>
           <el-descriptions-item label="映射配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.mappingConfigJson) }}</pre></el-descriptions-item>
+          <el-descriptions-item label="分页策略JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.pageConfigJson) }}</pre></el-descriptions-item>
+          <el-descriptions-item label="适配器配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.adapterConfigJson) }}</pre></el-descriptions-item>
           <el-descriptions-item label="备注">{{ detailInfo.remark || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -666,6 +708,23 @@ const cachePolicyOptions = ref([])
 const fallbackPolicyOptions = ref([])
 const formulaOptions = ref([])
 const dictTypeOptions = ref([])
+const requestMethodOptions = [
+  { label: 'GET', value: 'GET' },
+  { label: 'POST', value: 'POST' },
+  { label: 'PUT', value: 'PUT' },
+  { label: 'DELETE', value: 'DELETE' }
+]
+const contentTypeOptions = [
+  { label: 'application/json', value: 'application/json' },
+  { label: 'application/x-www-form-urlencoded', value: 'application/x-www-form-urlencoded' },
+  { label: 'text/plain', value: 'text/plain' }
+]
+const adapterTypeOptions = [
+  { label: '标准对象', value: 'STANDARD' },
+  { label: '根节点数组', value: 'ROOT_ARRAY' },
+  { label: '分页包装对象', value: 'PAGE_ENVELOPE' },
+  { label: '单对象响应', value: 'SINGLE_OBJECT' }
+]
 
 const governanceOpen = ref(false)
 const governanceLoading = ref(false)
@@ -722,6 +781,27 @@ const validateDictType = (_rule, value, callback) => {
   callback()
 }
 
+const validateRemoteRequestMethod = (_rule, value, callback) => {
+  if (data.form.sourceType === 'REMOTE' && !value) {
+    callback(new Error('请求方式不能为空'))
+    return
+  }
+  callback()
+}
+
+const validateRemoteJson = fieldLabel => (_rule, value, callback) => {
+  if (data.form.sourceType !== 'REMOTE' || !value) {
+    callback()
+    return
+  }
+  try {
+    JSON.parse(value)
+    callback()
+  } catch (error) {
+    callback(new Error(`${fieldLabel}格式不合法，请输入有效 JSON`))
+  }
+}
+
 const data = reactive({
   queryParams: { pageNum: 1, pageSize: 10, sceneId: undefined, groupId: undefined, variableCode: undefined, variableName: undefined, sourceType: undefined, sourceSystem: undefined },
   form: {},
@@ -734,7 +814,15 @@ const data = reactive({
     variableName: [{ required: true, message: '变量名称不能为空', trigger: 'blur' }],
     variableType: [{ required: true, message: '变量类型不能为空', trigger: 'change' }],
     sourceType: [{ required: true, message: '来源类型不能为空', trigger: 'change' }],
+    requestMethod: [{ validator: validateRemoteRequestMethod, trigger: 'change' }],
     dictType: [{ validator: validateDictType, trigger: 'change' }],
+    queryConfigJson: [{ validator: validateRemoteJson('查询参数JSON'), trigger: 'blur' }],
+    requestHeadersJson: [{ validator: validateRemoteJson('请求头JSON'), trigger: 'blur' }],
+    authConfigJson: [{ validator: validateRemoteJson('鉴权配置JSON'), trigger: 'blur' }],
+    responseConfigJson: [{ validator: validateRemoteJson('响应提取配置JSON'), trigger: 'blur' }],
+    mappingConfigJson: [{ validator: validateRemoteJson('映射配置JSON'), trigger: 'blur' }],
+    pageConfigJson: [{ validator: validateRemoteJson('分页策略JSON'), trigger: 'blur' }],
+    adapterConfigJson: [{ validator: validateRemoteJson('适配器配置JSON'), trigger: 'blur' }],
     status: [{ required: true, message: '状态不能为空', trigger: 'change' }]
   },
   copyRules: {
@@ -971,10 +1059,19 @@ function resetFormModel() {
     sourceSystem: undefined,
     dictType: undefined,
     remoteApi: undefined,
+    requestMethod: 'GET',
+    contentType: 'application/json',
+    queryConfigJson: undefined,
+    requestHeadersJson: undefined,
+    bodyTemplateJson: undefined,
     authType: 'NONE',
     authConfigJson: undefined,
     dataPath: undefined,
+    responseConfigJson: undefined,
     mappingConfigJson: undefined,
+    pageConfigJson: undefined,
+    adapterType: 'STANDARD',
+    adapterConfigJson: undefined,
     syncMode: 'REALTIME',
     cachePolicy: 'MANUAL_REFRESH',
     fallbackPolicy: 'FAIL_FAST',
@@ -1031,7 +1128,7 @@ async function handleUpdate(row) {
   await loadBaseOptions()
   resetFormModel()
   const response = await getVariable(row?.variableId || ids.value[0])
-  form.value = { ...response.data }
+  form.value = { ...form.value, ...response.data }
   initialStatus.value = response.data?.status
   formGroupOptions.value = await loadGroups(form.value.sceneId)
   await loadFormulaOptions(form.value.sceneId)
@@ -1123,10 +1220,35 @@ function currentRow() {
   return variableList.value.find(item => item.variableId === ids.value[0])
 }
 
+function buildRemoteRequestPayload(row) {
+  return {
+    variableId: row.variableId,
+    variableCode: row.variableCode,
+    sourceSystem: row.sourceSystem,
+    remoteApi: row.remoteApi,
+    requestMethod: row.requestMethod,
+    contentType: row.contentType,
+    queryConfigJson: row.queryConfigJson,
+    requestHeadersJson: row.requestHeadersJson,
+    bodyTemplateJson: row.bodyTemplateJson,
+    authType: row.authType,
+    authConfigJson: row.authConfigJson,
+    dataPath: row.dataPath,
+    responseConfigJson: row.responseConfigJson,
+    mappingConfigJson: row.mappingConfigJson,
+    pageConfigJson: row.pageConfigJson,
+    adapterType: row.adapterType,
+    adapterConfigJson: row.adapterConfigJson,
+    syncMode: row.syncMode,
+    cachePolicy: row.cachePolicy,
+    fallbackPolicy: row.fallbackPolicy
+  }
+}
+
 async function handleTestRemote() {
   const row = currentRow()
   if (!row) return
-  const response = await testVariableRemote({ remoteApi: row.remoteApi, authType: row.authType, sourceSystem: row.sourceSystem })
+  const response = await testVariableRemote(buildRemoteRequestPayload(row))
   testResult.value = response.data
   testOpen.value = true
 }
@@ -1134,15 +1256,37 @@ async function handleTestRemote() {
 async function handlePreviewRemote() {
   const row = currentRow()
   if (!row) return
-  const response = await previewVariableRemote({
-    variableId: row.variableId,
-    dataPath: row.dataPath,
-    variableCode: row.variableCode,
-    sourceSystem: row.sourceSystem,
-    syncMode: row.syncMode,
-    cachePolicy: row.cachePolicy,
-    fallbackPolicy: row.fallbackPolicy
-  })
+  const response = await previewVariableRemote(buildRemoteRequestPayload(row))
+  previewResult.value = response.data
+  previewOpen.value = true
+}
+
+async function validateRemoteFormBeforeInvoke() {
+  await proxy.$refs.variableRef.validateField([
+    'sourceSystem',
+    'remoteApi',
+    'requestMethod',
+    'authConfigJson',
+    'queryConfigJson',
+    'requestHeadersJson',
+    'bodyTemplateJson',
+    'responseConfigJson',
+    'mappingConfigJson',
+    'pageConfigJson',
+    'adapterConfigJson'
+  ])
+}
+
+async function handleTestRemoteDraft() {
+  await validateRemoteFormBeforeInvoke()
+  const response = await testVariableRemote(buildRemoteRequestPayload(form.value))
+  testResult.value = response.data
+  testOpen.value = true
+}
+
+async function handlePreviewRemoteDraft() {
+  await validateRemoteFormBeforeInvoke()
+  const response = await previewVariableRemote(buildRemoteRequestPayload(form.value))
   previewResult.value = response.data
   previewOpen.value = true
 }
@@ -1199,6 +1343,11 @@ async function submitImportData() {
 
 function downloadImportTemplate() {
   proxy.download('cost/variable/importTemplate', {}, 'cost_variable_import_template.xlsx')
+}
+
+function resolveRemoteOptionLabel(options, value) {
+  const target = options.find(item => item.value === value)
+  return target?.label || value || '-'
 }
 
 async function handleCopy(row) {
@@ -1347,6 +1496,10 @@ getList()
 .variable-center__drawer-tip { margin-bottom: 16px; padding: 12px 14px; border-radius: 12px; color: var(--el-text-color-regular); background: color-mix(in srgb, var(--el-color-primary-light-9) 32%, var(--el-bg-color-overlay)); line-height: 1.8; }
 .variable-center__drawer-tip--compact { margin-top: 10px; margin-bottom: 0; padding: 10px 12px; font-size: 12px; }
 .variable-center__drawer-actions { display: flex; justify-content: flex-end; margin: -6px 0 10px; }
+.variable-center__test-dialog { display: grid; gap: 12px; }
+.variable-center__test-preview { display: grid; gap: 8px; }
+.variable-center__test-preview-label { font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); }
+.variable-center__test-preview-content { margin: 0; padding: 12px 14px; max-height: 160px; overflow: auto; border-radius: 12px; background: var(--el-fill-color-light); color: var(--el-text-color-regular); line-height: 1.7; white-space: pre-wrap; word-break: break-word; font-family: Consolas, Monaco, monospace; }
 .variable-center__formula-preview { width: 100%; padding: 12px 14px; border-radius: 12px; background: var(--el-fill-color-light); line-height: 1.7; color: var(--el-text-color-regular); }
 .variable-detail { display: grid; gap: 14px; }
 .variable-detail__header { padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 12px; }

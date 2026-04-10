@@ -25,8 +25,8 @@
           >
             打开核算字典
           </el-button>
-          <el-tag type="info">业务域口径统一管理，便于跨场景复用与治理</el-tag>
-          <el-tag v-if="currentSceneInfo.sceneId" type="success">
+          <el-tag type="info" class="scene-center__hero-tag">业务域口径统一管理，便于跨场景复用与治理</el-tag>
+          <el-tag v-if="currentSceneInfo.sceneId" type="success" class="scene-center__hero-tag">
             当前工作场景：{{ currentSceneInfo.sceneCode }} / {{ currentSceneInfo.sceneName }}
           </el-tag>
           <el-button
@@ -1080,6 +1080,14 @@ getList()
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 18px;
+}
+
+.scene-center__hero-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 15px;
+  line-height: 1.2;
 }
 
 .scene-center__hero-note {
