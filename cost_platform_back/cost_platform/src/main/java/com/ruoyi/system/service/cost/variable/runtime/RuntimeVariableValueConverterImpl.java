@@ -6,14 +6,12 @@ import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.service.impl.cost.CostRunServiceImpl;
 import org.springframework.stereotype.Service;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.math.BigDecimal;
 
 @Service
 public class RuntimeVariableValueConverterImpl implements RuntimeVariableValueConverter {
-    private static final String DATA_TYPE_NUMBER = "NUMBER";
-    private static final String DATA_TYPE_BOOLEAN = "BOOLEAN";
-    private static final String DATA_TYPE_JSON = "JSON";
-
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override

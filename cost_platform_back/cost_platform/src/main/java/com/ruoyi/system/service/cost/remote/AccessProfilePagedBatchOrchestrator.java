@@ -6,6 +6,8 @@ import com.ruoyi.system.domain.cost.CostCalcInputBatch;
 import com.ruoyi.system.service.cost.remote.AccessProfileInputMappingService.InputBuildContext;
 import org.springframework.stereotype.Service;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.util.Map;
 
 /**
@@ -13,10 +15,6 @@ import java.util.Map;
  */
 @Service
 public class AccessProfilePagedBatchOrchestrator {
-    private static final String INPUT_BATCH_STATUS_LOADING = "LOADING";
-    private static final String INPUT_BATCH_STATUS_PARTIAL = "PARTIAL";
-    private static final String INPUT_BATCH_STATUS_READY = "READY";
-
     private final AccessProfileFetchPageProcessor pageProcessor;
     private final AccessProfileFetchSupport fetchSupport;
     private final AccessProfileBatchProgressService progressService;

@@ -11,6 +11,8 @@ import com.ruoyi.system.mapper.cost.CostCalcInputBatchItemMapper;
 import com.ruoyi.system.mapper.cost.CostCalcInputBatchMapper;
 import org.springframework.stereotype.Service;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.util.Date;
 import java.util.Objects;
 
@@ -19,8 +21,6 @@ import java.util.Objects;
  */
 @Service
 public class AccessProfileInputBatchService {
-    private static final String INPUT_BATCH_STATUS_READY = "READY";
-
     private final CostCalcInputBatchMapper calcInputBatchMapper;
     private final CostCalcInputBatchItemMapper calcInputBatchItemMapper;
 

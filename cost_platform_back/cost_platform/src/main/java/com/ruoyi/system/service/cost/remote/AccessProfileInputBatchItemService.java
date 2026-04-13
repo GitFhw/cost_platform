@@ -11,6 +11,8 @@ import com.ruoyi.system.mapper.cost.CostCalcInputBatchItemMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -20,7 +22,6 @@ import java.util.stream.Collectors;
 @Service
 public class AccessProfileInputBatchItemService {
     private static final int DEFAULT_INPUT_BATCH_INSERT_SIZE = 200;
-    private static final String INPUT_BATCH_STATUS_READY = "READY";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 

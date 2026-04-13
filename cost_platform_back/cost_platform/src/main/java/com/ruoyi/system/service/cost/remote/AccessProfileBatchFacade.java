@@ -12,6 +12,8 @@ import com.ruoyi.system.service.cost.remote.AccessProfileInputMappingService.Inp
 import org.apache.commons.lang3.math.NumberUtils;
 import org.springframework.stereotype.Service;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,9 +24,6 @@ import java.util.function.Function;
  */
 @Service
 public class AccessProfileBatchFacade {
-    private static final String ACCESS_SOURCE_TYPE_HTTP_API = "HTTP_API";
-    private static final String INPUT_BATCH_STATUS_LOADING = "LOADING";
-
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AccessProfilePayloadFetchService payloadFetchService;
     private final AccessProfileFetchSupport fetchSupport;

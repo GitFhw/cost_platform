@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruoyi.common.utils.StringUtils;
 import org.springframework.stereotype.Service;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.util.*;
 
 /**
@@ -222,9 +224,9 @@ public class AccessProfileInputMappingService {
 
     private String buildTemplateBizNo(String taskType, int index) {
         String prefix;
-        if ("FORMAL_BATCH".equalsIgnoreCase(taskType)) {
+        if (TASK_TYPE_FORMAL_BATCH.equalsIgnoreCase(taskType)) {
             prefix = "BATCH";
-        } else if ("FORMAL_SINGLE".equalsIgnoreCase(taskType)) {
+        } else if (TASK_TYPE_FORMAL_SINGLE.equalsIgnoreCase(taskType)) {
             prefix = "FORMAL";
         } else {
             prefix = "SIM";

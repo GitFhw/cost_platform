@@ -19,6 +19,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -33,7 +35,6 @@ import java.util.stream.Collectors;
  */
 @Service
 public class CostPublishServiceImpl implements ICostPublishService {
-    private static final String STATUS_ENABLED = "0";
     private static final String VERSION_STATUS_PUBLISHED = "PUBLISHED";
     private static final String VERSION_STATUS_ACTIVE = "ACTIVE";
     private static final String VERSION_STATUS_ROLLED_BACK = "ROLLED_BACK";

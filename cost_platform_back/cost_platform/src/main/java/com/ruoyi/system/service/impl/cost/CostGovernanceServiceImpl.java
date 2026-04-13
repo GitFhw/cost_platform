@@ -24,6 +24,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -37,12 +39,6 @@ import java.util.stream.Collectors;
  */
 @Service
 public class CostGovernanceServiceImpl implements ICostGovernanceService {
-    private static final String PERIOD_STATUS_NOT_STARTED = "NOT_STARTED";
-    private static final String PERIOD_STATUS_SEALED = "SEALED";
-    private static final String RECALC_STATUS_PENDING = "PENDING_APPROVAL";
-    private static final String RECALC_STATUS_APPROVED = "APPROVED";
-    private static final String RECALC_STATUS_REJECTED = "REJECTED";
-    private static final String RECALC_STATUS_RUNNING = "RUNNING";
     private static final String RUNTIME_CACHE_PREFIX = "cost:runtime:snapshot:";
     private static final String CHECK_STATUS_PASS = "PASS";
     private static final String CHECK_STATUS_FAIL = "FAIL";
@@ -89,7 +85,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
         LinkedHashMap<String, Object> stats = new LinkedHashMap<>();
         stats.put("periodCount", periods.size());
         stats.put("sealedCount", periods.stream().filter(item -> PERIOD_STATUS_SEALED.equals(item.getPeriodStatus())).count());
-        stats.put("runningCount", periods.stream().filter(item -> "IN_PROGRESS".equals(item.getPeriodStatus())).count());
+        stats.put("runningCount", periods.stream().filter(item -> PERIOD_STATUS_IN_PROGRESS.equals(item.getPeriodStatus())).count());
         stats.put("recalcCount", recalcOrderMapper.selectCount(Wrappers.<CostRecalcOrder>lambdaQuery()
                 .eq(sceneId != null, CostRecalcOrder::getSceneId, sceneId)));
         return stats;
@@ -266,7 +262,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
         submitBo.setSceneId(before.getSceneId());
         submitBo.setVersionId(before.getVersionId());
         submitBo.setBillMonth(before.getBillMonth());
-        submitBo.setTaskType(details.size() == 1 ? "FORMAL_SINGLE" : "FORMAL_BATCH");
+        submitBo.setTaskType(details.size() == 1 ? TASK_TYPE_FORMAL_SINGLE : TASK_TYPE_FORMAL_BATCH);
         submitBo.setRequestNo(firstNonBlank(before.getRequestNo(), "RECALC-" + before.getRecalcId()));
         submitBo.setRemark("重算申请#" + before.getRecalcId());
         submitBo.setInputJson(details.size() == 1 ? inputs.get(0) : "[" + String.join(",", inputs) + "]");
