@@ -114,6 +114,63 @@ class CostFormulaControllerManualIT {
         }
     }
 
+    @Test
+    void shouldReturnExpressionAnalysisForFormulaTest() throws Exception {
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+
+        ObjectNode testBody = objectMapper.createObjectNode();
+        testBody.put("formulaCode", "TEMP_ANALYSIS");
+        testBody.put("formulaExpr", "round(I.baseAmount + coalesce(V.adjustAmount, 0), 2)");
+        testBody.put("namespaceScope", "I,V");
+        testBody.put("inputJson", "{\"I\":{\"baseAmount\":100},\"V\":{\"adjustAmount\":23.456}}");
+
+        JsonNode response = readBody(mockMvc.perform(post("/cost/formula/test")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(testBody)))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(response.path("code").asInt()).isEqualTo(200);
+        JsonNode analysis = response.path("data").path("analysis");
+        assertThat(analysis.path("namespaceReferences").toString()).contains("I", "V");
+        assertThat(analysis.path("disallowedNamespaces").isArray()).isTrue();
+        assertThat(analysis.path("disallowedNamespaces").size()).isZero();
+        assertThat(analysis.path("functionReferences").toString()).contains("round", "coalesce");
+    }
+
+    @Test
+    void shouldRejectFormulaExpressionOutsideNamespaceScope() throws Exception {
+        Long sceneId = requireSceneId();
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+
+        ObjectNode createBody = objectMapper.createObjectNode();
+        createBody.put("sceneId", sceneId);
+        createBody.put("formulaCode", "IT_SCOPE_" + System.currentTimeMillis());
+        createBody.put("formulaName", "命名空间校验");
+        createBody.put("formulaDesc", "验证命名空间范围限制");
+        createBody.put("businessFormula", "V.workDays + 1");
+        createBody.put("formulaExpr", "V.workDays + 1");
+        createBody.put("assetType", "FORMULA");
+        createBody.put("workbenchMode", "EXPERT");
+        createBody.put("workbenchPattern", "IF_ELSE");
+        createBody.put("templateCode", "");
+        createBody.put("namespaceScope", "I");
+        createBody.put("returnType", "NUMBER");
+        createBody.put("status", "0");
+        createBody.put("sortNo", 10);
+
+        JsonNode response = readBody(mockMvc.perform(post("/cost/formula")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(createBody)))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertThat(response.path("code").asInt()).isNotEqualTo(200);
+        assertThat(response.path("msg").asText()).contains("未授权命名空间");
+    }
+
     private Long requireSceneId() {
         CostScene scene = sceneMapper.selectOne(Wrappers.<CostScene>lambdaQuery()
                 .eq(CostScene::getSceneCode, SCENE_CODE));

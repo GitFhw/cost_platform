@@ -2,7 +2,9 @@ package com.ruoyi.system.service.impl.cost;
 
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.system.domain.vo.CostExpressionAnalysisVo;
 import com.ruoyi.system.service.cost.ICostExpressionService;
+import com.ruoyi.system.service.cost.engine.FormulaFunctionRegistry;
 import org.springframework.context.expression.MapAccessor;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
@@ -17,18 +19,19 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-/**
- * 统一表达式执行服务实现。
- *
- * <p>线程七将公式实验室、公式变量和规则金额公式统一接到该服务，
- * 由这里负责语法校验、函数改写、缓存编译和 V/C/I/F/T 命名空间上下文收口。</p>
- *
- * @author HwFan
- */
 @Service
 public class CostExpressionServiceImpl implements ICostExpressionService {
     private static final int DIVIDE_SCALE = 16;
+    private static final String DEFAULT_NAMESPACE_SCOPE = "V,C,I,F,T";
+    private static final Pattern NAMESPACE_REFERENCE_PATTERN =
+            Pattern.compile("\\b([A-Z])\\.([A-Za-z_][A-Za-z0-9_]*)\\b");
+    private static final Pattern FEE_REFERENCE_PATTERN =
+            Pattern.compile("F\\[['\"]([A-Za-z0-9_\\-]+)['\"]\\]");
+    private static final Pattern GENERIC_REFERENCE_PATTERN =
+            Pattern.compile("\\bV\\.([A-Za-z_][A-Za-z0-9_]*)\\b|\\b([A-Za-z_][A-Za-z0-9_]*)\\b");
 
     private final ExpressionParser parser = new SpelExpressionParser();
     private final Map<String, Expression> expressionCache = new ConcurrentHashMap<>();
@@ -36,11 +39,22 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
 
     @Override
     public void validateExpression(String expression) {
+        validateExpression(expression, DEFAULT_NAMESPACE_SCOPE);
+    }
+
+    @Override
+    public void validateExpression(String expression, String namespaceScope) {
         if (StringUtils.isEmpty(expression)) {
             throw new ServiceException("表达式不能为空");
         }
         try {
             compileExpression(expression);
+            CostExpressionAnalysisVo analysis = analyzeExpression(expression, namespaceScope);
+            if (!analysis.getDisallowedNamespaces().isEmpty()) {
+                throw new ServiceException("表达式引用了未授权命名空间：" + String.join(", ", analysis.getDisallowedNamespaces()));
+            }
+        } catch (ServiceException e) {
+            throw e;
         } catch (Exception e) {
             throw new ServiceException("表达式校验失败：" + e.getMessage());
         }
@@ -67,9 +81,102 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
         }
     }
 
-    /**
-     * 构造统一根上下文，保证运行时至少存在 V/C/I/F/T 五个命名空间。
-     */
+    @Override
+    public CostExpressionAnalysisVo analyzeExpression(String expression) {
+        return analyzeExpression(expression, DEFAULT_NAMESPACE_SCOPE);
+    }
+
+    @Override
+    public CostExpressionAnalysisVo analyzeExpression(String expression, String namespaceScope) {
+        CostExpressionAnalysisVo analysis = new CostExpressionAnalysisVo();
+        analysis.setExpression(expression);
+        analysis.setRewrittenExpression(FormulaFunctionRegistry.rewrite(expression));
+
+        LinkedHashSet<String> allowedNamespaces = parseNamespaceScope(namespaceScope);
+        analysis.setAllowedNamespaces(new ArrayList<>(allowedNamespaces));
+
+        LinkedHashSet<String> namespaceReferences = new LinkedHashSet<>();
+        LinkedHashSet<String> disallowedNamespaces = new LinkedHashSet<>();
+        LinkedHashSet<String> variableReferences = new LinkedHashSet<>();
+        LinkedHashSet<String> feeReferences = new LinkedHashSet<>(extractFeeReferences(expression));
+
+        Matcher namespaceMatcher = NAMESPACE_REFERENCE_PATTERN.matcher(StringUtils.defaultString(expression));
+        while (namespaceMatcher.find()) {
+            String namespace = namespaceMatcher.group(1);
+            String code = namespaceMatcher.group(2);
+            if (StringUtils.isEmpty(namespace) || StringUtils.isEmpty(code)) {
+                continue;
+            }
+            namespaceReferences.add(namespace);
+            variableReferences.add(namespace + "." + code);
+            if (!allowedNamespaces.contains(namespace)) {
+                disallowedNamespaces.add(namespace);
+            }
+        }
+        if (!feeReferences.isEmpty()) {
+            namespaceReferences.add("F");
+            if (!allowedNamespaces.contains("F")) {
+                disallowedNamespaces.add("F");
+            }
+        }
+
+        analysis.setNamespaceReferences(new ArrayList<>(namespaceReferences));
+        analysis.setDisallowedNamespaces(new ArrayList<>(disallowedNamespaces));
+        analysis.setVariableReferences(new ArrayList<>(variableReferences));
+        analysis.setFeeReferences(new ArrayList<>(feeReferences));
+        analysis.setFunctionReferences(new ArrayList<>(FormulaFunctionRegistry.extractFunctions(expression)));
+        return analysis;
+    }
+
+    @Override
+    public Set<String> extractReferencedCodes(String expression, Collection<String> candidateCodes) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        if (StringUtils.isEmpty(expression) || candidateCodes == null || candidateCodes.isEmpty()) {
+            return result;
+        }
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        for (String candidate : candidateCodes) {
+            if (StringUtils.isNotEmpty(candidate)) {
+                candidates.add(candidate);
+            }
+        }
+        if (candidates.isEmpty()) {
+            return result;
+        }
+        String sanitized = StringUtils.defaultString(expression)
+                .replaceAll("'[^']*'", " ")
+                .replaceAll("\"[^\"]*\"", " ");
+        Matcher matcher = GENERIC_REFERENCE_PATTERN.matcher(sanitized);
+        while (matcher.find()) {
+            String candidate = firstNonBlank(matcher.group(1), matcher.group(2));
+            if (StringUtils.isNotEmpty(candidate) && candidates.contains(candidate)) {
+                result.add(candidate);
+            }
+        }
+        for (String feeCode : extractFeeReferences(expression)) {
+            if (candidates.contains(feeCode)) {
+                result.add(feeCode);
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public Set<String> extractFeeReferences(String expression) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        if (StringUtils.isEmpty(expression)) {
+            return result;
+        }
+        Matcher matcher = FEE_REFERENCE_PATTERN.matcher(expression);
+        while (matcher.find()) {
+            String feeCode = matcher.group(1);
+            if (StringUtils.isNotEmpty(feeCode)) {
+                result.add(feeCode);
+            }
+        }
+        return result;
+    }
+
     private Map<String, Object> buildRootContext(Map<String, Object> input) {
         LinkedHashMap<String, Object> root = new LinkedHashMap<>();
         if (input != null) {
@@ -121,64 +228,55 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
         return value;
     }
 
-    /**
-     * 编译表达式并做缓存。
-     */
     private Expression compileExpression(String expression) {
         return expressionCache.computeIfAbsent(expression, key -> parser.parseExpression(rewriteExpression(key)));
     }
 
-    /**
-     * 将平台表达式改写为 SpEL 可执行语法。
-     */
     private String rewriteExpression(String source) {
-        String expression = source.replace("&&", " and ").replace("||", " or ");
-        expression = expression.replaceAll("\\bif\\s*\\(", "#if.choose(");
-        expression = expression.replaceAll("\\bmax\\s*\\(", "#max.pick(");
-        expression = expression.replaceAll("\\bmin\\s*\\(", "#min.pick(");
-        expression = expression.replaceAll("\\bround\\s*\\(", "#round.scale(");
-        expression = expression.replaceAll("\\bbetween\\s*\\(", "#between.hit(");
-        expression = expression.replaceAll("\\bcoalesce\\s*\\(", "#coalesce.first(");
-        return expression;
+        return FormulaFunctionRegistry.rewrite(source);
     }
 
-    /**
-     * 公共函数集合。
-     */
+    private LinkedHashSet<String> parseNamespaceScope(String namespaceScope) {
+        LinkedHashSet<String> scopes = new LinkedHashSet<>();
+        String raw = StringUtils.defaultIfEmpty(StringUtils.trim(namespaceScope), DEFAULT_NAMESPACE_SCOPE);
+        for (String token : raw.split(",")) {
+            String normalized = StringUtils.upperCase(StringUtils.trim(token));
+            if (StringUtils.isNotEmpty(normalized)) {
+                scopes.add(normalized);
+            }
+        }
+        if (scopes.isEmpty()) {
+            scopes.addAll(Arrays.asList(DEFAULT_NAMESPACE_SCOPE.split(",")));
+        }
+        return scopes;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (StringUtils.isNotEmpty(first)) {
+            return first;
+        }
+        return StringUtils.defaultString(second);
+    }
+
     public static class CommonFunctions {
-        /**
-         * 条件选择函数。
-         */
         public Object choose(Object condition, Object trueValue, Object falseValue) {
             return toBoolean(condition) ? trueValue : falseValue;
         }
 
-        /**
-         * 保留精度。
-         */
         public BigDecimal scale(Object value, Object digits) {
             int precision = digits == null ? 2 : Integer.parseInt(String.valueOf(digits));
             return toBigDecimal(value).setScale(precision, RoundingMode.HALF_UP);
         }
 
-        /**
-         * 区间命中。
-         */
         public boolean hit(Object value, Object start, Object end) {
             BigDecimal current = toBigDecimal(value);
             return current.compareTo(toBigDecimal(start)) >= 0 && current.compareTo(toBigDecimal(end)) <= 0;
         }
 
-        /**
-         * 取首个非空值。
-         */
         public Object first(Object first, Object second) {
             return first != null ? first : second;
         }
 
-        /**
-         * 取首个非空值。
-         */
         public Object first(Object first, Object second, Object third) {
             if (first != null) {
                 return first;
@@ -204,9 +302,6 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
         }
     }
 
-    /**
-     * 最大值函数集合。
-     */
     public static class MaxFunctions extends CommonFunctions {
         public Double pick(Object left, Object right) {
             return Math.max(toBigDecimal(left).doubleValue(), toBigDecimal(right).doubleValue());
@@ -217,9 +312,6 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
         }
     }
 
-    /**
-     * 最小值函数集合。
-     */
     public static class MinFunctions extends CommonFunctions {
         public Double pick(Object left, Object right) {
             return Math.min(toBigDecimal(left).doubleValue(), toBigDecimal(right).doubleValue());

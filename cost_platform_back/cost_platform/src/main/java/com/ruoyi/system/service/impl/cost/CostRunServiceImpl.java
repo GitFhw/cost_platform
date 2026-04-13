@@ -21,22 +21,26 @@ import com.ruoyi.system.service.cost.ICostAlarmService;
 import com.ruoyi.system.service.cost.ICostAuditService;
 import com.ruoyi.system.service.cost.ICostExpressionService;
 import com.ruoyi.system.service.cost.ICostRunService;
+import com.ruoyi.system.service.cost.execution.CostNodeExecutor;
+import com.ruoyi.system.service.cost.execution.model.ExecutionResult;
+import com.ruoyi.system.service.cost.execution.model.FeeExecutionResult;
+import com.ruoyi.system.service.cost.execution.view.FeeExecutionViewAssembler;
+import com.ruoyi.system.service.cost.remote.AccessProfileInputMappingService;
+import com.ruoyi.system.service.cost.remote.AccessProfileInputMappingService.InputBuildContext;
+import com.ruoyi.system.service.cost.variable.runtime.RuntimeRemoteVariableValueService;
+import com.ruoyi.system.service.cost.variable.runtime.RuntimeVariableComputeService;
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
-import org.springframework.http.*;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -49,8 +53,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -98,53 +100,19 @@ public class CostRunServiceImpl implements ICostRunService {
     private static final String RECALC_STATUS_RUNNING = "RUNNING";
     private static final String RECALC_STATUS_SUCCESS = "SUCCESS";
     private static final String RECALC_STATUS_FAILED = "FAILED";
-    private static final String RULE_TYPE_FIXED_RATE = "FIXED_RATE";
-    private static final String RULE_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
     private static final String RULE_TYPE_FORMULA = "FORMULA";
-    private static final String RULE_TYPE_TIER_RATE = "TIER_RATE";
-    private static final String PRICING_MODE_GROUPED = "GROUPED";
     private static final String SNAPSHOT_SOURCE_PUBLISHED = "PUBLISHED";
     private static final String SNAPSHOT_SOURCE_DRAFT = "DRAFT";
-    private static final String ACCESS_SOURCE_TYPE_HTTP_API = "HTTP_API";
-    private static final String ACCESS_FETCH_MODE_NONE = "NONE";
-    private static final String ACCESS_FETCH_MODE_PAGE_NO = "PAGE_NO";
-    private static final String ACCESS_FETCH_MODE_CURSOR = "CURSOR";
     private static final String SOURCE_TYPE_FORMULA = "FORMULA";
     private static final String SOURCE_TYPE_REMOTE = "REMOTE";
-    private static final String AUTH_TYPE_NONE = "NONE";
-    private static final String AUTH_TYPE_BASIC = "BASIC";
-    private static final String AUTH_TYPE_BEARER = "BEARER";
-    private static final String FALLBACK_POLICY_FAIL_FAST = "FAIL_FAST";
-    private static final String FALLBACK_POLICY_DEFAULT_VALUE = "DEFAULT_VALUE";
-    private static final String FALLBACK_POLICY_LAST_SNAPSHOT = "LAST_SNAPSHOT";
-    private static final String CACHE_POLICY_NONE = "NONE";
-    private static final String CACHE_POLICY_TTL = "TTL";
-    private static final String REMOTE_CONTEXT_ROOT = "remoteContext";
-    private static final String REMOTE_PAYLOAD_ROOT = "remotePayload";
-    private static final String REMOTE_DATA_ROOT = "remoteData";
     private static final String DATA_TYPE_NUMBER = "NUMBER";
     private static final String DATA_TYPE_BOOLEAN = "BOOLEAN";
     private static final String DATA_TYPE_JSON = "JSON";
-    private static final String OP_EQ = "EQ";
-    private static final String OP_NE = "NE";
-    private static final String OP_GT = "GT";
-    private static final String OP_GE = "GE";
-    private static final String OP_LT = "LT";
-    private static final String OP_LE = "LE";
-    private static final String OP_IN = "IN";
-    private static final String OP_NOT_IN = "NOT_IN";
-    private static final String OP_BETWEEN = "BETWEEN";
     private static final String OP_EXPR = "EXPR";
     private static final String INTERVAL_LCRO = "LEFT_CLOSED_RIGHT_OPEN";
-    private static final String INTERVAL_LORC = "LEFT_OPEN_RIGHT_CLOSED";
     private static final String RUNTIME_CACHE_PREFIX = "cost:runtime:snapshot:";
-    private static final String REMOTE_LAST_SNAPSHOT_CACHE_PREFIX = "cost:runtime:remote:last:";
     private static final DateTimeFormatter NO_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final DecimalFormat PARTITION_FORMAT = new DecimalFormat("000");
-    private static final Pattern EXPRESSION_REFERENCE_PATTERN =
-            Pattern.compile("\\bV\\.([A-Za-z_][A-Za-z0-9_]*)\\b|\\b([A-Za-z_][A-Za-z0-9_]*)\\b");
-    private static final Pattern FEE_REFERENCE_PATTERN =
-            Pattern.compile("F\\[['\"]([A-Za-z0-9_\\-]+)['\"]\\]");
     private static final int DEFAULT_TASK_PARTITION_SIZE = 500;
     private static final int DEFAULT_TASK_DETAIL_INSERT_SIZE = 200;
     private static final int DEFAULT_TASK_PARTITION_INSERT_SIZE = 200;
@@ -154,10 +122,6 @@ public class CostRunServiceImpl implements ICostRunService {
     private static final long DEFAULT_TASK_DISPATCH_INTERVAL_SECONDS = 15L;
     private static final long DEFAULT_TASK_STALE_TIMEOUT_SECONDS = 600L;
     private static final int DEFAULT_INPUT_BATCH_INSERT_SIZE = 200;
-    private static final int DEFAULT_ACCESS_FETCH_PAGE_SIZE = 500;
-    private static final int DEFAULT_ACCESS_FETCH_MAX_PAGES = 200;
-    private static final int DEFAULT_ACCESS_PREVIEW_RECORD_LIMIT = 20;
-    private static final int REMOTE_CACHE_TTL_MINUTES = 30;
     private static final String DRAFT_VERSION_LABEL = "草稿版本";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -165,8 +129,6 @@ public class CostRunServiceImpl implements ICostRunService {
     private final Set<Long> activeTaskPartitionAssistIds = ConcurrentHashMap.newKeySet();
     @Autowired
     private CostSimulationRecordMapper simulationRecordMapper;
-    @Autowired
-    private CostAccessProfileMapper accessProfileMapper;
     @Autowired
     private CostCalcTaskMapper calcTaskMapper;
     @Autowired
@@ -210,11 +172,20 @@ public class CostRunServiceImpl implements ICostRunService {
     @Autowired
     private ICostExpressionService expressionService;
     @Autowired
+    private RuntimeVariableComputeService runtimeVariableComputeService;
+
+    @Autowired
+    private CostNodeExecutor costNodeExecutor;
+    @Autowired
+    private FeeExecutionViewAssembler feeExecutionViewAssembler;
+    @Autowired
+    private RuntimeRemoteVariableValueService runtimeRemoteVariableValueService;
+    @Autowired
     private CostDistributedLockSupport distributedLockSupport;
     @Autowired
     private TransactionTemplate transactionTemplate;
     @Autowired
-    private RestTemplate costAccessRestTemplate;
+    private AccessProfileInputMappingService accessProfileInputMappingService;
     @Autowired
     private Environment environment;
     @Autowired
@@ -422,7 +393,7 @@ public class CostRunServiceImpl implements ICostRunService {
         if (StringUtils.isNotEmpty(billMonth)) {
             validateBillMonth(billMonth);
         }
-        Map<String, Object> input = parseObjectJson(bo.getInputJson(), "璇曠畻杈撳叆蹇呴』鏄?JSON 瀵硅薄");
+        Map<String, Object> input = parseObjectJson(bo.getInputJson(), "试算输入必须是 JSON 对象");
         CostSimulationRecord record = executeAndPersistSimulation(snapshot, input, "", billMonth);
         return selectSimulationDetail(record.getSimulationId());
     }
@@ -434,9 +405,9 @@ public class CostRunServiceImpl implements ICostRunService {
         if (StringUtils.isNotEmpty(billMonth)) {
             validateBillMonth(billMonth);
         }
-        List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "鎵归噺璇曠畻杈撳叆蹇呴』鏄?JSON 鏁扮粍");
+        List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "批量试算输入必须是 JSON 数组");
         if (inputs.isEmpty()) {
-            throw new ServiceException("鎵归噺璇曠畻杈撳叆涓嶈兘涓虹┖鏁扮粍");
+            throw new ServiceException("批量试算输入不能为空数组");
         }
         validateDuplicateBizNo(inputs);
         List<CostSimulationRecord> records = new ArrayList<>();
@@ -1020,99 +991,6 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     @Override
-    public Map<String, Object> previewBuiltInputByProfile(Long profileId, CostAccessProfilePreviewFetchBo bo) {
-        CostAccessProfile profile = accessProfileMapper.selectAccessProfileById(profileId);
-        if (profile == null) {
-            throw new ServiceException("接入方案不存在，请刷新后重试");
-        }
-        if (!STATUS_ENABLED.equals(profile.getStatus())) {
-            throw new ServiceException("当前接入方案已停用，无法直接拉取预演");
-        }
-        if (!ACCESS_SOURCE_TYPE_HTTP_API.equalsIgnoreCase(profile.getSourceType())) {
-            throw new ServiceException("当前接入方案不是 HTTP 接口类型，不能执行直连预演");
-        }
-        if (StringUtils.isEmpty(profile.getEndpointUrl())) {
-            throw new ServiceException("当前接入方案未配置接口地址，无法执行直连预演");
-        }
-
-        Map<String, Object> fetchResult = fetchProfilePayload(profile, bo == null ? "" : bo.getRequestPayloadJson());
-        InputBuildContext context = buildInputBuildContext(profile.getSceneId(), profile.getVersionId(),
-                profile.getFeeId(), profile.getFeeCode(), profile.getTaskType(), profile.getMappingJson());
-        List<Map<String, Object>> rawRecords = extractAccessResponseRecords(profile, fetchResult.get("responsePayload"));
-        Map<String, Object> preview = buildMappedInputResult(context, rawRecords, 1);
-        preview.put("accessProfile", buildAccessProfileSummary(profile));
-        preview.put("fetchMeta", fetchResult.get("fetchMeta"));
-        preview.put("requestPayloadJson", fetchResult.get("requestPayload"));
-        preview.put("fetchedPayloadJson", fetchResult.get("responsePayload"));
-        preview.put("recordsPayloadJson", rawRecords);
-        preview.put("message", buildProfileFetchPreviewMessage(profile, preview));
-        return preview;
-    }
-
-    @Override
-    public Map<String, Object> createInputBatchByProfile(Long profileId, CostAccessProfileBuildBatchBo bo) {
-        if (bo == null) {
-            throw new ServiceException("按接入方案生成导入批次时，请补充账期");
-        }
-        CostAccessProfile profile = accessProfileMapper.selectAccessProfileById(profileId);
-        if (profile == null) {
-            throw new ServiceException("接入方案不存在，请刷新后重试");
-        }
-        InputBuildContext context = buildInputBuildContext(profile.getSceneId(), profile.getVersionId(),
-                profile.getFeeId(), profile.getFeeCode(), profile.getTaskType(), profile.getMappingJson());
-        AccessFetchConfig fetchConfig = buildAccessFetchConfig(profile);
-        String remark = firstNonBlank(StringUtils.trim(bo.getRemark()), buildProfileInputBatchRemark(profile));
-        Map<String, Object> batchResult;
-        if (bo.getResumeBatchId() != null) {
-            if (!fetchConfig.paged) {
-                throw new ServiceException("当前接入方案未启用分页拉取，不支持继续装载导入批次");
-            }
-            batchResult = resumePagedInputBatchByProfile(profile, context, bo, remark, fetchConfig);
-        } else if (!fetchConfig.paged) {
-            String billMonth = StringUtils.trim(bo.getBillMonth());
-            if (StringUtils.isEmpty(billMonth)) {
-                throw new ServiceException("按接入方案生成导入批次时，请补充账期");
-            }
-            validateBillMonth(billMonth);
-            Map<String, Object> fetchResult = fetchProfilePayload(profile, bo.getRequestPayloadJson());
-            List<Map<String, Object>> rawRecords = extractAccessResponseRecords(profile, fetchResult.get("responsePayload"));
-            Map<String, Object> preview = buildMappedInputResult(context, rawRecords, 1);
-
-            CostCalcInputBatchCreateBo createBo = new CostCalcInputBatchCreateBo();
-            createBo.setSceneId(profile.getSceneId());
-            createBo.setVersionId(profile.getVersionId());
-            createBo.setBillMonth(billMonth);
-            createBo.setInputJson(writeJsonString(preview.get("mappedRecords")));
-            createBo.setRemark(remark);
-            batchResult = createInputBatch(createBo);
-            bindAccessProfileToBatch(batchResult.get("batch"), profile.getProfileId(), bo.getRequestPayloadJson(), fetchConfig);
-            batchResult.put("fetchMeta", fetchResult.get("fetchMeta"));
-            batchResult.put("requestPayloadJson", fetchResult.get("requestPayload"));
-            batchResult.put("fetchedPayloadJson", fetchResult.get("responsePayload"));
-            batchResult.put("recordsPayloadJson", rawRecords);
-            batchResult.put("mappedRecordCount", preview.get("mappedRecordCount"));
-            batchResult.put("mappedRecords", preview.get("mappedRecords"));
-            batchResult.put("missingPaths", preview.get("missingPaths"));
-            batchResult.put("fieldMappings", preview.get("fieldMappings"));
-        } else {
-            String billMonth = StringUtils.trim(bo.getBillMonth());
-            if (StringUtils.isEmpty(billMonth)) {
-                throw new ServiceException("按接入方案生成导入批次时，请补充账期");
-            }
-            validateBillMonth(billMonth);
-            batchResult = createPagedInputBatchByProfile(profile, context, billMonth, bo.getRequestPayloadJson(), remark, fetchConfig);
-        }
-        batchResult.put("accessProfile", buildAccessProfileSummary(profile));
-        batchResult.put("message", "已按接入方案拉取业务接口并生成导入批次，可继续发起正式核算");
-        if (Boolean.TRUE.equals(batchResult.get("resumable"))) {
-            batchResult.put("message", "已按接入方案继续装载导入批次，当前仍有后续分页待继续拉取");
-        } else {
-            batchResult.put("message", "已按接入方案拉取业务接口并生成导入批次，可继续发起正式核算");
-        }
-        return batchResult;
-    }
-
-    @Override
     public Map<String, Object> calculateFee(CostFeeCalculateBo bo) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false);
         RuntimeFee fee = resolveRuntimeFee(snapshot, bo.getFeeId(), bo.getFeeCode());
@@ -1445,11 +1323,11 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     /**
-     * 澶勭悊鍗曟潯浠诲姟鏄庣粏锛屽苟钀界粨鏋滃彴璐︿笌杩芥函瑙ｉ噴銆?
+     * 处理单条任务明细，并落结果台账与追溯解释。
      */
     @Transactional(rollbackFor = Exception.class)
     protected void processTaskDetail(CostCalcTask task, CostCalcTaskDetail detail, RuntimeSnapshot snapshot) {
-        Map<String, Object> input = parseObjectJson(detail.getInputJson(), "浠诲姟鏄庣粏杈撳叆蹇呴』鏄?JSON 瀵硅薄");
+        Map<String, Object> input = parseObjectJson(detail.getInputJson(), "任务明细输入必须是 JSON 对象");
         purgeExistingTaskResults(task.getTaskId(), detail.getBizNo());
         ExecutionResult executionResult = executeSingle(snapshot, task.getTaskNo(), task.getBillMonth(), input);
 
@@ -1556,7 +1434,7 @@ public class CostRunServiceImpl implements ICostRunService {
                     () -> syncRecalcByTask(task, status));
             runTaskFinishSideEffect(task, "taskAudit",
                     () -> auditService.recordAudit(task.getSceneId(), "CALC_TASK", task.getTaskNo(),
-                            "FINISH", "姝ｅ紡鏍哥畻浠诲姟瀹屾垚", null, task, task.getRequestNo()));
+                            "FINISH", "正式核算任务完成", null, task, task.getRequestNo()));
             if (TASK_STATUS_SUCCESS.equals(status)) {
                 runTaskFinishSideEffect(task, "alarmAutoResolve",
                         () -> alarmService.autoResolveByTask(task.getTaskId(), "任务执行成功，自动关闭历史任务告警"));
@@ -1565,7 +1443,7 @@ public class CostRunServiceImpl implements ICostRunService {
                 runTaskFinishSideEffect(task, "finishAlarm",
                         () -> createTaskAlarm(task, null, "TASK_FINISHED_WITH_ERROR",
                                 TASK_STATUS_FAILED.equals(status) ? "ERROR" : "WARN",
-                                TASK_STATUS_FAILED.equals(status) ? "姝ｅ紡鏍哥畻浠诲姟澶辫触" : "姝ｅ紡鏍哥畻浠诲姟閮ㄥ垎鎴愬姛",
+                                TASK_STATUS_FAILED.equals(status) ? "正式核算任务失败" : "正式核算任务部分成功",
                                 "任务 " + task.getTaskNo() + " 完成状态为 " + status + "，成功 " + summary.successCount + " 条，失败 " + summary.failedCount + " 条。"));
             }
         }
@@ -1593,420 +1471,12 @@ public class CostRunServiceImpl implements ICostRunService {
         baseContext.put("billMonth", billMonth);
         baseContext.put("sceneCode", snapshot.sceneCode);
         baseContext.put("versionNo", snapshot.versionNo);
-        LinkedHashMap<String, Object> variableValues = computeVariables(snapshot, baseContext,
+        LinkedHashMap<String, Object> variableValues = runtimeVariableComputeService.compute(snapshot, baseContext,
                 resolveExecutionVariables(snapshot, feesToExecute));
-        List<FeeExecutionResult> feeResults = new ArrayList<>();
-        List<Map<String, Object>> timeline = new ArrayList<>();
-        ExecutionResult result = new ExecutionResult();
-
-        LinkedHashMap<String, Object> feeResultContext = new LinkedHashMap<>();
-        for (RuntimeFee fee : feesToExecute) {
-            List<RuntimeRule> rules = snapshot.rulesByFeeCode.getOrDefault(fee.feeCode, Collections.emptyList());
-            RuleMatchResult matchResult = matchRule(rules, variableValues, baseContext, includeExplain);
-            if (matchResult == null || matchResult.rule == null) {
-                if (includeExplain) {
-                    result.skippedFeeExplains.put(fee.feeCode,
-                            buildFeeNoMatchExplain(fee, rules, variableValues,
-                                    matchResult == null ? Collections.emptyList() : matchResult.ruleEvaluations));
-                }
-                timeline.add(buildStep("FEE_SKIP", fee.feeCode, fee.feeName, "当前费用未命中任何启用规则"));
-                continue;
-            }
-            PricingResult pricingResult = calculateAmount(matchResult.rule, matchResult.tier, variableValues, baseContext, feeResultContext, snapshot);
-            pricingResult.pricingExplain.put("unitCode", fee.unitCode);
-            pricingResult.pricingExplain.put("unitSemantic", buildUnitSemanticSummary(fee.unitCode));
-            FeeExecutionResult feeResult = new FeeExecutionResult();
-            feeResult.feeId = fee.feeId;
-            feeResult.feeCode = fee.feeCode;
-            feeResult.feeName = fee.feeName;
-            feeResult.unitCode = fee.unitCode;
-            feeResult.objectDimension = fee.objectDimension;
-            feeResult.ruleId = matchResult.rule.ruleId;
-            feeResult.ruleCode = matchResult.rule.ruleCode;
-            feeResult.ruleName = matchResult.rule.ruleName;
-            feeResult.tierId = matchResult.tier == null ? null : matchResult.tier.tierId;
-            feeResult.quantityValue = pricingResult.quantityValue;
-            feeResult.unitPrice = pricingResult.unitPrice;
-            feeResult.amountValue = pricingResult.amountValue;
-            feeResult.variableExplain = variableValues;
-            feeResult.conditionExplain = matchResult.conditionExplain;
-            feeResult.pricingExplain = pricingResult.pricingExplain;
-            feeResult.timelineSteps = buildFeeTimeline(fee, matchResult, pricingResult);
-            feeResults.add(feeResult);
-            feeResultContext.put(fee.feeCode, feeResult.toExplainView());
-            timeline.add(buildStep("FEE_RESULT", fee.feeCode, fee.feeName,
-                    String.format(Locale.ROOT, "鍛戒腑瑙勫垯 %s锛岄噾棰?%s", feeResult.ruleCode, feeResult.amountValue)));
-        }
-
-        LinkedHashMap<String, Object> resultView = new LinkedHashMap<>();
-        resultView.put("taskNo", taskNo);
-        resultView.put("sceneCode", snapshot.sceneCode);
-        resultView.put("versionNo", snapshot.versionNo);
-        resultView.put("snapshotSource", snapshot.snapshotSource);
-        resultView.put("bizNo", resolveBizNo(input, 1));
-        resultView.put("feeResults", feeResults.stream().map(FeeExecutionResult::toView).collect(Collectors.toList()));
-        resultView.put("amountTotal", feeResults.stream().map(item -> item.amountValue).reduce(BigDecimal.ZERO, BigDecimal::add));
-
-        LinkedHashMap<String, Object> explainView = new LinkedHashMap<>();
-        explainView.put("timeline", timeline);
-        explainView.put("matchedFees", feeResults.stream().map(FeeExecutionResult::toExplainView).collect(Collectors.toList()));
-
-        result.variableView = variableValues;
-        result.resultView = resultView;
-        result.explainView = explainView;
-        result.feeResults = feeResults;
-        return result;
+        return costNodeExecutor.execute(snapshot, taskNo, billMonth, input, resolveBizNo(input, 1),
+                feesToExecute, includeExplain, baseContext, variableValues);
     }
 
-    private LinkedHashMap<String, Object> computeVariables(RuntimeSnapshot snapshot, Map<String, Object> baseContext) {
-        return computeVariables(snapshot, baseContext, snapshot.variables);
-    }
-
-    private LinkedHashMap<String, Object> computeVariables(RuntimeSnapshot snapshot, Map<String, Object> baseContext,
-                                                           List<RuntimeVariable> runtimeVariables) {
-        LinkedHashMap<String, Object> values = new LinkedHashMap<>();
-        List<RuntimeVariable> variablesToCompute = runtimeVariables == null ? snapshot.variables : runtimeVariables;
-        Map<String, RuntimeVariable> variableMap = snapshot == null || snapshot.variablesByCode == null
-                ? Collections.emptyMap()
-                : snapshot.variablesByCode;
-        LinkedHashSet<String> dependencyStack = new LinkedHashSet<>();
-        for (RuntimeVariable variable : variablesToCompute) {
-            resolveRuntimeVariableValue(snapshot, variable, baseContext, values, variableMap, dependencyStack);
-        }
-        return values;
-    }
-
-    private Object resolveRuntimeVariableValue(RuntimeSnapshot snapshot, RuntimeVariable variable,
-                                               Map<String, Object> baseContext, LinkedHashMap<String, Object> computedValues,
-                                               Map<String, RuntimeVariable> variableMap, Set<String> dependencyStack) {
-        if (variable == null || StringUtils.isEmpty(variable.variableCode)) {
-            return null;
-        }
-        if (computedValues.containsKey(variable.variableCode)) {
-            return computedValues.get(variable.variableCode);
-        }
-        if (!dependencyStack.add(variable.variableCode)) {
-            throw new ServiceException("公式变量存在循环依赖：" + String.join(" -> ", dependencyStack) + " -> " + variable.variableCode);
-        }
-        try {
-            Object value;
-            if (SOURCE_TYPE_FORMULA.equals(variable.sourceType)) {
-                String formulaExpression = resolveVariableFormula(snapshot, variable);
-                for (String dependencyCode : extractExpressionVariableCodes(formulaExpression, variableMap)) {
-                    if (StringUtils.equals(variable.variableCode, dependencyCode)) {
-                        continue;
-                    }
-                    RuntimeVariable dependency = variableMap.get(dependencyCode);
-                    if (dependency != null) {
-                        resolveRuntimeVariableValue(snapshot, dependency, baseContext, computedValues, variableMap, dependencyStack);
-                    }
-                }
-                value = evaluateExpression(formulaExpression, mergeContext(baseContext, computedValues, Collections.emptyMap()));
-            } else if (SOURCE_TYPE_REMOTE.equalsIgnoreCase(variable.sourceType)) {
-                value = resolveRemoteVariableValue(variable, baseContext);
-            } else {
-                value = resolveValueFromInput(baseContext, variable.dataPath, variable.variableCode, variable.defaultValue);
-            }
-            Object converted = convertValueByType(value, variable.dataType, variable.defaultValue);
-            computedValues.put(variable.variableCode, converted);
-            return converted;
-        } finally {
-            dependencyStack.remove(variable.variableCode);
-        }
-    }
-
-    private RuleMatchResult matchRule(List<RuntimeRule> rules, Map<String, Object> variableValues,
-                                      Map<String, Object> baseContext, boolean includeExplain) {
-        Map<String, Object> conditionContext = mergeContext(baseContext, variableValues, Collections.emptyMap());
-        RuleMatchResult fallbackResult = includeExplain ? new RuleMatchResult() : null;
-        for (RuntimeRule rule : rules) {
-            List<Map<String, Object>> conditionExplain = new ArrayList<>();
-            ConditionMatchResult conditionMatchResult = matchConditions(rule, variableValues, conditionContext, conditionExplain);
-            if (includeExplain) {
-                fallbackResult.ruleEvaluations.add(buildRuleEvaluation(rule, conditionMatchResult, conditionExplain));
-            }
-            if (conditionMatchResult.matched) {
-                RuleMatchResult result = new RuleMatchResult();
-                result.rule = rule;
-                result.matchedGroupNo = conditionMatchResult.matchedGroupNo;
-                result.rule.matchedGroupNo = conditionMatchResult.matchedGroupNo;
-                result.conditionExplain = conditionExplain;
-                result.ruleEvaluations = includeExplain ? fallbackResult.ruleEvaluations : Collections.emptyList();
-                if (RULE_TYPE_TIER_RATE.equals(rule.ruleType)) {
-                    BigDecimal quantityValue = toBigDecimal(variableValues.get(rule.quantityVariableCode));
-                    result.tier = locateTier(rule.tiers, quantityValue);
-                    if (result.tier == null) {
-                        throw new ServiceException(String.format("规则 %s 未找到可命中的阶梯区间", rule.ruleCode));
-                    }
-                }
-                return result;
-            }
-        }
-        return fallbackResult;
-    }
-
-    private Map<String, Object> buildRuleEvaluation(RuntimeRule rule, ConditionMatchResult matchResult,
-                                                    List<Map<String, Object>> conditionExplain) {
-        LinkedHashMap<String, Object> item = new LinkedHashMap<>();
-        item.put("ruleCode", rule.ruleCode);
-        item.put("ruleName", rule.ruleName);
-        item.put("ruleType", rule.ruleType);
-        item.put("pricingMode", rule.pricingMode);
-        item.put("priority", rule.priority);
-        item.put("matched", matchResult.matched);
-        item.put("matchedGroupNo", matchResult.matchedGroupNo);
-        item.put("conditions", conditionExplain);
-        return item;
-    }
-
-    private ConditionMatchResult matchConditions(RuntimeRule rule, Map<String, Object> variableValues,
-                                                 Map<String, Object> conditionContext, List<Map<String, Object>> explain) {
-        ConditionMatchResult result = new ConditionMatchResult();
-        if (rule.conditionGroups == null || rule.conditionGroups.isEmpty()) {
-            result.matched = true;
-            result.matchedGroupNo = 1;
-            return result;
-        }
-        List<Boolean> groupResults = new ArrayList<>(rule.conditionGroups.size());
-        for (RuntimeConditionGroup group : rule.conditionGroups) {
-            boolean groupPass = true;
-            for (RuntimeCondition condition : group.conditions) {
-                Object leftValue = variableValues.get(condition.variableCode);
-                boolean pass = evaluateCondition(condition, leftValue, conditionContext);
-                LinkedHashMap<String, Object> item = new LinkedHashMap<>();
-                item.put("groupNo", group.groupNo);
-                item.put("displayName", condition.displayName);
-                item.put("variableCode", condition.variableCode);
-                item.put("leftValue", leftValue);
-                item.put("operatorCode", condition.operatorCode);
-                item.put("compareValue", condition.compareValue);
-                item.put("pass", pass);
-                explain.add(item);
-                groupPass = groupPass && pass;
-            }
-            groupResults.add(groupPass);
-            if (groupPass && result.matchedGroupNo == null) {
-                result.matchedGroupNo = group.groupNo;
-            }
-        }
-        if ("OR".equalsIgnoreCase(rule.conditionLogic)) {
-            result.matched = groupResults.stream().anyMatch(Boolean::booleanValue);
-            if (!result.matched) {
-                result.matchedGroupNo = null;
-            }
-            return result;
-        }
-        result.matched = groupResults.stream().allMatch(Boolean::booleanValue);
-        if (!result.matched) {
-            result.matchedGroupNo = null;
-        }
-        return result;
-    }
-
-    private boolean evaluateCondition(RuntimeCondition condition, Object leftValue, Map<String, Object> context) {
-        String operatorCode = condition.operatorCode;
-        if (OP_EXPR.equals(operatorCode)) {
-            Object exprResult = evaluateExpression(condition.compareValue, context);
-            return Boolean.TRUE.equals(convertBoolean(exprResult));
-        }
-        if (OP_IN.equals(operatorCode) || OP_NOT_IN.equals(operatorCode)) {
-            List<String> values = splitValues(condition.compareValue);
-            boolean contains = values.contains(String.valueOf(leftValue));
-            return OP_IN.equals(operatorCode) ? contains : !contains;
-        }
-        if (OP_BETWEEN.equals(operatorCode)) {
-            List<String> values = splitValues(condition.compareValue);
-            if (values.size() < 2) {
-                return false;
-            }
-            BigDecimal left = toBigDecimal(leftValue);
-            BigDecimal start = toBigDecimal(values.get(0));
-            BigDecimal end = toBigDecimal(values.get(1));
-            if (left == null || start == null || end == null) {
-                return false;
-            }
-            return left.compareTo(start) >= 0 && left.compareTo(end) <= 0;
-        }
-        BigDecimal leftNumber = toBigDecimal(leftValue);
-        BigDecimal rightNumber = toBigDecimal(condition.compareValue);
-        switch (operatorCode) {
-            case OP_EQ:
-                return Objects.equals(String.valueOf(leftValue), String.valueOf(condition.compareValue));
-            case OP_NE:
-                return !Objects.equals(String.valueOf(leftValue), String.valueOf(condition.compareValue));
-            case OP_GT:
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) > 0;
-            case OP_GE:
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) >= 0;
-            case OP_LT:
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) < 0;
-            case OP_LE:
-                return leftNumber != null && rightNumber != null && leftNumber.compareTo(rightNumber) <= 0;
-            default:
-                return false;
-        }
-    }
-
-    private RuntimeTier locateTier(List<RuntimeTier> tiers, BigDecimal quantityValue) {
-        if (quantityValue == null) {
-            return null;
-        }
-        for (RuntimeTier tier : tiers) {
-            BigDecimal start = tier.startValue;
-            BigDecimal end = tier.endValue;
-            boolean pass;
-            if (INTERVAL_LORC.equals(tier.intervalMode)) {
-                pass = (start == null || quantityValue.compareTo(start) > 0)
-                        && (end == null || quantityValue.compareTo(end) <= 0);
-            } else {
-                pass = (start == null || quantityValue.compareTo(start) >= 0)
-                        && (end == null || quantityValue.compareTo(end) < 0);
-            }
-            if (pass) {
-                return tier;
-            }
-        }
-        return null;
-    }
-
-    private PricingResult calculateAmount(RuntimeRule rule, RuntimeTier tier, Map<String, Object> variableValues,
-                                          Map<String, Object> baseContext, Map<String, Object> feeResultContext, RuntimeSnapshot snapshot) {
-        BigDecimal quantityValue = toBigDecimal(variableValues.get(rule.quantityVariableCode));
-        if (quantityValue == null) {
-            quantityValue = BigDecimal.ONE;
-        }
-        PricingResult result = new PricingResult();
-        result.quantityValue = quantityValue.setScale(4, RoundingMode.HALF_UP);
-        result.pricingExplain = new LinkedHashMap<>();
-        result.pricingExplain.put("ruleCode", rule.ruleCode);
-        result.pricingExplain.put("ruleType", rule.ruleType);
-        result.pricingExplain.put("quantityVariableCode", rule.quantityVariableCode);
-        result.pricingExplain.put("quantityValue", result.quantityValue);
-        result.pricingExplain.put("pricingMode", rule.pricingMode);
-        result.pricingExplain.put("matchedGroupNo", rule.matchedGroupNo);
-        if (RULE_TYPE_FIXED_RATE.equals(rule.ruleType)) {
-            BigDecimal unitPrice = resolveGroupedPricingValue(rule, "rateValue");
-            result.unitPrice = defaultZero(unitPrice).setScale(6, RoundingMode.HALF_UP);
-            result.amountValue = result.unitPrice.multiply(result.quantityValue).setScale(2, RoundingMode.HALF_UP);
-            result.pricingExplain.put("pricingSource", "FIXED_RATE");
-        } else if (RULE_TYPE_FIXED_AMOUNT.equals(rule.ruleType)) {
-            BigDecimal amountValue = resolveGroupedPricingValue(rule, "amountValue");
-            result.unitPrice = defaultZero(amountValue).setScale(6, RoundingMode.HALF_UP);
-            result.amountValue = defaultZero(amountValue).setScale(2, RoundingMode.HALF_UP);
-            result.pricingExplain.put("pricingSource", "FIXED_AMOUNT");
-        } else if (RULE_TYPE_FORMULA.equals(rule.ruleType)) {
-            RuntimeFormula formula = requireRuleFormula(snapshot, rule);
-            String expression = formula.formulaExpr;
-            Object amountValue = evaluateExpression(expression, mergeContext(baseContext, variableValues, feeResultContext));
-            BigDecimal computed = defaultZero(toBigDecimal(amountValue)).setScale(2, RoundingMode.HALF_UP);
-            result.unitPrice = computed.setScale(6, RoundingMode.HALF_UP);
-            result.amountValue = computed;
-            result.pricingExplain.put("pricingSource", "FORMULA");
-            result.pricingExplain.put("formula", expression);
-            result.pricingExplain.put("formulaCode", formula.formulaCode);
-            result.pricingExplain.put("formulaName", formula.formulaName);
-            result.pricingExplain.put("businessFormula", formula.businessFormula);
-        } else if (RULE_TYPE_TIER_RATE.equals(rule.ruleType)) {
-            BigDecimal unitPrice = tier == null ? BigDecimal.ZERO : defaultZero(tier.rateValue);
-            result.unitPrice = unitPrice.setScale(6, RoundingMode.HALF_UP);
-            result.amountValue = result.unitPrice.multiply(result.quantityValue).setScale(2, RoundingMode.HALF_UP);
-            result.pricingExplain.put("pricingSource", "TIER_RATE");
-            result.pricingExplain.put("tierNo", tier == null ? null : tier.tierNo);
-            result.pricingExplain.put("tierRange", tier == null ? null : tier.buildRangeSummary());
-        } else {
-            throw new ServiceException("暂不支持的规则类型: " + rule.ruleType);
-        }
-        result.pricingExplain.put("unitPrice", result.unitPrice);
-        result.pricingExplain.put("amountValue", result.amountValue);
-        return result;
-    }
-
-    private BigDecimal resolveGroupedPricingValue(RuntimeRule rule, String valueKey) {
-        if (!PRICING_MODE_GROUPED.equalsIgnoreCase(rule.pricingMode)) {
-            return toBigDecimal(rule.pricingConfig.get(valueKey));
-        }
-        Object rawGroupPrices = rule.pricingConfig.get("groupPrices");
-        if (!(rawGroupPrices instanceof List<?> groupPrices)) {
-            throw new ServiceException(String.format("规则 %s 未配置组合定价明细", rule.ruleCode));
-        }
-        for (Object item : groupPrices) {
-            if (!(item instanceof Map<?, ?> rawMap)) {
-                continue;
-            }
-            Integer groupNo = intValue(rawMap.get("groupNo"));
-            if (Objects.equals(groupNo, rule.matchedGroupNo)) {
-                BigDecimal value = toBigDecimal(rawMap.get(valueKey));
-                if (value == null) {
-                    throw new ServiceException(String.format("规则 %s 的组合组 %s 未配置定价值", rule.ruleCode, groupNo));
-                }
-                return value;
-            }
-        }
-        throw new ServiceException(String.format("规则 %s 未找到命中组合组 %s 对应的定价配置", rule.ruleCode, rule.matchedGroupNo));
-    }
-
-    private List<Map<String, Object>> buildFeeTimeline(RuntimeFee fee, RuleMatchResult matchResult, PricingResult pricingResult) {
-        List<Map<String, Object>> steps = new ArrayList<>();
-        steps.add(buildStep("FEE", fee.feeCode, fee.feeName, "进入费用计算"));
-        steps.add(buildStep("RULE", matchResult.rule.ruleCode, matchResult.rule.ruleName, "命中规则"));
-        if (matchResult.tier != null) {
-            steps.add(buildStep("TIER", String.valueOf(matchResult.tier.tierNo), matchResult.tier.buildRangeSummary(), "命中阶梯区间"));
-        }
-        steps.add(buildStep("PRICING", fee.feeCode, fee.feeName,
-                buildPricingStepSummary(fee.unitCode, pricingResult)));
-        return steps;
-    }
-
-    /**
-     * 构建带计价单位语义的定价摘要，便于结果追溯和业务复核。
-     */
-    private String buildPricingStepSummary(String unitCode, PricingResult pricingResult) {
-        String pricingSource = pricingResult.pricingExplain == null ? "" : stringValue(pricingResult.pricingExplain.get("pricingSource"));
-        if (RULE_TYPE_FIXED_AMOUNT.equals(pricingSource) || "FIXED_AMOUNT".equals(pricingSource) || "元".equals(unitCode)) {
-            return String.format(Locale.ROOT, "计价单位 %s，按固定金额计价，结果 %s 元", firstNonBlank(unitCode, "元"), pricingResult.amountValue);
-        }
-        if (pricingResult.quantityValue == null) {
-            return String.format(Locale.ROOT, "计价单位 %s，单价 %s，金额 %s", firstNonBlank(unitCode, "-"), pricingResult.unitPrice, pricingResult.amountValue);
-        }
-        String normalizedUnit = firstNonBlank(unitCode, "-");
-        return String.format(Locale.ROOT, "数量 %s %s，单价 %s 元/%s，金额 %s 元",
-                pricingResult.quantityValue,
-                normalizedUnit,
-                pricingResult.unitPrice,
-                normalizedUnit,
-                pricingResult.amountValue);
-    }
-
-    /**
-     * 缁熶竴杈撳嚭璁′环鍗曚綅涓氬姟鍙ｅ緞锛屼緵杩芥函瑙ｉ噴鍜岀粨鏋滈〉鐩存帴灞曠ず銆?
-     */
-    private String buildUnitSemanticSummary(String unitCode) {
-        if ("吨".equals(unitCode)) {
-            return "按重量吨数计价";
-        }
-        if ("天".equals(unitCode)) {
-            return "按天数计价";
-        }
-        if ("次".equals(unitCode)) {
-            return "按次数计价";
-        }
-        if ("航次".equals(unitCode)) {
-            return "按航次计价";
-        }
-        if ("人".equals(unitCode)) {
-            return "按人数计价";
-        }
-        if ("箱".equals(unitCode)) {
-            return "按箱量计价";
-        }
-        if ("元".equals(unitCode)) {
-            return "按固定金额计价";
-        }
-        if ("平方米*天".equals(unitCode) || "平方米·天".equals(unitCode)) {
-            return "按面积天复合量计价";
-        }
-        return "按当前计价单位口径计价";
-    }
 
     private Map<String, Object> buildTraceView(CostResultTrace trace) {
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
@@ -2213,18 +1683,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     private Set<String> extractExpressionFeeCodes(String expression) {
-        LinkedHashSet<String> result = new LinkedHashSet<>();
-        if (StringUtils.isEmpty(expression)) {
-            return result;
-        }
-        Matcher matcher = FEE_REFERENCE_PATTERN.matcher(expression);
-        while (matcher.find()) {
-            String feeCode = matcher.group(1);
-            if (StringUtils.isNotEmpty(feeCode)) {
-                result.add(feeCode);
-            }
-        }
-        return result;
+        return expressionService.extractFeeReferences(expression);
     }
 
     private List<RuntimeVariable> buildExecutionVariables(RuntimeSnapshot snapshot, List<RuntimeRule> rules) {
@@ -2294,19 +1753,8 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     private Set<String> extractExpressionVariableCodes(String expression, Map<String, RuntimeVariable> variableMap) {
-        LinkedHashSet<String> result = new LinkedHashSet<>();
-        if (StringUtils.isEmpty(expression) || variableMap == null || variableMap.isEmpty()) {
-            return result;
-        }
-        String sanitized = expression.replaceAll("'[^']*'", " ").replaceAll("\"[^\"]*\"", " ");
-        Matcher matcher = EXPRESSION_REFERENCE_PATTERN.matcher(sanitized);
-        while (matcher.find()) {
-            String candidate = firstNonBlank(matcher.group(1), matcher.group(2));
-            if (StringUtils.isNotEmpty(candidate) && variableMap.containsKey(candidate)) {
-                result.add(candidate);
-            }
-        }
-        return result;
+        return expressionService.extractReferencedCodes(expression,
+                variableMap == null ? Collections.emptySet() : variableMap.keySet());
     }
 
     private String buildTemplateInputJson(List<RuntimeVariable> variables, String taskType, String objectDimension) {
@@ -3316,10 +2764,10 @@ public class CostRunServiceImpl implements ICostRunService {
             return loadInputBatchItems(bo);
         }
         if (TASK_TYPE_FORMAL_SINGLE.equals(bo.getTaskType())) {
-            return Collections.singletonList(parseObjectJson(bo.getInputJson(), "鍗曠瑪姝ｅ紡鏍哥畻杈撳叆蹇呴』鏄?JSON 瀵硅薄"));
+            return Collections.singletonList(parseObjectJson(bo.getInputJson(), "单笔正式核算输入必须是 JSON 对象"));
         }
         if (TASK_TYPE_FORMAL_BATCH.equals(bo.getTaskType())) {
-            List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "鎵归噺浠诲姟杈撳叆蹇呴』鏄?JSON 鏁扮粍");
+            List<Map<String, Object>> inputs = parseArrayJson(bo.getInputJson(), "批量任务输入必须是 JSON 数组");
             if (inputs.isEmpty()) {
                 throw new ServiceException("批量任务输入不能为空数组");
             }
@@ -3485,43 +2933,16 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     private Map<String, Object> buildFeeCalculationExplain(FeeExecutionResult feeResult) {
-        LinkedHashMap<String, Object> explain = new LinkedHashMap<>();
-        explain.put("matched", true);
-        explain.put("feeCode", feeResult.feeCode);
-        explain.put("feeName", feeResult.feeName);
-        explain.put("ruleId", feeResult.ruleId);
-        explain.put("ruleCode", feeResult.ruleCode);
-        explain.put("ruleName", feeResult.ruleName);
-        explain.put("tierId", feeResult.tierId);
-        explain.put("variables", feeResult.variableExplain);
-        explain.put("conditions", feeResult.conditionExplain);
-        explain.put("pricing", feeResult.pricingExplain);
-        explain.put("timeline", feeResult.timelineSteps);
-        return explain;
+        return feeExecutionViewAssembler.buildFeeCalculationExplain(feeResult);
     }
 
     private Map<String, Object> buildFeeNoMatchExplain(RuntimeFee fee, List<RuntimeRule> rules,
                                                        Map<String, Object> variableValues, List<Map<String, Object>> ruleEvaluations) {
-        LinkedHashMap<String, Object> explain = new LinkedHashMap<>();
-        explain.put("matched", false);
-        explain.put("feeCode", fee.feeCode);
-        explain.put("feeName", fee.feeName);
-        explain.put("attemptedRuleCount", rules == null ? 0 : rules.size());
-        explain.put("variables", variableValues);
-        explain.put("candidateRules", ruleEvaluations == null ? Collections.emptyList() : ruleEvaluations);
-        explain.put("timeline", Collections.singletonList(buildStep("FEE_SKIP", fee.feeCode, fee.feeName,
-                rules == null || rules.isEmpty() ? "当前费用在当前运行配置下未挂载启用规则" : "当前费用未命中任何启用规则")));
-        return explain;
+        return costNodeExecutor.buildFeeNoMatchExplain(fee, rules, variableValues, ruleEvaluations);
     }
 
     private Map<String, Object> buildFeeFailureExplain(RuntimeFee fee, Exception exception) {
-        LinkedHashMap<String, Object> explain = new LinkedHashMap<>();
-        explain.put("matched", false);
-        explain.put("feeCode", fee.feeCode);
-        explain.put("feeName", fee.feeName);
-        explain.put("timeline", Collections.singletonList(buildStep("FEE_FAILED", fee.feeCode, fee.feeName,
-                limitLength(exception.getMessage(), 300))));
-        return explain;
+        return costNodeExecutor.buildFeeFailureExplain(fee, exception);
     }
 
     private String buildDetailSummary(List<CostResultLedger> ledgers) {
@@ -3855,7 +3276,7 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private void prepareTaskDetailExecution(CostCalcTask task, CostCalcTaskDetail detail, RuntimeSnapshot snapshot, PartitionExecutionBundle bundle) {
         try {
-            Map<String, Object> input = parseObjectJson(detail.getInputJson(), "浠诲姟鏄庣粏杈撳叆蹇呴』鏄?JSON 瀵硅薄");
+            Map<String, Object> input = parseObjectJson(detail.getInputJson(), "任务明细输入必须是 JSON 对象");
             ExecutionResult executionResult = executeSingle(snapshot, task.getTaskNo(), task.getBillMonth(), input);
             List<CostResultLedger> detailLedgers = new ArrayList<>();
             for (FeeExecutionResult feeResult : executionResult.feeResults) {
@@ -3892,14 +3313,14 @@ public class CostRunServiceImpl implements ICostRunService {
             bundle.recoveryHint = "";
             bundle.lastErrorStage = "";
         } catch (Exception batchException) {
-            String batchMessage = limitLength(resolveThrowableMessage(batchException, "鍒嗙墖鎵归噺钀藉簱澶辫触"), 500);
+            String batchMessage = limitLength(resolveThrowableMessage(batchException, "分片批量落库失败"), 500);
             try {
                 transactionTemplate.executeWithoutResult(status -> persistPartitionBundleRowByRow(taskId, bundle));
                 bundle.persistMode = PARTITION_PERSIST_MODE_SINGLE;
                 bundle.recoveryHint = limitLength("批量落库失败后已自动降级为逐条写入：" + batchMessage, 500);
                 bundle.lastErrorStage = PARTITION_STAGE_BATCH_PERSIST;
             } catch (Exception singleException) {
-                String singleMessage = limitLength(resolveThrowableMessage(singleException, "鍒嗙墖閫愭潯钀藉簱澶辫触"), 500);
+                String singleMessage = limitLength(resolveThrowableMessage(singleException, "分片逐条落库失败"), 500);
                 throw new ServiceException("分片结果落库失败，批量写入与逐条降级均未成功。批量阶段："
                         + batchMessage + "；逐条阶段：" + singleMessage);
             }
@@ -4070,743 +3491,12 @@ public class CostRunServiceImpl implements ICostRunService {
     private InputBuildContext buildInputBuildContext(Long sceneId, Long versionId, Long feeId, String feeCode,
                                                      String taskType, String mappingJson) {
         Map<String, Object> template = buildFeeInputTemplate(sceneId, versionId, feeId, feeCode, taskType);
-        InputBuildContext context = new InputBuildContext();
-        context.template = template;
-        context.mapping = parseOptionalJsonMap(mappingJson);
-        context.fields = castFieldList(template.get("fields"));
-        context.taskType = stringValue(template.get("taskType"));
-        context.defaultObjectDimension = stringValue(castMap(template.get("fee")).get("objectDimension"));
-        context.fieldMappings = buildFieldMappingSummary(context.fields, context.mapping);
-        return context;
+        return accessProfileInputMappingService.buildContext(template, mappingJson);
     }
 
     private Map<String, Object> buildMappedInputResult(InputBuildContext context, List<Map<String, Object>> rawRecords,
                                                        int startIndex) {
-        List<Map<String, Object>> mappedRecords = new ArrayList<>();
-        LinkedHashSet<String> missingPaths = new LinkedHashSet<>();
-        for (int i = 0; i < rawRecords.size(); i++) {
-            mappedRecords.add(buildMappedInputRecord(rawRecords.get(i), context.fields, context.mapping, context.taskType,
-                    context.defaultObjectDimension, startIndex + i, missingPaths));
-        }
-
-        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
-        result.put("sceneId", context.template.get("sceneId"));
-        result.put("sceneCode", context.template.get("sceneCode"));
-        result.put("sceneName", context.template.get("sceneName"));
-        result.put("versionId", context.template.get("versionId"));
-        result.put("versionNo", context.template.get("versionNo"));
-        result.put("snapshotSource", context.template.get("snapshotSource"));
-        result.put("taskType", context.taskType);
-        result.put("fee", context.template.get("fee"));
-        result.put("templateFieldCount", context.fields.size());
-        result.put("rawRecordCount", rawRecords.size());
-        result.put("mappedRecordCount", mappedRecords.size());
-        result.put("fieldMappings", context.fieldMappings);
-        result.put("mappedRecords", mappedRecords);
-        result.put("missingPaths", new ArrayList<>(missingPaths));
-        result.put("loadingGuide", buildInputBatchLoadingGuide(mappedRecords.size()));
-        result.put("mappingJson", context.mapping);
-        result.put("message", buildInputBuildPreviewMessage(mappedRecords.size(), missingPaths.size()));
-        return result;
-    }
-
-    private List<Map<String, Object>> extractAccessResponseRecords(CostAccessProfile profile, Object responsePayload) {
-        AccessFetchConfig fetchConfig = buildAccessFetchConfig(profile);
-        Object recordPayload = responsePayload;
-        if (StringUtils.isNotEmpty(fetchConfig.recordsPath)) {
-            recordPayload = resolveByPath(responsePayload, fetchConfig.recordsPath);
-        }
-        if (recordPayload instanceof Map) {
-            return Collections.singletonList(castMap(recordPayload));
-        }
-        if (recordPayload instanceof List) {
-            List<Map<String, Object>> records = new ArrayList<>();
-            for (Object item : (List<?>) recordPayload) {
-                if (!(item instanceof Map)) {
-                    throw new ServiceException("预演输入数组中的每一项都必须是 JSON 对象");
-                }
-                records.add(castMap(item));
-            }
-            return records;
-        }
-        throw new ServiceException("直连业务接口返回结果无法解析为标准计费对象记录集合");
-    }
-
-    private Map<String, Object> createPagedInputBatchByProfile(CostAccessProfile profile, InputBuildContext context,
-                                                               String billMonth, String requestPayloadJson, String remark, AccessFetchConfig fetchConfig) {
-        RuntimeSnapshot snapshot = loadRuntimeSnapshot(profile.getSceneId(), profile.getVersionId(), true);
-        if (snapshot != null) {
-            CostCalcInputBatch batch = createInputBatchShell(snapshot, billMonth, remark, ACCESS_SOURCE_TYPE_HTTP_API,
-                    profile.getProfileId(), INPUT_BATCH_STATUS_LOADING);
-            AccessFetchCheckpoint checkpoint = new AccessFetchCheckpoint();
-            checkpoint.requestPayloadJson = firstNonBlank(StringUtils.trim(requestPayloadJson), StringUtils.trim(profile.getSamplePayloadJson()));
-            checkpoint.pagingMode = fetchConfig.pagingMode;
-            checkpoint.recordsPath = fetchConfig.recordsPath;
-            checkpoint.pageSize = fetchConfig.pageSize;
-            checkpoint.maxPages = fetchConfig.maxPages;
-            checkpoint.nextPageNo = fetchConfig.startPage;
-            checkpoint.nextCursor = "";
-            checkpoint.hasMore = true;
-            persistAccessBatchProgress(batch, checkpoint, INPUT_BATCH_STATUS_LOADING, "", remark);
-            return continuePagedInputBatchByProfile(profile, context, batch, checkpoint, remark, fetchConfig, false);
-        }
-        CostCalcInputBatch batch = createInputBatchShell(snapshot, billMonth, remark, ACCESS_SOURCE_TYPE_HTTP_API);
-
-        Set<String> seenBizNos = new LinkedHashSet<>();
-        List<Map<String, Object>> previewMappedRecords = new ArrayList<>();
-        LinkedHashSet<String> missingPaths = new LinkedHashSet<>();
-        List<Map<String, Object>> pageSummaries = new ArrayList<>();
-        Object firstResponsePayload = null;
-        Object firstRequestPayload = null;
-        int totalMappedCount = 0;
-        int totalRawCount = 0;
-        Integer responseTotal = null;
-        String nextCursor = "";
-        boolean hasMore = true;
-        int pageNo = fetchConfig.startPage;
-
-        while (hasMore && pageSummaries.size() < fetchConfig.maxPages) {
-            Map<String, Object> fetchResult = fetchProfilePayload(profile, requestPayloadJson, fetchConfig, pageNo, nextCursor);
-            if (firstResponsePayload == null) {
-                firstResponsePayload = fetchResult.get("responsePayload");
-                firstRequestPayload = fetchResult.get("requestPayload");
-            }
-
-            List<Map<String, Object>> rawRecords = extractAccessResponseRecords(profile, fetchResult.get("responsePayload"));
-            totalRawCount += rawRecords.size();
-            Map<String, Object> mappedPage = buildMappedInputResult(context, rawRecords, totalMappedCount + 1);
-            List<Map<String, Object>> mappedRecords = castFieldList(mappedPage.get("mappedRecords"));
-            appendPreviewRecords(previewMappedRecords, mappedRecords, DEFAULT_ACCESS_PREVIEW_RECORD_LIMIT);
-            missingPaths.addAll(castStringList(mappedPage.get("missingPaths")));
-            totalMappedCount += appendInputBatchItems(batch, mappedRecords, totalMappedCount, seenBizNos);
-
-            Map<String, Object> pageMeta = castMap(fetchResult.get("fetchMeta"));
-            LinkedHashMap<String, Object> pageSummary = new LinkedHashMap<>();
-            pageSummary.put("pageNo", pageMeta.get("pageNo"));
-            pageSummary.put("cursor", pageMeta.get("cursor"));
-            pageSummary.put("recordCount", rawRecords.size());
-            pageSummary.put("resolvedUrl", pageMeta.get("resolvedUrl"));
-            pageSummaries.add(pageSummary);
-
-            responseTotal = resolvePagedResponseTotal(fetchConfig, fetchResult.get("responsePayload"), responseTotal);
-            hasMore = resolveAccessFetchHasMore(fetchConfig, rawRecords.size(), fetchResult.get("responsePayload"), responseTotal,
-                    totalRawCount, pageNo - fetchConfig.startPage + 1);
-            nextCursor = resolveAccessFetchNextCursor(fetchConfig, fetchResult.get("responsePayload"));
-            if (ACCESS_FETCH_MODE_CURSOR.equals(fetchConfig.pagingMode) && StringUtils.isEmpty(nextCursor)) {
-                hasMore = false;
-            }
-            pageNo++;
-        }
-
-        if (totalMappedCount <= 0) {
-            throw new ServiceException("按接入方案分页拉取后未生成任何标准计费对象，无法创建导入批次");
-        }
-        boolean maxPageReached = hasMore && pageSummaries.size() >= fetchConfig.maxPages;
-        finalizeInputBatch(batch, totalMappedCount);
-        Map<String, Object> result = selectInputBatchDetail(batch.getBatchId(), 1, 10);
-        LinkedHashMap<String, Object> fetchMeta = new LinkedHashMap<>();
-        fetchMeta.put("paged", true);
-        fetchMeta.put("pagingMode", fetchConfig.pagingMode);
-        fetchMeta.put("pageSize", fetchConfig.pageSize);
-        fetchMeta.put("pageCount", pageSummaries.size());
-        fetchMeta.put("recordCount", totalRawCount);
-        fetchMeta.put("responseTotal", responseTotal);
-        fetchMeta.put("recordsPath", fetchConfig.recordsPath);
-        fetchMeta.put("pageSummaries", pageSummaries);
-        fetchMeta.put("maxPages", fetchConfig.maxPages);
-        fetchMeta.put("maxPageReached", maxPageReached);
-        result.put("fetchMeta", fetchMeta);
-        result.put("requestPayloadJson", firstRequestPayload);
-        result.put("fetchedPayloadJson", firstResponsePayload);
-        result.put("recordsPayloadJson", firstResponsePayload == null ? Collections.emptyList() : extractAccessResponseRecords(profile, firstResponsePayload));
-        result.put("mappedRecordCount", totalMappedCount);
-        result.put("mappedRecords", previewMappedRecords);
-        result.put("missingPaths", new ArrayList<>(missingPaths));
-        result.put("fieldMappings", context.fieldMappings);
-        return result;
-    }
-
-    private CostCalcInputBatch createInputBatchShell(RuntimeSnapshot snapshot, String billMonth, String remark, String sourceType) {
-        Date now = DateUtils.getNowDate();
-        String operator = resolveOperator();
-        CostCalcInputBatch batch = new CostCalcInputBatch();
-        batch.setBatchNo(buildRunNo("INPUT"));
-        batch.setSceneId(snapshot.sceneId);
-        batch.setVersionId(snapshot.versionId);
-        batch.setBillMonth(billMonth);
-        batch.setSourceType(firstNonBlank(sourceType, "JSON_IMPORT"));
-        batch.setBatchStatus(INPUT_BATCH_STATUS_READY);
-        batch.setTotalCount(0);
-        batch.setValidCount(0);
-        batch.setErrorCount(0);
-        batch.setRemark(remark);
-        batch.setErrorMessage("");
-        batch.setCreateBy(operator);
-        batch.setCreateTime(now);
-        batch.setUpdateBy(operator);
-        batch.setUpdateTime(now);
-        calcInputBatchMapper.insert(batch);
-        return batch;
-    }
-
-    private CostCalcInputBatch createInputBatchShell(RuntimeSnapshot snapshot, String billMonth, String remark, String sourceType,
-                                                     Long accessProfileId, String batchStatus) {
-        CostCalcInputBatch batch = createInputBatchShell(snapshot, billMonth, remark, sourceType);
-        batch.setAccessProfileId(accessProfileId);
-        batch.setBatchStatus(firstNonBlank(batchStatus, batch.getBatchStatus()));
-        batch.setCheckpointJson("");
-        batch.setUpdateBy(resolveOperator());
-        batch.setUpdateTime(DateUtils.getNowDate());
-        calcInputBatchMapper.updateById(batch);
-        return batch;
-    }
-
-    private Map<String, Object> resumePagedInputBatchByProfile(CostAccessProfile profile, InputBuildContext context,
-                                                               CostAccessProfileBuildBatchBo bo, String remark, AccessFetchConfig fetchConfig) {
-        CostCalcInputBatch batch = calcInputBatchMapper.selectById(bo.getResumeBatchId());
-        if (batch == null) {
-            throw new ServiceException("待继续的导入批次不存在，请刷新后重试");
-        }
-        if (!Objects.equals(batch.getSceneId(), profile.getSceneId())) {
-            throw new ServiceException("待继续的导入批次与当前场景不匹配");
-        }
-        if (profile.getVersionId() != null && !Objects.equals(batch.getVersionId(), profile.getVersionId())) {
-            throw new ServiceException("待继续的导入批次与当前版本不匹配");
-        }
-        if (batch.getAccessProfileId() != null && !Objects.equals(batch.getAccessProfileId(), profile.getProfileId())) {
-            throw new ServiceException("待继续的导入批次与当前接入方案不匹配");
-        }
-        AccessFetchCheckpoint checkpoint = parseAccessFetchCheckpoint(batch.getCheckpointJson());
-        if (!Boolean.TRUE.equals(checkpoint.hasMore)) {
-            throw new ServiceException("当前导入批次没有待继续的分页游标");
-        }
-        if (StringUtils.isNotEmpty(bo.getBillMonth()) && !Objects.equals(StringUtils.trim(bo.getBillMonth()), batch.getBillMonth())) {
-            throw new ServiceException("继续装载时账期必须与原导入批次保持一致");
-        }
-        if (StringUtils.isNotEmpty(StringUtils.trim(bo.getRequestPayloadJson()))) {
-            checkpoint.requestPayloadJson = StringUtils.trim(bo.getRequestPayloadJson());
-        }
-        return continuePagedInputBatchByProfile(profile, context, batch, checkpoint, firstNonBlank(remark, batch.getRemark()),
-                fetchConfig, true);
-    }
-
-    private Map<String, Object> continuePagedInputBatchByProfile(CostAccessProfile profile, InputBuildContext context,
-                                                                 CostCalcInputBatch batch, AccessFetchCheckpoint checkpoint, String remark, AccessFetchConfig fetchConfig,
-                                                                 boolean resumed) {
-        Set<String> seenBizNos = new LinkedHashSet<>();
-        List<Map<String, Object>> previewMappedRecords = new ArrayList<>();
-        LinkedHashSet<String> missingPaths = new LinkedHashSet<>();
-        List<Map<String, Object>> pageSummaries = new ArrayList<>();
-        Object firstResponsePayload = null;
-        Object firstRequestPayload = null;
-        int totalMappedCount = Math.max(NumberUtils.toInt(String.valueOf(batch.getTotalCount()), 0), countInputBatchItems(batch.getBatchId()));
-        int totalRawCount = checkpoint.fetchedRecordCount == null ? 0 : checkpoint.fetchedRecordCount;
-        int totalFetchedPageCount = checkpoint.fetchedPageCount == null ? 0 : checkpoint.fetchedPageCount;
-        Integer responseTotal = checkpoint.responseTotal;
-        String nextCursor = StringUtils.defaultString(checkpoint.nextCursor);
-        boolean hasMore = checkpoint.hasMore == null || checkpoint.hasMore;
-        int pageNo = checkpoint.nextPageNo == null || checkpoint.nextPageNo < 1 ? fetchConfig.startPage : checkpoint.nextPageNo;
-        String requestPayloadJson = firstNonBlank(StringUtils.trim(checkpoint.requestPayloadJson), StringUtils.trim(profile.getSamplePayloadJson()));
-
-        batch.setAccessProfileId(profile.getProfileId());
-        batch.setRemark(firstNonBlank(remark, batch.getRemark()));
-        persistAccessBatchProgress(batch, checkpoint, INPUT_BATCH_STATUS_LOADING, "", batch.getRemark());
-        try {
-            while (hasMore && pageSummaries.size() < fetchConfig.maxPages) {
-                Map<String, Object> fetchResult = fetchProfilePayload(profile, requestPayloadJson, fetchConfig, pageNo, nextCursor);
-                if (firstResponsePayload == null) {
-                    firstResponsePayload = fetchResult.get("responsePayload");
-                    firstRequestPayload = fetchResult.get("requestPayload");
-                }
-
-                List<Map<String, Object>> rawRecords = extractAccessResponseRecords(profile, fetchResult.get("responsePayload"));
-                totalRawCount += rawRecords.size();
-                Map<String, Object> mappedPage = buildMappedInputResult(context, rawRecords, totalMappedCount + 1);
-                List<Map<String, Object>> mappedRecords = castFieldList(mappedPage.get("mappedRecords"));
-                appendPreviewRecords(previewMappedRecords, mappedRecords, DEFAULT_ACCESS_PREVIEW_RECORD_LIMIT);
-                missingPaths.addAll(castStringList(mappedPage.get("missingPaths")));
-                totalMappedCount += appendInputBatchItems(batch, mappedRecords, totalMappedCount, seenBizNos);
-
-                Map<String, Object> pageMeta = castMap(fetchResult.get("fetchMeta"));
-                LinkedHashMap<String, Object> pageSummary = new LinkedHashMap<>();
-                pageSummary.put("pageNo", pageMeta.get("pageNo"));
-                pageSummary.put("cursor", pageMeta.get("cursor"));
-                pageSummary.put("recordCount", rawRecords.size());
-                pageSummary.put("resolvedUrl", pageMeta.get("resolvedUrl"));
-                pageSummaries.add(pageSummary);
-
-                totalFetchedPageCount++;
-                responseTotal = resolvePagedResponseTotal(fetchConfig, fetchResult.get("responsePayload"), responseTotal);
-                hasMore = resolveAccessFetchHasMore(fetchConfig, rawRecords.size(), fetchResult.get("responsePayload"), responseTotal,
-                        totalRawCount, pageSummaries.size());
-                nextCursor = resolveAccessFetchNextCursor(fetchConfig, fetchResult.get("responsePayload"));
-                if (ACCESS_FETCH_MODE_CURSOR.equals(fetchConfig.pagingMode) && StringUtils.isEmpty(nextCursor)) {
-                    hasMore = false;
-                }
-                checkpoint.requestPayloadJson = requestPayloadJson;
-                checkpoint.pagingMode = fetchConfig.pagingMode;
-                checkpoint.recordsPath = fetchConfig.recordsPath;
-                checkpoint.pageSize = fetchConfig.pageSize;
-                checkpoint.maxPages = fetchConfig.maxPages;
-                checkpoint.responseTotal = responseTotal;
-                checkpoint.fetchedPageCount = totalFetchedPageCount;
-                checkpoint.fetchedRecordCount = totalRawCount;
-                checkpoint.mappedRecordCount = totalMappedCount;
-                checkpoint.lastPageNo = pageNo;
-                checkpoint.lastCursor = stringValue(pageMeta.get("cursor"));
-                checkpoint.lastResolvedUrl = stringValue(pageMeta.get("resolvedUrl"));
-                checkpoint.nextPageNo = pageNo + 1;
-                checkpoint.nextCursor = nextCursor;
-                checkpoint.hasMore = hasMore;
-                persistAccessBatchProgress(batch, checkpoint, INPUT_BATCH_STATUS_LOADING, "", batch.getRemark());
-                pageNo++;
-            }
-        } catch (Exception e) {
-            checkpoint.hasMore = true;
-            checkpoint.nextPageNo = pageNo;
-            checkpoint.nextCursor = nextCursor;
-            persistAccessBatchProgress(batch, checkpoint, INPUT_BATCH_STATUS_PARTIAL, limitLength(e.getMessage(), 1000), batch.getRemark());
-            throw new ServiceException("分页拉取中途失败，已保留当前批次 " + batch.getBatchNo() + "，可稍后继续装载："
-                    + limitLength(e.getMessage(), 200));
-        }
-
-        if (totalMappedCount <= 0) {
-            throw new ServiceException("按接入方案分页拉取后未生成任何标准计费对象，无法创建导入批次");
-        }
-        boolean resumable = hasMore;
-        persistAccessBatchProgress(batch, checkpoint, resumable ? INPUT_BATCH_STATUS_PARTIAL : INPUT_BATCH_STATUS_READY, "",
-                batch.getRemark());
-        return buildAccessBatchResult(profile, context, batch, checkpoint, fetchConfig, firstRequestPayload, firstResponsePayload,
-                previewMappedRecords, missingPaths, pageSummaries, totalMappedCount, totalRawCount, responseTotal, resumable, resumed);
-    }
-
-    private void persistAccessBatchProgress(CostCalcInputBatch batch, AccessFetchCheckpoint checkpoint, String batchStatus,
-                                            String errorMessage, String remark) {
-        batch.setBatchStatus(firstNonBlank(batchStatus, batch.getBatchStatus()));
-        batch.setCheckpointJson(writeJson(checkpoint));
-        batch.setTotalCount(checkpoint.mappedRecordCount == null ? batch.getTotalCount() : checkpoint.mappedRecordCount);
-        batch.setValidCount(checkpoint.mappedRecordCount == null ? batch.getValidCount() : checkpoint.mappedRecordCount);
-        batch.setErrorCount(0);
-        batch.setRemark(remark);
-        batch.setErrorMessage(firstNonBlank(errorMessage, ""));
-        batch.setUpdateBy(resolveOperator());
-        batch.setUpdateTime(DateUtils.getNowDate());
-        calcInputBatchMapper.updateById(batch);
-    }
-
-    private AccessFetchCheckpoint parseAccessFetchCheckpoint(String checkpointJson) {
-        Map<String, Object> checkpointMap = parseOptionalJsonMap(checkpointJson);
-        AccessFetchCheckpoint checkpoint = new AccessFetchCheckpoint();
-        checkpoint.requestPayloadJson = stringValue(checkpointMap.get("requestPayloadJson"));
-        checkpoint.pagingMode = stringValue(checkpointMap.get("pagingMode"));
-        checkpoint.recordsPath = stringValue(checkpointMap.get("recordsPath"));
-        checkpoint.nextPageNo = checkpointMap.get("nextPageNo") == null ? null : NumberUtils.toInt(String.valueOf(checkpointMap.get("nextPageNo")));
-        checkpoint.nextCursor = stringValue(checkpointMap.get("nextCursor"));
-        checkpoint.hasMore = checkpointMap.get("hasMore") == null ? null : Boolean.parseBoolean(String.valueOf(checkpointMap.get("hasMore")));
-        checkpoint.responseTotal = checkpointMap.get("responseTotal") == null ? null : NumberUtils.toInt(String.valueOf(checkpointMap.get("responseTotal")));
-        checkpoint.fetchedPageCount = checkpointMap.get("fetchedPageCount") == null ? null : NumberUtils.toInt(String.valueOf(checkpointMap.get("fetchedPageCount")));
-        checkpoint.fetchedRecordCount = checkpointMap.get("fetchedRecordCount") == null ? null : NumberUtils.toInt(String.valueOf(checkpointMap.get("fetchedRecordCount")));
-        checkpoint.mappedRecordCount = checkpointMap.get("mappedRecordCount") == null ? null : NumberUtils.toInt(String.valueOf(checkpointMap.get("mappedRecordCount")));
-        checkpoint.lastPageNo = checkpointMap.get("lastPageNo") == null ? null : NumberUtils.toInt(String.valueOf(checkpointMap.get("lastPageNo")));
-        checkpoint.lastCursor = stringValue(checkpointMap.get("lastCursor"));
-        checkpoint.lastResolvedUrl = stringValue(checkpointMap.get("lastResolvedUrl"));
-        checkpoint.pageSize = checkpointMap.get("pageSize") == null ? null : NumberUtils.toInt(String.valueOf(checkpointMap.get("pageSize")));
-        checkpoint.maxPages = checkpointMap.get("maxPages") == null ? null : NumberUtils.toInt(String.valueOf(checkpointMap.get("maxPages")));
-        return checkpoint;
-    }
-
-    private Map<String, Object> buildAccessBatchResult(CostAccessProfile profile, InputBuildContext context, CostCalcInputBatch batch,
-                                                       AccessFetchCheckpoint checkpoint, AccessFetchConfig fetchConfig, Object firstRequestPayload, Object firstResponsePayload,
-                                                       List<Map<String, Object>> previewMappedRecords, LinkedHashSet<String> missingPaths, List<Map<String, Object>> pageSummaries,
-                                                       int totalMappedCount, int totalRawCount, Integer responseTotal, boolean resumable, boolean resumed) {
-        Map<String, Object> result = selectInputBatchDetail(batch.getBatchId(), 1, 10);
-        LinkedHashMap<String, Object> fetchMeta = new LinkedHashMap<>();
-        fetchMeta.put("paged", true);
-        fetchMeta.put("pagingMode", fetchConfig.pagingMode);
-        fetchMeta.put("pageSize", fetchConfig.pageSize);
-        fetchMeta.put("pageCount", pageSummaries.size());
-        fetchMeta.put("recordCount", totalRawCount);
-        fetchMeta.put("responseTotal", responseTotal);
-        fetchMeta.put("recordsPath", fetchConfig.recordsPath);
-        fetchMeta.put("pageSummaries", pageSummaries);
-        fetchMeta.put("maxPages", fetchConfig.maxPages);
-        fetchMeta.put("maxPageReached", resumable);
-        fetchMeta.put("resumed", resumed);
-        result.put("fetchMeta", fetchMeta);
-        result.put("requestPayloadJson", firstRequestPayload == null ? checkpoint.requestPayloadJson : firstRequestPayload);
-        result.put("fetchedPayloadJson", firstResponsePayload);
-        result.put("recordsPayloadJson", firstResponsePayload == null ? Collections.emptyList() : extractAccessResponseRecords(profile, firstResponsePayload));
-        result.put("mappedRecordCount", totalMappedCount);
-        result.put("mappedRecords", previewMappedRecords);
-        result.put("missingPaths", new ArrayList<>(missingPaths));
-        result.put("fieldMappings", context.fieldMappings);
-        result.put("checkpoint", checkpoint);
-        result.put("resumable", resumable);
-        result.put("resumed", resumed);
-        return result;
-    }
-
-    private int countInputBatchItems(Long batchId) {
-        return Math.toIntExact(calcInputBatchItemMapper.selectCount(Wrappers.<CostCalcInputBatchItem>lambdaQuery()
-                .eq(CostCalcInputBatchItem::getBatchId, batchId)));
-    }
-
-    private void bindAccessProfileToBatch(Object batchPayload, Long profileId, String requestPayloadJson,
-                                          AccessFetchConfig fetchConfig) {
-        Object batchIdValue = batchPayload instanceof CostCalcInputBatch
-                ? ((CostCalcInputBatch) batchPayload).getBatchId()
-                : batchPayload instanceof Map ? castMap(batchPayload).get("batchId") : null;
-        if (batchIdValue == null) {
-            return;
-        }
-        CostCalcInputBatch batch = calcInputBatchMapper.selectById(NumberUtils.toLong(String.valueOf(batchIdValue)));
-        if (batch == null) {
-            return;
-        }
-        AccessFetchCheckpoint checkpoint = new AccessFetchCheckpoint();
-        checkpoint.requestPayloadJson = StringUtils.trim(requestPayloadJson);
-        checkpoint.pagingMode = fetchConfig.pagingMode;
-        checkpoint.recordsPath = fetchConfig.recordsPath;
-        checkpoint.pageSize = fetchConfig.pageSize;
-        checkpoint.maxPages = fetchConfig.maxPages;
-        checkpoint.hasMore = false;
-        checkpoint.mappedRecordCount = batch.getTotalCount();
-        persistAccessBatchProgress(batch, checkpoint, batch.getBatchStatus(), "", batch.getRemark());
-        batch.setAccessProfileId(profileId);
-        batch.setUpdateBy(resolveOperator());
-        batch.setUpdateTime(DateUtils.getNowDate());
-        calcInputBatchMapper.updateById(batch);
-    }
-
-    private void finalizeInputBatch(CostCalcInputBatch batch, int totalCount) {
-        batch.setTotalCount(totalCount);
-        batch.setValidCount(totalCount);
-        batch.setUpdateBy(resolveOperator());
-        batch.setUpdateTime(DateUtils.getNowDate());
-        calcInputBatchMapper.updateById(batch);
-    }
-
-    private int appendInputBatchItems(CostCalcInputBatch batch, List<Map<String, Object>> inputs, int startItemNo,
-                                      Set<String> seenBizNos) {
-        if (inputs == null || inputs.isEmpty()) {
-            return 0;
-        }
-        List<String> currentPageBizNos = new ArrayList<>(inputs.size());
-        int probeItemNo = startItemNo;
-        for (Map<String, Object> input : inputs) {
-            probeItemNo++;
-            String bizNo = resolveBizNo(input, probeItemNo);
-            if (seenBizNos != null && !seenBizNos.add(bizNo)) {
-                throw new ServiceException("鍒嗛〉瑁呰浇鏃跺彂鐜伴噸澶嶄笟鍔″崟鍙?" + bizNo);
-            }
-            currentPageBizNos.add(bizNo);
-        }
-        if (batch.getBatchId() != null) {
-            List<String> existedBizNos = calcInputBatchItemMapper.selectList(Wrappers.<CostCalcInputBatchItem>lambdaQuery()
-                            .eq(CostCalcInputBatchItem::getBatchId, batch.getBatchId())
-                            .in(CostCalcInputBatchItem::getBizNo, currentPageBizNos)
-                            .select(CostCalcInputBatchItem::getBizNo))
-                    .stream()
-                    .map(CostCalcInputBatchItem::getBizNo)
-                    .filter(StringUtils::isNotEmpty)
-                    .distinct()
-                    .collect(Collectors.toList());
-            if (!existedBizNos.isEmpty()) {
-                throw new ServiceException("鍒嗛〉瑁呰浇鏃跺彂鐜版壒娆″唴宸插瓨鍦ㄤ笟鍔″崟鍙?" + String.join(", ", existedBizNos));
-            }
-        }
-        List<CostCalcInputBatchItem> buffer = new ArrayList<>(DEFAULT_INPUT_BATCH_INSERT_SIZE);
-        int itemNo = startItemNo;
-        for (Map<String, Object> input : inputs) {
-            itemNo++;
-            String bizNo = resolveBizNo(input, itemNo);
-            if (false && seenBizNos != null && !seenBizNos.add(bizNo)) {
-                throw new ServiceException("鍒嗛〉瑁呰浇鏃跺彂鐜伴噸澶嶄笟鍔″崟鍙? " + bizNo);
-            }
-            CostCalcInputBatchItem item = new CostCalcInputBatchItem();
-            item.setBatchId(batch.getBatchId());
-            item.setBatchNo(batch.getBatchNo());
-            item.setItemNo(itemNo);
-            item.setBizNo(bizNo);
-            item.setItemStatus(INPUT_BATCH_STATUS_READY);
-            item.setInputJson(writeJson(input));
-            item.setErrorMessage("");
-            buffer.add(item);
-            if (buffer.size() >= DEFAULT_INPUT_BATCH_INSERT_SIZE) {
-                calcInputBatchItemMapper.insertBatch(buffer);
-                buffer.clear();
-            }
-        }
-        if (!buffer.isEmpty()) {
-            calcInputBatchItemMapper.insertBatch(buffer);
-        }
-        return inputs.size();
-    }
-
-    private void appendPreviewRecords(List<Map<String, Object>> target, List<Map<String, Object>> pageRecords, int limit) {
-        if (target.size() >= limit) {
-            return;
-        }
-        for (Map<String, Object> record : pageRecords) {
-            target.add(record);
-            if (target.size() >= limit) {
-                return;
-            }
-        }
-    }
-
-    private Map<String, Object> fetchProfilePayload(CostAccessProfile profile, String requestPayloadJson) {
-        return fetchProfilePayload(profile, requestPayloadJson, buildAccessFetchConfig(profile), null, "");
-    }
-
-    private Map<String, Object> fetchProfilePayload(CostAccessProfile profile, String requestPayloadJson,
-                                                    AccessFetchConfig fetchConfig, Integer pageNo, String cursor) {
-        String requestMethod = StringUtils.defaultIfEmpty(StringUtils.upperCase(profile.getRequestMethod()), "GET");
-        Object requestPayload = applyAccessFetchRequestControls(
-                parseOptionalJsonObject(firstNonBlank(requestPayloadJson, profile.getSamplePayloadJson())),
-                fetchConfig, pageNo, cursor);
-        HttpHeaders headers = buildAccessHeaders(profile);
-        String requestUrl = buildAccessRequestUrl(profile.getEndpointUrl(), requestMethod, requestPayload);
-        HttpEntity<?> requestEntity = buildAccessRequestEntity(headers, requestMethod, requestPayload);
-        ResponseEntity<String> response;
-        try {
-            response = costAccessRestTemplate.exchange(requestUrl, HttpMethod.valueOf(requestMethod), requestEntity, String.class);
-        } catch (RestClientException e) {
-            throw new ServiceException("直连业务接口失败：" + limitLength(e.getMessage(), 300));
-        }
-        String responseBody = StringUtils.defaultString(response.getBody());
-        if (StringUtils.isEmpty(StringUtils.trim(responseBody))) {
-            throw new ServiceException("业务接口已返回，但响应体为空，无法预演标准计费对象");
-        }
-        Object responsePayload = parseJsonToObject(responseBody);
-
-        LinkedHashMap<String, Object> fetchMeta = new LinkedHashMap<>();
-        fetchMeta.put("requestMethod", requestMethod);
-        fetchMeta.put("endpointUrl", profile.getEndpointUrl());
-        fetchMeta.put("resolvedUrl", requestUrl);
-        fetchMeta.put("statusCode", response.getStatusCode().value());
-        fetchMeta.put("contentType", response.getHeaders().getContentType() == null ? "" : response.getHeaders().getContentType().toString());
-        fetchMeta.put("sourceType", profile.getSourceType());
-        fetchMeta.put("requestPayloadProvided", requestPayload != null);
-        fetchMeta.put("responseSize", responseBody.length());
-        fetchMeta.put("pageNo", pageNo);
-        fetchMeta.put("cursor", cursor);
-        fetchMeta.put("recordsPath", fetchConfig.recordsPath);
-        fetchMeta.put("pagingMode", fetchConfig.pagingMode);
-        fetchMeta.put("paged", fetchConfig.paged);
-
-        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
-        result.put("requestPayload", requestPayload);
-        result.put("responsePayload", responsePayload);
-        result.put("fetchMeta", fetchMeta);
-        return result;
-    }
-
-    private Object applyAccessFetchRequestControls(Object requestPayload, AccessFetchConfig fetchConfig, Integer pageNo,
-                                                   String cursor) {
-        if (!fetchConfig.paged) {
-            return requestPayload;
-        }
-        LinkedHashMap<String, Object> payload = requestPayload instanceof Map
-                ? new LinkedHashMap<>(castMap(requestPayload))
-                : new LinkedHashMap<>();
-        if (ACCESS_FETCH_MODE_PAGE_NO.equals(fetchConfig.pagingMode)) {
-            payload.put(fetchConfig.pageField, pageNo == null ? fetchConfig.startPage : pageNo);
-            payload.put(fetchConfig.pageSizeField, fetchConfig.pageSize);
-        } else if (ACCESS_FETCH_MODE_CURSOR.equals(fetchConfig.pagingMode)) {
-            payload.put(fetchConfig.pageSizeField, fetchConfig.pageSize);
-            if (StringUtils.isNotEmpty(cursor)) {
-                payload.put(fetchConfig.cursorField, cursor);
-            }
-        }
-        return payload;
-    }
-
-    private HttpHeaders buildAccessHeaders(CostAccessProfile profile) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        Map<String, Object> authConfig = parseOptionalJsonMap(profile.getAuthConfigJson());
-        String authType = StringUtils.defaultIfEmpty(StringUtils.upperCase(profile.getAuthType()), AUTH_TYPE_NONE);
-        if (AUTH_TYPE_BASIC.equals(authType)) {
-            String username = firstNonBlank(stringValue(authConfig.get("username")), stringValue(authConfig.get("user")));
-            String password = firstNonBlank(stringValue(authConfig.get("password")), stringValue(authConfig.get("pass")));
-            if (StringUtils.isEmpty(username)) {
-                throw new ServiceException("BASIC 閴存潈缂哄皯 username 閰嶇疆");
-            }
-            headers.setBasicAuth(username, StringUtils.defaultString(password));
-        } else if (AUTH_TYPE_BEARER.equals(authType)) {
-            String token = firstNonBlank(
-                    firstNonBlank(stringValue(authConfig.get("token")), stringValue(authConfig.get("accessToken"))),
-                    stringValue(authConfig.get("bearerToken")));
-            if (StringUtils.isEmpty(token)) {
-                throw new ServiceException("BEARER 閴存潈缂哄皯 token 閰嶇疆");
-            }
-            headers.setBearerAuth(token);
-        }
-
-        Object extraHeaders = authConfig.get("headers");
-        if (extraHeaders instanceof Map) {
-            castMap(extraHeaders).forEach((key, value) -> {
-                if (StringUtils.isNotEmpty(key) && value != null) {
-                    headers.set(key, String.valueOf(value));
-                }
-            });
-        }
-        return headers;
-    }
-
-    private AccessFetchConfig buildAccessFetchConfig(CostAccessProfile profile) {
-        Map<String, Object> config = parseOptionalJsonMap(profile.getFetchConfigJson());
-        Map<String, Object> paging = config.get("paging") instanceof Map ? castMap(config.get("paging")) : Collections.emptyMap();
-        AccessFetchConfig fetchConfig = new AccessFetchConfig();
-        fetchConfig.recordsPath = firstNonBlank(stringValue(config.get("recordsPath")), stringValue(config.get("recordPath")));
-        fetchConfig.pagingMode = StringUtils.defaultIfEmpty(
-                StringUtils.upperCase(firstNonBlank(stringValue(paging.get("mode")), stringValue(config.get("pagingMode")))),
-                ACCESS_FETCH_MODE_NONE);
-        fetchConfig.paged = ACCESS_FETCH_MODE_PAGE_NO.equals(fetchConfig.pagingMode)
-                || ACCESS_FETCH_MODE_CURSOR.equals(fetchConfig.pagingMode);
-        fetchConfig.pageField = firstNonBlank(stringValue(paging.get("pageField")), "pageNo");
-        fetchConfig.pageSizeField = firstNonBlank(stringValue(paging.get("pageSizeField")), "pageSize");
-        fetchConfig.cursorField = firstNonBlank(stringValue(paging.get("cursorField")), "cursor");
-        fetchConfig.pageSize = Math.max(1,
-                NumberUtils.toInt(firstNonBlank(stringValue(paging.get("pageSize")), stringValue(config.get("pageSize"))),
-                        DEFAULT_ACCESS_FETCH_PAGE_SIZE));
-        fetchConfig.maxPages = Math.max(1,
-                NumberUtils.toInt(firstNonBlank(stringValue(paging.get("maxPages")), stringValue(config.get("maxPages"))),
-                        DEFAULT_ACCESS_FETCH_MAX_PAGES));
-        fetchConfig.startPage = Math.max(1,
-                NumberUtils.toInt(firstNonBlank(stringValue(paging.get("startPage")), stringValue(paging.get("startPageNo"))),
-                        1));
-        fetchConfig.hasMorePath = firstNonBlank(stringValue(paging.get("hasMorePath")), stringValue(config.get("hasMorePath")));
-        fetchConfig.nextCursorPath = firstNonBlank(stringValue(paging.get("nextCursorPath")), stringValue(config.get("nextCursorPath")));
-        fetchConfig.totalPath = firstNonBlank(stringValue(paging.get("totalPath")), stringValue(config.get("totalPath")));
-        return fetchConfig;
-    }
-
-    private Integer resolvePagedResponseTotal(AccessFetchConfig fetchConfig, Object responsePayload, Integer fallback) {
-        if (StringUtils.isEmpty(fetchConfig.totalPath)) {
-            return fallback;
-        }
-        Object totalValue = resolveByPath(responsePayload, fetchConfig.totalPath);
-        if (totalValue == null) {
-            return fallback;
-        }
-        return NumberUtils.toInt(String.valueOf(totalValue), fallback == null ? 0 : fallback);
-    }
-
-    private boolean resolveAccessFetchHasMore(AccessFetchConfig fetchConfig, int pageRecordCount, Object responsePayload,
-                                              Integer responseTotal, int totalFetchedCount, int fetchedPageCount) {
-        if (!fetchConfig.paged) {
-            return false;
-        }
-        if (StringUtils.isNotEmpty(fetchConfig.hasMorePath)) {
-            Object value = resolveByPath(responsePayload, fetchConfig.hasMorePath);
-            if (value != null) {
-                return Boolean.parseBoolean(String.valueOf(value));
-            }
-        }
-        if (responseTotal != null && responseTotal > 0) {
-            return totalFetchedCount < responseTotal;
-        }
-        if (pageRecordCount < fetchConfig.pageSize) {
-            return false;
-        }
-        return fetchedPageCount < fetchConfig.maxPages;
-    }
-
-    private String resolveAccessFetchNextCursor(AccessFetchConfig fetchConfig, Object responsePayload) {
-        if (StringUtils.isEmpty(fetchConfig.nextCursorPath)) {
-            return "";
-        }
-        Object value = resolveByPath(responsePayload, fetchConfig.nextCursorPath);
-        return value == null ? "" : String.valueOf(value);
-    }
-
-    private String buildAccessRequestUrl(String endpointUrl, String requestMethod, Object requestPayload) {
-        String normalizedUrl = StringUtils.trim(endpointUrl);
-        if (!StringUtils.startsWithIgnoreCase(normalizedUrl, "http://")
-                && !StringUtils.startsWithIgnoreCase(normalizedUrl, "https://")) {
-            throw new ServiceException("接口地址必须以 http:// 或 https:// 开头");
-        }
-        if (!HttpMethod.GET.name().equalsIgnoreCase(requestMethod) || !(requestPayload instanceof Map)) {
-            return normalizedUrl;
-        }
-        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(normalizedUrl);
-        castMap(requestPayload).forEach((key, value) -> {
-            if (StringUtils.isEmpty(key) || value == null) {
-                return;
-            }
-            if (value instanceof Collection) {
-                for (Object item : (Collection<?>) value) {
-                    builder.queryParam(key, item == null ? "" : writeJsonQueryValue(item));
-                }
-                return;
-            }
-            builder.queryParam(key, writeJsonQueryValue(value));
-        });
-        return builder.build(true).toUriString();
-    }
-
-    private HttpEntity<?> buildAccessRequestEntity(HttpHeaders headers, String requestMethod, Object requestPayload) {
-        if (HttpMethod.GET.name().equalsIgnoreCase(requestMethod)) {
-            return new HttpEntity<>(headers);
-        }
-        return new HttpEntity<>(requestPayload == null ? new LinkedHashMap<>() : requestPayload, headers);
-    }
-
-    private Object parseOptionalJsonObject(String json) {
-        String normalized = StringUtils.trim(json);
-        if (StringUtils.isEmpty(normalized)) {
-            return null;
-        }
-        return parseJsonToObject(normalized);
-    }
-
-    private String writeJsonString(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new ServiceException("JSON 序列化失败");
-        }
-    }
-
-    private String writeJsonQueryValue(Object value) {
-        if (value == null || value instanceof String || value instanceof Number || value instanceof Boolean) {
-            return String.valueOf(value);
-        }
-        return writeJsonString(value);
-    }
-
-    private Map<String, Object> buildAccessProfileSummary(CostAccessProfile profile) {
-        LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
-        summary.put("profileId", profile.getProfileId());
-        summary.put("profileCode", profile.getProfileCode());
-        summary.put("profileName", profile.getProfileName());
-        summary.put("sceneId", profile.getSceneId());
-        summary.put("sceneCode", profile.getSceneCode());
-        summary.put("sceneName", profile.getSceneName());
-        summary.put("feeId", profile.getFeeId());
-        summary.put("feeCode", profile.getFeeCode());
-        summary.put("feeName", profile.getFeeName());
-        summary.put("versionId", profile.getVersionId());
-        summary.put("versionNo", profile.getVersionNo());
-        summary.put("sourceType", profile.getSourceType());
-        summary.put("taskType", profile.getTaskType());
-        summary.put("requestMethod", profile.getRequestMethod());
-        summary.put("endpointUrl", profile.getEndpointUrl());
-        summary.put("authType", profile.getAuthType());
-        return summary;
-    }
-
-    private String buildProfileFetchPreviewMessage(CostAccessProfile profile, Map<String, Object> preview) {
-        return "已按接入方案 " + profile.getProfileName() + " 拉取业务接口并完成标准计费对象预演，共生成 "
-                + NumberUtils.toInt(stringValue(preview.get("mappedRecordCount"))) + " 条标准对象";
-    }
-
-    private String buildProfileInputBatchRemark(CostAccessProfile profile) {
-        return profile.getProfileCode() + " 直连业务接口生成导入批次";
+        return accessProfileInputMappingService.buildMappedInputResult(context, rawRecords, startIndex);
     }
 
     private Object parseJsonToObject(String json) {
@@ -4864,139 +3554,6 @@ public class CostRunServiceImpl implements ICostRunService {
             }
         }
         return result;
-    }
-
-    private List<Map<String, Object>> buildFieldMappingSummary(List<Map<String, Object>> fields, Map<String, Object> mapping) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Map<String, Object> field : fields) {
-            LinkedHashMap<String, Object> item = new LinkedHashMap<>();
-            String path = stringValue(field.get("path"));
-            String variableCode = stringValue(field.get("variableCode"));
-            Object mappingSpec = resolveInputBuildMappingSpec(mapping, path, variableCode);
-            item.put("path", path);
-            item.put("variableCode", variableCode);
-            item.put("variableName", field.get("variableName"));
-            item.put("sourceType", field.get("sourceType"));
-            item.put("includedInTemplate", field.get("includedInTemplate"));
-            item.put("mappingSpec", mappingSpec);
-            item.put("mappingHint", describeMappingSpec(mappingSpec));
-            result.add(item);
-        }
-        return result;
-    }
-
-    private Map<String, Object> buildMappedInputRecord(Map<String, Object> rawRecord, List<Map<String, Object>> fields,
-                                                       Map<String, Object> mapping, String taskType, String defaultObjectDimension, int index,
-                                                       Set<String> missingPaths) {
-        LinkedHashMap<String, Object> target = new LinkedHashMap<>();
-        populatePathValue(target, "bizNo",
-                firstNonBlank(resolveMappedCoreField(rawRecord, mapping, "bizNo"), buildTemplateBizNo(taskType, index)));
-        String objectDimension = firstNonBlank(
-                firstNonBlank(resolveMappedCoreField(rawRecord, mapping, "objectDimension"),
-                        resolveString(rawRecord, "objectDimension", "object_dimension", "objectType", "object_type")),
-                defaultObjectDimension);
-        if (StringUtils.isNotEmpty(objectDimension)) {
-            populatePathValue(target, "objectDimension", objectDimension);
-        }
-        populatePathValue(target, "objectCode",
-                firstNonBlank(resolveMappedCoreField(rawRecord, mapping, "objectCode"),
-                        resolveString(rawRecord, "objectCode", "object_code", "teamCode", "team_code", "id")));
-        populatePathValue(target, "objectName",
-                firstNonBlank(resolveMappedCoreField(rawRecord, mapping, "objectName"),
-                        resolveString(rawRecord, "objectName", "object_name", "teamName", "team_name", "name")));
-
-        for (Map<String, Object> field : fields) {
-            if (!Boolean.TRUE.equals(field.get("includedInTemplate"))) {
-                continue;
-            }
-            String path = stringValue(field.get("path"));
-            String variableCode = stringValue(field.get("variableCode"));
-            Object mappedValue = resolveMappedFieldValue(rawRecord, mapping, path, variableCode);
-            if (mappedValue == null) {
-                missingPaths.add(path);
-                continue;
-            }
-            populatePathValue(target, path, mappedValue);
-        }
-        return target;
-    }
-
-    private String resolveMappedCoreField(Map<String, Object> rawRecord, Map<String, Object> mapping, String targetKey) {
-        Object mappingSpec = resolveInputBuildMappingSpec(mapping, targetKey, targetKey);
-        Object resolved = resolveValueByMappingSpec(rawRecord, mappingSpec);
-        return resolved == null ? "" : String.valueOf(resolved);
-    }
-
-    private Object resolveMappedFieldValue(Map<String, Object> rawRecord, Map<String, Object> mapping, String path,
-                                           String variableCode) {
-        Object mappingSpec = resolveInputBuildMappingSpec(mapping, path, variableCode);
-        Object mappedValue = resolveValueByMappingSpec(rawRecord, mappingSpec);
-        if (mappedValue != null) {
-            return mappedValue;
-        }
-        if (StringUtils.isNotEmpty(path)) {
-            mappedValue = resolveByPath(rawRecord, path);
-            if (mappedValue != null) {
-                return mappedValue;
-            }
-        }
-        if (StringUtils.isNotEmpty(variableCode)) {
-            return resolveByPath(rawRecord, variableCode);
-        }
-        return null;
-    }
-
-    private Object resolveInputBuildMappingSpec(Map<String, Object> mapping, String path, String variableCode) {
-        if (mapping == null || mapping.isEmpty()) {
-            return null;
-        }
-        if (StringUtils.isNotEmpty(path) && mapping.containsKey(path)) {
-            return mapping.get(path);
-        }
-        if (StringUtils.isNotEmpty(variableCode) && mapping.containsKey(variableCode)) {
-            return mapping.get(variableCode);
-        }
-        return null;
-    }
-
-    private Object resolveValueByMappingSpec(Map<String, Object> rawRecord, Object mappingSpec) {
-        if (mappingSpec == null) {
-            return null;
-        }
-        if (mappingSpec instanceof Map) {
-            Map<String, Object> specMap = castMap(mappingSpec);
-            if (specMap.containsKey("value")) {
-                return specMap.get("value");
-            }
-            String sourcePath = firstNonBlank(stringValue(specMap.get("path")), stringValue(specMap.get("sourcePath")));
-            return StringUtils.isEmpty(sourcePath) ? null : resolveByPath(rawRecord, sourcePath);
-        }
-        if (mappingSpec instanceof String) {
-            String sourcePath = StringUtils.trim((String) mappingSpec);
-            return StringUtils.isEmpty(sourcePath) ? null : resolveByPath(rawRecord, sourcePath);
-        }
-        return mappingSpec;
-    }
-
-    private String describeMappingSpec(Object mappingSpec) {
-        if (mappingSpec == null) {
-            return "AUTO";
-        }
-        if (mappingSpec instanceof Map) {
-            Map<String, Object> specMap = castMap(mappingSpec);
-            if (specMap.containsKey("value")) {
-                return "CONST";
-            }
-            return firstNonBlank(stringValue(specMap.get("path")), stringValue(specMap.get("sourcePath")));
-        }
-        return String.valueOf(mappingSpec);
-    }
-
-    private String buildInputBuildPreviewMessage(int mappedRecordCount, int missingCount) {
-        if (missingCount <= 0) {
-            return "已生成 " + mappedRecordCount + " 条标准计费对象，可直接复制到单费用取价或正式核算入口继续联调。";
-        }
-        return "已生成 " + mappedRecordCount + " 条标准计费对象，仍有 " + missingCount + " 个模板路径未命中，请继续补映射。";
     }
 
     private String writeJson(Object value) {
@@ -5061,14 +3618,7 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     private String buildRemoteTemplatePath(RuntimeVariable variable) {
-        Map<String, Object> mapping = parseOptionalJsonMap(variable.mappingConfigJson);
-        String configuredContextPath = stringValue(mapping.get("contextPath"));
-        if (StringUtils.isNotEmpty(configuredContextPath)) {
-            return configuredContextPath;
-        }
-        String scopeCode = firstNonBlank(variable.sourceSystem, variable.variableCode);
-        String valuePath = resolveRemoteValuePath(variable, mapping);
-        return REMOTE_CONTEXT_ROOT + "." + scopeCode + "." + variable.variableCode + "." + valuePath;
+        return runtimeRemoteVariableValueService.buildTemplatePath(variable);
     }
 
     private RuntimeFormula requireRuleFormula(RuntimeSnapshot snapshot, RuntimeRule rule) {
@@ -5080,297 +3630,6 @@ public class CostRunServiceImpl implements ICostRunService {
             throw new ServiceException("当前运行配置中的公式规则[" + rule.ruleCode + "]引用的公式编码[" + rule.amountFormulaCode + "]不存在或不可执行，请先补齐配置后再执行");
         }
         return formula;
-    }
-
-    private Object resolveRemoteVariableValue(RuntimeVariable variable, Map<String, Object> baseContext) {
-        Map<String, Object> mapping = parseOptionalJsonMap(variable.mappingConfigJson);
-        mapping.putIfAbsent("sourceSystem", variable.sourceSystem);
-        mapping.putIfAbsent("variableCode", variable.variableCode);
-        Object value = resolveRemoteValueFromInput(baseContext, variable, mapping);
-        if (value != null) {
-            cacheRemoteVariableSnapshot(variable, baseContext, value);
-            return value;
-        }
-        return resolveRemoteFallbackValue(variable, baseContext);
-    }
-
-    private Object resolveRemoteValueFromInput(Map<String, Object> input, RuntimeVariable variable, Map<String, Object> mapping) {
-        if (input == null || variable == null) {
-            return null;
-        }
-        for (Object candidate : buildRemoteCandidates(input, variable, mapping)) {
-            Object normalized = normalizeRemoteCandidate(candidate, mapping, input);
-            Object value = extractRemoteValue(normalized, variable, mapping);
-            if (value != null) {
-                return value;
-            }
-        }
-        return null;
-    }
-
-    private List<Object> buildRemoteCandidates(Map<String, Object> input, RuntimeVariable variable, Map<String, Object> mapping) {
-        List<Object> candidates = new ArrayList<>();
-        addRemoteCandidate(candidates, resolveByPath(input, stringValue(mapping.get("contextPath"))));
-        addRemoteCandidate(candidates, resolveByPath(input, REMOTE_CONTEXT_ROOT));
-        addRemoteCandidate(candidates, resolveByPath(input, REMOTE_PAYLOAD_ROOT));
-        addRemoteCandidate(candidates, resolveByPath(input, REMOTE_DATA_ROOT));
-        addRemoteCandidate(candidates, resolveByPath(input, variable.variableCode));
-        addRemoteCandidate(candidates, resolveByPath(input, variable.dataPath));
-        return candidates;
-    }
-
-    private void addRemoteCandidate(List<Object> candidates, Object candidate) {
-        if (candidate != null) {
-            candidates.add(candidate);
-        }
-    }
-
-    private Object normalizeRemoteCandidate(Object candidate, Map<String, Object> mapping, Map<String, Object> input) {
-        if (candidate instanceof Map) {
-            Map<String, Object> candidateMap = castMap(candidate);
-            Object nested = resolveNestedRemoteCandidate(candidateMap, mapping);
-            if (nested != null && nested != candidate) {
-                return normalizeRemoteCandidate(nested, mapping, input);
-            }
-            return candidateMap;
-        }
-        if (candidate instanceof List) {
-            return selectRemoteMatchedRow((List<?>) candidate, mapping, input);
-        }
-        return candidate;
-    }
-
-    private Object resolveNestedRemoteCandidate(Map<String, Object> candidate, Map<String, Object> mapping) {
-        String scopeKey = stringValue(mapping.get("scopeKey"));
-        if (StringUtils.isNotEmpty(scopeKey) && candidate.containsKey(scopeKey)) {
-            return candidate.get(scopeKey);
-        }
-        String sourceSystem = stringValue(mapping.get("sourceSystem"));
-        String variableCode = stringValue(mapping.get("variableCode"));
-        if (StringUtils.isNotEmpty(sourceSystem)) {
-            Object systemScoped = candidate.get(sourceSystem);
-            if (systemScoped instanceof Map && StringUtils.isNotEmpty(variableCode)
-                    && ((Map<?, ?>) systemScoped).containsKey(variableCode)) {
-                return ((Map<?, ?>) systemScoped).get(variableCode);
-            }
-            if (systemScoped != null) {
-                return systemScoped;
-            }
-        }
-        if (StringUtils.isNotEmpty(variableCode) && candidate.containsKey(variableCode)) {
-            return candidate.get(variableCode);
-        }
-        return candidate;
-    }
-
-    private Object selectRemoteMatchedRow(List<?> rows, Map<String, Object> mapping, Map<String, Object> input) {
-        if (rows == null || rows.isEmpty()) {
-            return null;
-        }
-        Map<String, String> matchBy = normalizeMatchByConfig(mapping.get("matchBy"));
-        for (Object row : rows) {
-            if (!(row instanceof Map)) {
-                continue;
-            }
-            Map<String, Object> rowMap = castMap(row);
-            if (matchBy.isEmpty()) {
-                if (matchesRemoteRow(rowMap, input, "objectCode", "objectCode")
-                        || matchesRemoteRow(rowMap, input, "bizNo", "bizNo")) {
-                    return rowMap;
-                }
-                continue;
-            }
-            boolean matched = true;
-            for (Map.Entry<String, String> entry : matchBy.entrySet()) {
-                if (!matchesRemoteRow(rowMap, input, entry.getKey(), entry.getValue())) {
-                    matched = false;
-                    break;
-                }
-            }
-            if (matched) {
-                return rowMap;
-            }
-        }
-        Object first = rows.get(0);
-        return first instanceof Map ? castMap(first) : first;
-    }
-
-    private Map<String, String> normalizeMatchByConfig(Object raw) {
-        LinkedHashMap<String, String> matchBy = new LinkedHashMap<>();
-        if (!(raw instanceof Map)) {
-            return matchBy;
-        }
-        Map<?, ?> rawMap = (Map<?, ?>) raw;
-        for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
-            String remoteField = stringValue(entry.getKey());
-            String localField = stringValue(entry.getValue());
-            if (StringUtils.isNotEmpty(remoteField) && StringUtils.isNotEmpty(localField)) {
-                matchBy.put(remoteField, localField);
-            }
-        }
-        return matchBy;
-    }
-
-    private boolean matchesRemoteRow(Map<String, Object> row, Map<String, Object> input, String remoteField, String localField) {
-        if (row == null || input == null || StringUtils.isEmpty(remoteField) || StringUtils.isEmpty(localField)) {
-            return false;
-        }
-        Object remoteValue = resolveByPath(row, remoteField);
-        Object localValue = resolveByPath(input, localField);
-        return remoteValue != null && localValue != null
-                && StringUtils.equals(String.valueOf(remoteValue), String.valueOf(localValue));
-    }
-
-    private Object extractRemoteValue(Object candidate, RuntimeVariable variable, Map<String, Object> mapping) {
-        if (candidate == null) {
-            return null;
-        }
-        if (!(candidate instanceof Map)) {
-            return candidate;
-        }
-        Map<String, Object> candidateMap = castMap(candidate);
-        for (String path : buildRemoteValuePaths(variable, mapping)) {
-            Object value = resolveByPath(candidateMap, path);
-            if (value != null) {
-                return value;
-            }
-        }
-        return null;
-    }
-
-    private List<String> buildRemoteValuePaths(RuntimeVariable variable, Map<String, Object> mapping) {
-        LinkedHashSet<String> paths = new LinkedHashSet<>();
-        String configuredValuePath = stringValue(mapping.get("valuePath"));
-        if (StringUtils.isNotEmpty(configuredValuePath)) {
-            paths.add(configuredValuePath);
-        }
-        if (StringUtils.isNotEmpty(variable.dataPath)) {
-            paths.add(variable.dataPath);
-        }
-        if (StringUtils.isNotEmpty(variable.variableCode)) {
-            paths.add(variable.variableCode);
-        }
-        paths.add("mappedValue");
-        paths.add("value");
-        return new ArrayList<>(paths);
-    }
-
-    private String resolveRemoteValuePath(RuntimeVariable variable, Map<String, Object> mapping) {
-        List<String> paths = buildRemoteValuePaths(variable, mapping);
-        return paths.isEmpty() ? "value" : paths.get(0);
-    }
-
-    private Object resolveRemoteFallbackValue(RuntimeVariable variable, Map<String, Object> baseContext) {
-        String fallbackPolicy = firstNonBlank(StringUtils.trim(variable.fallbackPolicy), FALLBACK_POLICY_FAIL_FAST);
-        if (FALLBACK_POLICY_DEFAULT_VALUE.equalsIgnoreCase(fallbackPolicy)) {
-            return variable.defaultValue;
-        }
-        if (FALLBACK_POLICY_LAST_SNAPSHOT.equalsIgnoreCase(fallbackPolicy)) {
-            Object cachedValue = readRemoteCachedValue(variable, baseContext);
-            if (cachedValue != null) {
-                return cachedValue;
-            }
-            if (variable.defaultValue != null) {
-                return variable.defaultValue;
-            }
-        }
-        throw new ServiceException("第三方变量[" + variable.variableCode + "]未获取到运行值，请检查 remoteContext/remotePayload 输入或调整兜底策略");
-    }
-
-    private Object readRemoteCachedValue(RuntimeVariable variable, Map<String, Object> baseContext) {
-        String cacheKey = buildRemoteLastSnapshotCacheKey(variable, baseContext);
-        String cachedJson = redisCache.getCacheObject(cacheKey);
-        return StringUtils.isEmpty(cachedJson) ? null : parseJsonToObject(cachedJson);
-    }
-
-    private void cacheRemoteVariableSnapshot(RuntimeVariable variable, Map<String, Object> baseContext, Object value) {
-        if (variable == null || value == null) {
-            return;
-        }
-        String fallbackPolicy = firstNonBlank(StringUtils.trim(variable.fallbackPolicy), "");
-        String cachePolicy = firstNonBlank(StringUtils.trim(variable.cachePolicy), CACHE_POLICY_NONE);
-        if (CACHE_POLICY_NONE.equalsIgnoreCase(cachePolicy) && !FALLBACK_POLICY_LAST_SNAPSHOT.equalsIgnoreCase(fallbackPolicy)) {
-            return;
-        }
-        String cacheKey = buildRemoteLastSnapshotCacheKey(variable, baseContext);
-        String payload = writeJson(value);
-        if (CACHE_POLICY_TTL.equalsIgnoreCase(cachePolicy)) {
-            redisCache.setCacheObject(cacheKey, payload, REMOTE_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
-            return;
-        }
-        redisCache.setCacheObject(cacheKey, payload);
-    }
-
-    private String buildRemoteLastSnapshotCacheKey(RuntimeVariable variable, Map<String, Object> baseContext) {
-        String sceneCode = resolveString(baseContext, "sceneCode");
-        String objectCode = resolveString(baseContext, "objectCode", "object_code");
-        String bizNo = resolveString(baseContext, "bizNo", "biz_no");
-        String sourceSystem = firstNonBlank(variable.sourceSystem, "DEFAULT");
-        String objectKey = firstNonBlank(objectCode, firstNonBlank(bizNo, "GLOBAL"));
-        return REMOTE_LAST_SNAPSHOT_CACHE_PREFIX + firstNonBlank(sceneCode, "UNKNOWN")
-                + ":" + sourceSystem + ":" + variable.variableCode + ":" + objectKey;
-    }
-
-    private Object resolveValueFromInput(Map<String, Object> input, String dataPath, String variableCode, Object defaultValue) {
-        Object value = null;
-        if (StringUtils.isNotEmpty(dataPath)) {
-            value = resolveByPath(input, dataPath);
-        }
-        if (value == null && StringUtils.isNotEmpty(variableCode)) {
-            value = resolveByPath(input, variableCode);
-        }
-        return value != null ? value : defaultValue;
-    }
-
-    private Object resolveByPath(Object input, String path) {
-        if (!(input instanceof Map)) {
-            return null;
-        }
-        return resolveByPath(castMap(input), path);
-    }
-
-    private Object resolveByPath(Map<String, Object> input, String path) {
-        if (input == null || StringUtils.isEmpty(path)) {
-            return null;
-        }
-        String[] pieces = path.split("\\.");
-        Object current = input;
-        for (String piece : pieces) {
-            if (!(current instanceof Map)) {
-                return null;
-            }
-            current = ((Map<?, ?>) current).get(piece);
-            if (current == null) {
-                return null;
-            }
-        }
-        return current;
-    }
-
-    private Object convertValueByType(Object value, String dataType, Object defaultValue) {
-        if (DATA_TYPE_NUMBER.equals(dataType)) {
-            return toBigDecimal(value == null ? defaultValue : value);
-        }
-        if (DATA_TYPE_BOOLEAN.equals(dataType)) {
-            return convertBoolean(value == null ? defaultValue : value);
-        }
-        if (DATA_TYPE_JSON.equals(dataType) && value instanceof String) {
-            return parseJsonToObject(String.valueOf(value));
-        }
-        if (value == null) {
-            return defaultValue;
-        }
-        return value;
-    }
-
-    private Boolean convertBoolean(Object value) {
-        if (value == null) {
-            return Boolean.FALSE;
-        }
-        if (value instanceof Boolean) {
-            return (Boolean) value;
-        }
-        return "true".equalsIgnoreCase(String.valueOf(value)) || "1".equals(String.valueOf(value));
     }
 
     private List<String> splitValues(String compareValue) {
@@ -5720,7 +3979,7 @@ public class CostRunServiceImpl implements ICostRunService {
             }
             try {
                 createTaskAlarm(task, null, "TASK_FINISH_SIDE_EFFECT_FAILED", "WARN",
-                        "浠诲姟鏀跺熬娌荤悊澶辫触",
+                        "任务收尾治理失败",
                         "任务 " + task.getTaskNo() + " 在 " + action + " 阶段失败：" + limitLength(ex.getMessage(), 300));
             } catch (Exception alarmException) {
                 log.warn("Task finish side effect alarm create failed, taskId={}, action={}",
@@ -5747,48 +4006,6 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private String buildRuntimeCacheKey(Long versionId) {
         return RUNTIME_CACHE_PREFIX + versionId;
-    }
-
-    private static class InputBuildContext {
-        private Map<String, Object> template = new LinkedHashMap<>();
-        private Map<String, Object> mapping = new LinkedHashMap<>();
-        private List<Map<String, Object>> fields = Collections.emptyList();
-        private List<Map<String, Object>> fieldMappings = Collections.emptyList();
-        private String taskType;
-        private String defaultObjectDimension;
-    }
-
-    private static class AccessFetchConfig {
-        private boolean paged;
-        private String pagingMode = ACCESS_FETCH_MODE_NONE;
-        private String recordsPath;
-        private String pageField = "pageNo";
-        private String pageSizeField = "pageSize";
-        private String cursorField = "cursor";
-        private String hasMorePath;
-        private String nextCursorPath;
-        private String totalPath;
-        private int pageSize = DEFAULT_ACCESS_FETCH_PAGE_SIZE;
-        private int maxPages = DEFAULT_ACCESS_FETCH_MAX_PAGES;
-        private int startPage = 1;
-    }
-
-    private static class AccessFetchCheckpoint {
-        public String requestPayloadJson;
-        public String pagingMode;
-        public String recordsPath;
-        public Integer nextPageNo;
-        public String nextCursor;
-        public Boolean hasMore;
-        public Integer responseTotal;
-        public Integer fetchedPageCount;
-        public Integer fetchedRecordCount;
-        public Integer mappedRecordCount;
-        public Integer lastPageNo;
-        public String lastCursor;
-        public String lastResolvedUrl;
-        public Integer pageSize;
-        public Integer maxPages;
     }
 
     public static class RuntimeSnapshot {
@@ -5893,7 +4110,7 @@ public class CostRunServiceImpl implements ICostRunService {
         public BigDecimal rateValue;
         public String intervalMode;
 
-        private String buildRangeSummary() {
+        public String buildRangeSummary() {
             return String.format(Locale.ROOT, "%s ~ %s",
                     startValue == null ? "-INF" : startValue.toPlainString(),
                     endValue == null ? "+INF" : endValue.toPlainString());
@@ -5915,14 +4132,6 @@ public class CostRunServiceImpl implements ICostRunService {
         private FeeTemplateVariable(RuntimeVariable variable) {
             this.variable = variable;
         }
-    }
-
-    private static class RuleMatchResult {
-        private RuntimeRule rule;
-        private RuntimeTier tier;
-        private Integer matchedGroupNo;
-        private List<Map<String, Object>> conditionExplain = Collections.emptyList();
-        private List<Map<String, Object>> ruleEvaluations = new ArrayList<>();
     }
 
     private static class AfterCommitTaskSynchronization implements TransactionSynchronization {
@@ -5969,64 +4178,6 @@ public class CostRunServiceImpl implements ICostRunService {
         private PartitionDispatchContext(List<CostCalcTaskDetail> partitionDetails, PartitionClaimToken claimToken) {
             this.partitionDetails = partitionDetails;
             this.claimToken = claimToken;
-        }
-    }
-
-    private static class ConditionMatchResult {
-        private boolean matched;
-        private Integer matchedGroupNo;
-    }
-
-    private static class PricingResult {
-        private BigDecimal quantityValue;
-        private BigDecimal unitPrice;
-        private BigDecimal amountValue;
-        private Map<String, Object> pricingExplain;
-    }
-
-    private static class FeeExecutionResult {
-        private Long feeId;
-        private String feeCode;
-        private String feeName;
-        private String unitCode;
-        private String objectDimension;
-        private Long ruleId;
-        private String ruleCode;
-        private String ruleName;
-        private Long tierId;
-        private BigDecimal quantityValue;
-        private BigDecimal unitPrice;
-        private BigDecimal amountValue;
-        private Map<String, Object> variableExplain;
-        private List<Map<String, Object>> conditionExplain;
-        private Map<String, Object> pricingExplain;
-        private List<Map<String, Object>> timelineSteps;
-
-        private Map<String, Object> toView() {
-            LinkedHashMap<String, Object> item = new LinkedHashMap<>();
-            item.put("feeId", feeId);
-            item.put("feeCode", feeCode);
-            item.put("feeName", feeName);
-            item.put("unitCode", unitCode);
-            item.put("ruleCode", ruleCode);
-            item.put("ruleName", ruleName);
-            item.put("quantityValue", quantityValue);
-            item.put("unitPrice", unitPrice);
-            item.put("amountValue", amountValue);
-            return item;
-        }
-
-        private Map<String, Object> toExplainView() {
-            LinkedHashMap<String, Object> item = new LinkedHashMap<>();
-            item.put("feeCode", feeCode);
-            item.put("feeName", feeName);
-            item.put("unitCode", unitCode);
-            item.put("ruleCode", ruleCode);
-            item.put("ruleName", ruleName);
-            item.put("conditions", conditionExplain);
-            item.put("pricing", pricingExplain);
-            item.put("timeline", timelineSteps);
-            return item;
         }
     }
 
@@ -6106,11 +4257,4 @@ public class CostRunServiceImpl implements ICostRunService {
         }
     }
 
-    private static class ExecutionResult {
-        private Map<String, Object> variableView;
-        private Map<String, Object> resultView;
-        private Map<String, Object> explainView;
-        private List<FeeExecutionResult> feeResults;
-        private Map<String, Map<String, Object>> skippedFeeExplains = new LinkedHashMap<>();
-    }
 }

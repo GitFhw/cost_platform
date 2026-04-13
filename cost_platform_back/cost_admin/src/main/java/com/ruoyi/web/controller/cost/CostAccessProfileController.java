@@ -9,7 +9,7 @@ import com.ruoyi.system.domain.cost.CostAccessProfile;
 import com.ruoyi.system.domain.cost.bo.CostAccessProfileBuildBatchBo;
 import com.ruoyi.system.domain.cost.bo.CostAccessProfilePreviewFetchBo;
 import com.ruoyi.system.service.cost.ICostAccessProfileService;
-import com.ruoyi.system.service.cost.ICostRunService;
+import com.ruoyi.system.service.cost.remote.AccessProfileRunService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -24,7 +24,7 @@ public class CostAccessProfileController extends BaseController {
     private ICostAccessProfileService accessProfileService;
 
     @Autowired
-    private ICostRunService runService;
+    private AccessProfileRunService accessProfileRunService;
 
     @PreAuthorize("@ss.hasPermi('cost:access:list')")
     @GetMapping("/list")
@@ -50,14 +50,14 @@ public class CostAccessProfileController extends BaseController {
     @Log(title = "数据接入", businessType = BusinessType.OTHER)
     @PostMapping("/{profileId}/preview-fetch")
     public AjaxResult previewFetch(@PathVariable Long profileId, @RequestBody(required = false) CostAccessProfilePreviewFetchBo bo) {
-        return success(runService.previewBuiltInputByProfile(profileId, bo));
+        return success(accessProfileRunService.previewBuiltInputByProfile(profileId, bo));
     }
 
     @PreAuthorize("@ss.hasPermi('cost:task:execute')")
     @Log(title = "数据接入", businessType = BusinessType.INSERT)
     @PostMapping("/{profileId}/input-batch")
     public AjaxResult buildInputBatch(@PathVariable Long profileId, @Validated @RequestBody CostAccessProfileBuildBatchBo bo) {
-        return success(runService.createInputBatchByProfile(profileId, bo));
+        return success(accessProfileRunService.createInputBatchByProfile(profileId, bo));
     }
 
     @PreAuthorize("@ss.hasPermi('cost:access:add')")
