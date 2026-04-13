@@ -4,14 +4,14 @@ import com.ruoyi.system.domain.vo.CostPublishCheckItemVo;
 import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
 import org.springframework.stereotype.Component;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @Component
 public class BasicPublishValidationRule implements PublishValidationRule {
-    private static final String STATUS_ENABLED = "0";
-
     private final CostPublishVersionMapper publishVersionMapper;
 
     public BasicPublishValidationRule(CostPublishVersionMapper publishVersionMapper) {

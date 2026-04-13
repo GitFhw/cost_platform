@@ -22,6 +22,8 @@ import com.ruoyi.system.service.cost.ICostFormulaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.util.*;
 
 /**
@@ -34,7 +36,6 @@ import java.util.*;
  */
 @Service
 public class CostFormulaServiceImpl implements ICostFormulaService {
-    private static final String STATUS_ENABLED = "0";
     private static final String ASSET_TYPE_FORMULA = "FORMULA";
     private static final String ASSET_TYPE_TEMPLATE = "TEMPLATE";
     private static final String DICT_TYPE_FORMULA_STATUS = "cost_formula_status";

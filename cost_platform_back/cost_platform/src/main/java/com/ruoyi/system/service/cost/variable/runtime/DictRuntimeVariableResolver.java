@@ -4,10 +4,10 @@ import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.service.impl.cost.CostRunServiceImpl;
 import org.springframework.stereotype.Component;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 @Component
 public class DictRuntimeVariableResolver implements RuntimeVariableResolver {
-    private static final String SOURCE_TYPE_DICT = "DICT";
-
     @Override
     public boolean supports(RuntimeVariableResolveContext context) {
         CostRunServiceImpl.RuntimeVariable variable = context.getVariable();

@@ -16,6 +16,8 @@ import com.ruoyi.system.service.cost.ICostRunService;
 import com.ruoyi.system.service.cost.remote.AccessProfileInputMappingService.InputBuildContext;
 import org.springframework.stereotype.Service;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -25,8 +27,6 @@ import java.util.UUID;
 
 @Service
 public class AccessProfileRunService {
-    private static final String STATUS_ENABLED = "0";
-    private static final String ACCESS_SOURCE_TYPE_HTTP_API = "HTTP_API";
     private static final String VERSION_STATUS_ACTIVE = "ACTIVE";
     private static final DateTimeFormatter NO_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final int DEFAULT_ACCESS_PREVIEW_RECORD_LIMIT = 20;

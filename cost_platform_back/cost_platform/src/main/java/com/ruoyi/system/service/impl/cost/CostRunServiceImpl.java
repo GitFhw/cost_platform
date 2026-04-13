@@ -55,6 +55,9 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+import static com.ruoyi.system.service.cost.execution.CostExecutionConstants.RULE_TYPE_FORMULA;
+
 /**
  * 成本核算主链服务实现
  *
@@ -65,49 +68,11 @@ import java.util.stream.Collectors;
 @Service
 public class CostRunServiceImpl implements ICostRunService {
     private static final Logger log = LoggerFactory.getLogger(CostRunServiceImpl.class);
-    private static final String STATUS_ENABLED = "0";
-    private static final String SIMULATION_STATUS_SUCCESS = "SUCCESS";
-    private static final String SIMULATION_STATUS_FAILED = "FAILED";
-    private static final String TASK_TYPE_SIMULATION_BATCH = "SIMULATION_BATCH";
-    private static final String TASK_TYPE_FORMAL_SINGLE = "FORMAL_SINGLE";
-    private static final String TASK_TYPE_FORMAL_BATCH = "FORMAL_BATCH";
-    private static final String INPUT_SOURCE_INLINE_JSON = "INLINE_JSON";
-    private static final String INPUT_SOURCE_BATCH = "INPUT_BATCH";
-    private static final String INPUT_BATCH_STATUS_LOADING = "LOADING";
-    private static final String INPUT_BATCH_STATUS_PARTIAL = "PARTIAL";
-    private static final String INPUT_BATCH_STATUS_READY = "READY";
-    private static final String INPUT_BATCH_STATUS_SUBMITTED = "SUBMITTED";
-    private static final String INPUT_BATCH_STATUS_CONSUMED = "CONSUMED";
-    private static final String TASK_STATUS_INIT = "INIT";
-    private static final String TASK_STATUS_RUNNING = "RUNNING";
-    private static final String TASK_STATUS_SUCCESS = "SUCCESS";
-    private static final String TASK_STATUS_PART_SUCCESS = "PART_SUCCESS";
-    private static final String TASK_STATUS_FAILED = "FAILED";
-    private static final String TASK_STATUS_CANCELLED = "CANCELLED";
-    private static final String DETAIL_STATUS_INIT = "INIT";
-    private static final String DETAIL_STATUS_SUCCESS = "SUCCESS";
-    private static final String DETAIL_STATUS_FAILED = "FAILED";
     private static final String PARTITION_PERSIST_MODE_BATCH = "BATCH";
     private static final String PARTITION_PERSIST_MODE_SINGLE = "SINGLE_FALLBACK";
     private static final String PARTITION_STAGE_EXECUTION = "EXECUTION";
     private static final String PARTITION_STAGE_BATCH_PERSIST = "BATCH_PERSIST";
     private static final String PARTITION_STAGE_SINGLE_PERSIST = "SINGLE_PERSIST";
-    private static final String RESULT_STATUS_SUCCESS = "SUCCESS";
-    private static final String PERIOD_STATUS_NOT_STARTED = "NOT_STARTED";
-    private static final String PERIOD_STATUS_IN_PROGRESS = "IN_PROGRESS";
-    private static final String PERIOD_STATUS_CLOSED = "CLOSED";
-    private static final String PERIOD_STATUS_SEALED = "SEALED";
-    private static final String RECALC_STATUS_RUNNING = "RUNNING";
-    private static final String RECALC_STATUS_SUCCESS = "SUCCESS";
-    private static final String RECALC_STATUS_FAILED = "FAILED";
-    private static final String RULE_TYPE_FORMULA = "FORMULA";
-    private static final String SNAPSHOT_SOURCE_PUBLISHED = "PUBLISHED";
-    private static final String SNAPSHOT_SOURCE_DRAFT = "DRAFT";
-    private static final String SOURCE_TYPE_FORMULA = "FORMULA";
-    private static final String SOURCE_TYPE_REMOTE = "REMOTE";
-    private static final String DATA_TYPE_NUMBER = "NUMBER";
-    private static final String DATA_TYPE_BOOLEAN = "BOOLEAN";
-    private static final String DATA_TYPE_JSON = "JSON";
     private static final String OP_EXPR = "EXPR";
     private static final String INTERVAL_LCRO = "LEFT_CLOSED_RIGHT_OPEN";
     private static final String RUNTIME_CACHE_PREFIX = "cost:runtime:snapshot:";

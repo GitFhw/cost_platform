@@ -17,16 +17,18 @@ import com.ruoyi.system.service.cost.ICostAccessProfileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+
 import java.util.Arrays;
 import java.util.List;
 
 @Service
 public class CostAccessProfileServiceImpl implements ICostAccessProfileService {
     private static final String DEFAULT_SOURCE_TYPE = "RAW_JSON";
-    private static final String DEFAULT_TASK_TYPE = "FORMAL_BATCH";
+    private static final String DEFAULT_TASK_TYPE = TASK_TYPE_FORMAL_BATCH;
     private static final String DEFAULT_REQUEST_METHOD = "GET";
     private static final String DEFAULT_AUTH_TYPE = "NONE";
-    private static final String DEFAULT_STATUS = "0";
+    private static final String DEFAULT_STATUS = STATUS_ENABLED;
 
     @Autowired
     private CostAccessProfileMapper accessProfileMapper;

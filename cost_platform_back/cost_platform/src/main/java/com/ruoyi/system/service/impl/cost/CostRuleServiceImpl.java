@@ -21,6 +21,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
+import static com.ruoyi.system.service.cost.execution.CostExecutionConstants.RULE_TYPE_FORMULA;
+
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.*;
@@ -39,10 +42,8 @@ import java.util.*;
 @Service
 public class CostRuleServiceImpl implements ICostRuleService {
     private static final String STATUS_DISABLED = "1";
-    private static final String STATUS_ENABLED = "0";
     private static final String RULE_TYPE_FIXED_RATE = "FIXED_RATE";
     private static final String RULE_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
-    private static final String RULE_TYPE_FORMULA = "FORMULA";
     private static final String RULE_TYPE_TIER_RATE = "TIER_RATE";
     private static final String PRICING_MODE_TYPED = "TYPED";
     private static final String PRICING_MODE_GROUPED = "GROUPED";
