@@ -48,6 +48,9 @@ class CostPublishControllerManualIT {
     private CostVariableMapper variableMapper;
 
     @Autowired
+    private CostFormulaMapper formulaMapper;
+
+    @Autowired
     private CostRuleMapper ruleMapper;
 
     @Autowired
@@ -103,6 +106,56 @@ class CostPublishControllerManualIT {
         assertCheckMessageContains(precheck.path("items"), "FORMULA_VARIABLE_ASSET_MISSING", variableMissingAsset.getVariableCode());
         assertCheckMessageContains(precheck.path("items"), "FORMULA_RULE_CODE_MISSING", ruleMissingCode.getRuleCode());
         assertCheckMessageContains(precheck.path("items"), "FORMULA_RULE_ASSET_MISSING", ruleMissingAsset.getRuleCode());
+    }
+
+    @Test
+    void shouldBlockPublishPrecheckWhenFormulaVariableDependenciesAreBroken() throws Exception {
+        Long sceneId = requireSceneId();
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+        String token = loginAndGetToken();
+
+        CostFormula missingVariableFormula = buildFormula(sceneId, "TMPPUB_FORMULA_MISSINGVAR_" + stamp, "V.MISSING_VAR_" + stamp + " + 1");
+        formulaMapper.insert(missingVariableFormula);
+        CostVariable missingVariable = buildFormulaVariable(sceneId,
+                "TMPPUB_VAR_MISSINGVAR_" + stamp, "temp formula var missing dep " + stamp);
+        missingVariable.setFormulaCode(missingVariableFormula.getFormulaCode());
+        missingVariable.setFormulaExpr(missingVariableFormula.getFormulaExpr());
+        variableMapper.insert(missingVariable);
+
+        CostFormula missingFeeFormula = buildFormula(sceneId, "TMPPUB_FORMULA_MISSINGFEE_" + stamp, "F['MISSING_FEE_" + stamp + "'] + 1");
+        formulaMapper.insert(missingFeeFormula);
+        CostVariable missingFee = buildFormulaVariable(sceneId,
+                "TMPPUB_VAR_MISSINGFEE_" + stamp, "temp formula var missing fee " + stamp);
+        missingFee.setFormulaCode(missingFeeFormula.getFormulaCode());
+        missingFee.setFormulaExpr(missingFeeFormula.getFormulaExpr());
+        variableMapper.insert(missingFee);
+
+        CostFormula cycleFormulaA = buildFormula(sceneId, "TMPPUB_FORMULA_CYCLE_A_" + stamp, "V.TMPPUB_VAR_CYCLE_B_" + stamp + " + 1");
+        CostFormula cycleFormulaB = buildFormula(sceneId, "TMPPUB_FORMULA_CYCLE_B_" + stamp, "V.TMPPUB_VAR_CYCLE_A_" + stamp + " + 1");
+        formulaMapper.insert(cycleFormulaA);
+        formulaMapper.insert(cycleFormulaB);
+
+        CostVariable cycleA = buildFormulaVariable(sceneId,
+                "TMPPUB_VAR_CYCLE_A_" + stamp, "temp cycle var A " + stamp);
+        cycleA.setFormulaCode(cycleFormulaA.getFormulaCode());
+        cycleA.setFormulaExpr(cycleFormulaA.getFormulaExpr());
+        variableMapper.insert(cycleA);
+
+        CostVariable cycleB = buildFormulaVariable(sceneId,
+                "TMPPUB_VAR_CYCLE_B_" + stamp, "temp cycle var B " + stamp);
+        cycleB.setFormulaCode(cycleFormulaB.getFormulaCode());
+        cycleB.setFormulaExpr(cycleFormulaB.getFormulaExpr());
+        variableMapper.insert(cycleB);
+
+        JsonNode precheck = readData(mockMvc.perform(get("/cost/publish/precheck/{sceneId}", sceneId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        assertThat(precheck.path("publishable").asBoolean()).isFalse();
+        assertCheckMessageContains(precheck.path("items"), "FORMULA_DEPENDENCY_VARIABLE_MISSING", missingVariable.getVariableCode());
+        assertCheckMessageContains(precheck.path("items"), "FORMULA_DEPENDENCY_FEE_MISSING", missingFee.getVariableCode());
+        assertCheckMessageContains(precheck.path("items"), "FORMULA_DEPENDENCY_CYCLE", cycleA.getVariableCode());
     }
 
     @Test
@@ -282,6 +335,28 @@ class CostPublishControllerManualIT {
         rule.setCreateBy("itest");
         rule.setUpdateBy("itest");
         return rule;
+    }
+
+    private CostFormula buildFormula(Long sceneId, String formulaCode, String formulaExpr) {
+        CostFormula formula = new CostFormula();
+        formula.setSceneId(sceneId);
+        formula.setFormulaCode(formulaCode);
+        formula.setFormulaName("publish-precheck-formula-" + formulaCode);
+        formula.setFormulaDesc("publish precheck formula dependency regression");
+        formula.setBusinessFormula(formulaExpr);
+        formula.setFormulaExpr(formulaExpr);
+        formula.setAssetType("FORMULA");
+        formula.setWorkbenchMode("EXPERT");
+        formula.setWorkbenchPattern("IF_ELSE");
+        formula.setTemplateCode("");
+        formula.setWorkbenchConfigJson("{}");
+        formula.setNamespaceScope("V,F,I,C,T");
+        formula.setReturnType("NUMBER");
+        formula.setStatus("0");
+        formula.setSortNo(990);
+        formula.setCreateBy("itest");
+        formula.setUpdateBy("itest");
+        return formula;
     }
 
     private void assertCheckMessageContains(JsonNode items, String code, String expectedText) {

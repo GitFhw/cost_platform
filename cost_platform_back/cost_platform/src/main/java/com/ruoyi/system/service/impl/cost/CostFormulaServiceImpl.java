@@ -11,6 +11,7 @@ import com.ruoyi.system.domain.cost.CostFormula;
 import com.ruoyi.system.domain.cost.CostFormulaVersion;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.bo.CostFormulaTestBo;
+import com.ruoyi.system.domain.vo.CostExpressionAnalysisVo;
 import com.ruoyi.system.domain.vo.CostFormulaGovernanceCheckVo;
 import com.ruoyi.system.mapper.SysDictDataMapper;
 import com.ruoyi.system.mapper.cost.CostFormulaMapper;
@@ -38,6 +39,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService {
     private static final String ASSET_TYPE_TEMPLATE = "TEMPLATE";
     private static final String DICT_TYPE_FORMULA_STATUS = "cost_formula_status";
     private static final String DICT_TYPE_RETURN_TYPE = "cost_formula_return_type";
+    private static final String DEFAULT_NAMESPACE_SCOPE = "V,C,I,F,T";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -200,6 +202,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService {
         }
         CostFormula formula = resolveFormulaForTest(bo);
         Map<String, Object> input = parseInputContext(bo.getInputJson());
+        CostExpressionAnalysisVo analysis = expressionService.analyzeExpression(formula.getFormulaExpr(), formula.getNamespaceScope());
         Object result = expressionService.evaluate(formula.getFormulaExpr(), input);
 
         LinkedHashMap<String, Object> response = new LinkedHashMap<>();
@@ -208,6 +211,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService {
         response.put("businessFormula", formula.getBusinessFormula());
         response.put("formulaExpr", formula.getFormulaExpr());
         response.put("input", input);
+        response.put("analysis", analysis);
         response.put("result", result);
 
         if (formula.getFormulaId() != null) {
@@ -244,14 +248,14 @@ public class CostFormulaServiceImpl implements ICostFormulaService {
         validateDictValue(DICT_TYPE_FORMULA_STATUS, formula.getStatus(), "公式状态");
         validateDictValue(DICT_TYPE_RETURN_TYPE, formula.getReturnType(), "返回类型");
         validateAssetType(formula.getAssetType());
-        expressionService.validateExpression(formula.getFormulaExpr());
-        validateTestCaseJson(formula.getTestCaseJson());
         formula.setFormulaCode(StringUtils.trim(formula.getFormulaCode()));
         formula.setFormulaName(StringUtils.trim(formula.getFormulaName()));
         formula.setFormulaDesc(StringUtils.defaultString(formula.getFormulaDesc()));
         formula.setBusinessFormula(StringUtils.defaultString(formula.getBusinessFormula()));
+        formula.setNamespaceScope(normalizeNamespaceScope(formula.getNamespaceScope()));
+        expressionService.validateExpression(formula.getFormulaExpr(), formula.getNamespaceScope());
+        validateTestCaseJson(formula.getTestCaseJson());
         normalizeWorkbenchConfig(formula);
-        formula.setNamespaceScope(StringUtils.defaultIfEmpty(StringUtils.trim(formula.getNamespaceScope()), "V,C,I,F,T"));
     }
 
     /**
@@ -424,8 +428,13 @@ public class CostFormulaServiceImpl implements ICostFormulaService {
         temporary.setFormulaName("临时测试公式");
         temporary.setBusinessFormula("临时测试公式");
         temporary.setFormulaExpr(bo.getFormulaExpr());
-        expressionService.validateExpression(temporary.getFormulaExpr());
+        temporary.setNamespaceScope(normalizeNamespaceScope(bo.getNamespaceScope()));
+        expressionService.validateExpression(temporary.getFormulaExpr(), temporary.getNamespaceScope());
         return temporary;
+    }
+
+    private String normalizeNamespaceScope(String namespaceScope) {
+        return StringUtils.defaultIfEmpty(StringUtils.trim(namespaceScope), DEFAULT_NAMESPACE_SCOPE);
     }
 
     /**

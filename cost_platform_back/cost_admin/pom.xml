@@ -12,7 +12,7 @@
     <artifactId>cost_admin</artifactId>
 
     <description>
-        web服务入口
+        web鏈嶅姟鍏ュ彛
     </description>
 
     <dependencies>
@@ -21,7 +21,7 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
-            <optional>true</optional> <!-- 表示依赖不会传递 -->
+            <optional>true</optional>
         </dependency>
 
         <!-- spring-doc -->
@@ -42,31 +42,37 @@
             <version>10.10.0</version>
         </dependency>
 
-         <!-- Mysql驱动包 -->
+        <!-- Mysql椹卞姩鍖?-->
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
         </dependency>
 
-        <!-- 核心模块-->
+        <!-- 鏍稿績妯″潡-->
         <dependency>
             <groupId>com.ruoyi</groupId>
             <artifactId>cost_framework</artifactId>
         </dependency>
 
-        <!-- 成本核算模块 -->
+        <!-- 鎴愭湰鏍哥畻妯″潡 -->
         <dependency>
             <groupId>com.ruoyi</groupId>
             <artifactId>cost_platform</artifactId>
         </dependency>
 
-        <!-- 定时任务-->
+        <!-- 绯荤粺鍩虹妯″潡 -->
+        <dependency>
+            <groupId>com.ruoyi</groupId>
+            <artifactId>cost_system</artifactId>
+        </dependency>
+
+        <!-- 瀹氭椂浠诲姟-->
         <dependency>
             <groupId>com.ruoyi</groupId>
             <artifactId>cost_quartz</artifactId>
         </dependency>
 
-        <!-- 代码生成-->
+        <!-- 浠ｇ爜鐢熸垚-->
         <dependency>
             <groupId>com.ruoyi</groupId>
             <artifactId>cost_generator</artifactId>
@@ -100,15 +106,15 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>   
-                <groupId>org.apache.maven.plugins</groupId>   
-                <artifactId>maven-war-plugin</artifactId>   
-                <version>3.1.0</version>   
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-war-plugin</artifactId>
+                <version>3.1.0</version>
                 <configuration>
                     <failOnMissingWebXml>false</failOnMissingWebXml>
                     <warName>${project.artifactId}</warName>
-                </configuration>   
-           </plugin>   
+                </configuration>
+           </plugin>
         </plugins>
         <finalName>${project.artifactId}</finalName>
     </build>

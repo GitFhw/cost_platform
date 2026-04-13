@@ -63,9 +63,5 @@ public interface ICostRunService {
 
     Map<String, Object> previewBuiltInput(CostInputBuildPreviewBo bo);
 
-    Map<String, Object> previewBuiltInputByProfile(Long profileId, CostAccessProfilePreviewFetchBo bo);
-
-    Map<String, Object> createInputBatchByProfile(Long profileId, CostAccessProfileBuildBatchBo bo);
-
     Map<String, Object> calculateFee(CostFeeCalculateBo bo);
 }
