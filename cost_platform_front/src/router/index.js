@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '@/layout'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 
 /**
  * 路由说明
@@ -161,7 +162,7 @@ export const dynamicRoutes = [
     ]
   },
   {
-    path: '/cost/publish-audit',
+    path: '/cost/model/publish-audit',
     component: Layout,
     hidden: true,
     permissions: ['cost:publish:list'],
@@ -170,7 +171,7 @@ export const dynamicRoutes = [
         path: 'index',
         component: () => import('@/views/cost/publish/audit.vue'),
         name: 'CostPublishAudit',
-        meta: { title: '发布审计', activeMenu: '/cost/publish' }
+        meta: { title: '发布审计', activeMenu: COST_MENU_ROUTES.publish }
       }
     ]
   }

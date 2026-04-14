@@ -174,7 +174,15 @@
         </el-select>
       </el-form-item>
       <el-form-item label="账期" prop="billMonth">
-        <el-input v-model="queryParams.billMonth" clearable placeholder="yyyy-MM" style="width: 160px" />
+        <el-date-picker
+          v-model="queryParams.billMonth"
+          clearable
+          type="month"
+          format="YYYY-MM"
+          value-format="YYYY-MM"
+          placeholder="选择账期"
+          style="width: 160px"
+        />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
@@ -209,7 +217,14 @@
             </el-radio-group>
           </el-form-item>
           <el-form-item label="账期" required>
-            <el-input v-model="form.billMonth" placeholder="yyyy-MM" />
+            <el-date-picker
+              v-model="form.billMonth"
+              type="month"
+              format="YYYY-MM"
+              value-format="YYYY-MM"
+              placeholder="选择账期"
+              style="width: 100%"
+            />
           </el-form-item>
           <el-form-item label="请求号">
             <el-input v-model="form.requestNo" placeholder="可选，用于幂等提交" />
@@ -547,7 +562,14 @@
           </el-select>
         </el-form-item>
         <el-form-item label="账期" required>
-          <el-input v-model="batchForm.billMonth" placeholder="yyyy-MM" />
+          <el-date-picker
+            v-model="batchForm.billMonth"
+            type="month"
+            format="YYYY-MM"
+            value-format="YYYY-MM"
+            placeholder="选择账期"
+            style="width: 100%"
+          />
         </el-form-item>
         <el-form-item label="批次备注">
           <el-input v-model="batchForm.remark" type="textarea" :rows="2" maxlength="500" show-word-limit />
@@ -591,7 +613,15 @@
           </el-select>
         </el-form-item>
         <el-form-item label="账期">
-          <el-input v-model="batchQuery.billMonth" placeholder="yyyy-MM" style="width: 140px" />
+          <el-date-picker
+            v-model="batchQuery.billMonth"
+            clearable
+            type="month"
+            format="YYYY-MM"
+            value-format="YYYY-MM"
+            placeholder="选择账期"
+            style="width: 140px"
+          />
         </el-form-item>
         <el-form-item label="批次号">
           <el-input v-model="batchQuery.batchNo" placeholder="关键字查询" style="width: 220px" />
@@ -701,6 +731,8 @@ import {
 } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -763,17 +795,17 @@ const queryParams = reactive({
   pageSize: 10,
   taskId: route.query.taskId ? Number(route.query.taskId) : undefined,
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
-  versionId: undefined,
+  versionId: resolveWorkingVersionId(route.query.versionId ? Number(route.query.versionId) : undefined),
   taskType: undefined,
   taskStatus: undefined,
-  billMonth: ''
+  billMonth: resolveWorkingBillMonth(route.query.billMonth)
 })
 
 const form = reactive({
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
-  versionId: undefined,
+  versionId: resolveWorkingVersionId(route.query.versionId ? Number(route.query.versionId) : undefined),
   taskType: 'FORMAL_SINGLE',
-  billMonth: resolveCurrentBillMonth(),
+  billMonth: resolveWorkingBillMonth(route.query.billMonth),
   requestNo: '',
   inputSourceType: route.query.inputSourceType || 'INLINE_JSON',
   sourceBatchNo: route.query.sourceBatchNo || '',
@@ -783,8 +815,8 @@ const form = reactive({
 
 const batchForm = reactive({
   sceneId: undefined,
-  versionId: undefined,
-  billMonth: resolveCurrentBillMonth(),
+  versionId: resolveWorkingVersionId(route.query.versionId ? Number(route.query.versionId) : undefined),
+  billMonth: resolveWorkingBillMonth(route.query.billMonth, form.billMonth),
   inputJson: '',
   remark: ''
 })
@@ -793,7 +825,7 @@ const batchQuery = reactive({
   pageNum: 1,
   pageSize: 8,
   sceneId: undefined,
-  billMonth: '',
+  billMonth: resolveWorkingBillMonth(route.query.billMonth),
   batchNo: '',
   batchStatus: ''
 })
@@ -930,6 +962,7 @@ function resetQuery() {
   queryParams.pageNum = 1
   queryParams.pageSize = 10
   queryParams.taskId = routeTaskContext.taskId
+  queryParams.billMonth = resolveWorkingBillMonth(route.query.billMonth, form.billMonth)
   versionOptions.value = []
   getList()
 }
@@ -938,16 +971,21 @@ async function handleQuerySceneChange(sceneId) {
   queryParams.versionId = undefined
   queryParams.sceneId = sceneId
   batchQuery.sceneId = sceneId
+  clearCostWorkContext(['versionId'])
+  syncCostWorkContext({ sceneId, billMonth: queryParams.billMonth || form.billMonth })
   await loadVersionOptions(sceneId, versionOptions)
 }
 
 async function handleFormSceneChange(sceneId) {
   form.versionId = undefined
+  queryParams.versionId = undefined
   batchForm.versionId = undefined
   form.sceneId = sceneId
   batchForm.sceneId = sceneId
   batchQuery.sceneId = sceneId
   queryParams.sceneId = sceneId
+  clearCostWorkContext(['versionId'])
+  syncCostWorkContext({ sceneId, billMonth: form.billMonth })
   await loadVersionOptions(sceneId, formVersionOptions)
   await loadVersionOptions(sceneId, versionOptions)
   await fillExample()
@@ -1034,7 +1072,7 @@ function resetBatchQuery() {
   batchQuery.pageNum = 1
   batchQuery.pageSize = 8
   batchQuery.batchNo = ''
-  batchQuery.billMonth = ''
+  batchQuery.billMonth = resolveWorkingBillMonth(form.billMonth)
   batchQuery.batchStatus = ''
   batchQuery.sceneId = form.sceneId || batchQuery.sceneId
   loadBatchList()
@@ -1140,18 +1178,19 @@ async function handleSubmit() {
 }
 
 function openBatchLedger() {
-  router.push({ path: '/cost/taskBatch', query: { sceneId: form.sceneId } })
+  router.push({ path: COST_MENU_ROUTES.taskBatch, query: { sceneId: form.sceneId, versionId: form.versionId, billMonth: form.billMonth } })
 }
 
 function openAlertCenter(task) {
   if (!task?.taskId) {
-    router.push('/cost/alert')
+    router.push(COST_MENU_ROUTES.alert)
     return
   }
   router.push({
-    path: '/cost/alert',
+    path: COST_MENU_ROUTES.alert,
     query: {
       sceneId: task.sceneId,
+      versionId: task.versionId,
       billMonth: task.billMonth,
       taskId: task.taskId,
       alarmStatus: 'OPEN'
@@ -1161,11 +1200,12 @@ function openAlertCenter(task) {
 
 function openTaskCenterById(taskId, billMonth, view = 'detail') {
   router.push({
-    path: '/cost/task',
+    path: COST_MENU_ROUTES.task,
     query: {
       taskId,
       billMonth,
       sceneId: queryParams.sceneId,
+      versionId: queryParams.versionId || form.versionId,
       view
     }
   })
@@ -1173,13 +1213,14 @@ function openTaskCenterById(taskId, billMonth, view = 'detail') {
 
 function openResultCenter(task) {
   if (!task?.taskId) {
-    router.push('/cost/result')
+    router.push(COST_MENU_ROUTES.result)
     return
   }
   router.push({
-    path: '/cost/result',
+    path: COST_MENU_ROUTES.result,
     query: {
       sceneId: task.sceneId,
+      versionId: task.versionId,
       billMonth: task.billMonth,
       taskId: task.taskId,
       view: 'list'
@@ -1296,12 +1337,6 @@ function canRetryPartition(row) {
   return ['FAILED', 'PARTIAL_SUCCESS'].includes(row.partitionStatus) || Number(row.failCount || 0) > 0
 }
 
-function resolveCurrentBillMonth() {
-  const current = new Date()
-  const month = String(current.getMonth() + 1).padStart(2, '0')
-  return `${current.getFullYear()}-${month}`
-}
-
 function normalizeBatchExample(inputJson) {
   if (!inputJson) return '[]'
   const trimmed = inputJson.trim()
@@ -1354,6 +1389,14 @@ function clearReactiveObject(target) {
 watch(() => form.taskType, () => fillExample(), { immediate: true })
 
 watch(
+  () => [form.sceneId, form.versionId, form.billMonth],
+  ([sceneId, versionId, billMonth]) => {
+    syncCostWorkContext({ sceneId, versionId, billMonth })
+  },
+  { immediate: true }
+)
+
+watch(
   () => route.query,
   value => {
     routeTaskContext.taskId = value.taskId ? Number(value.taskId) : undefined
@@ -1361,6 +1404,21 @@ watch(
     queryParams.taskId = routeTaskContext.taskId
     if (value.sceneId) {
       queryParams.sceneId = Number(value.sceneId)
+      form.sceneId = Number(value.sceneId)
+      batchForm.sceneId = Number(value.sceneId)
+      batchQuery.sceneId = Number(value.sceneId)
+    }
+    if (value.versionId) {
+      const versionId = Number(value.versionId)
+      queryParams.versionId = versionId
+      form.versionId = versionId
+      batchForm.versionId = versionId
+    }
+    if (value.billMonth) {
+      queryParams.billMonth = value.billMonth
+      form.billMonth = value.billMonth
+      batchForm.billMonth = value.billMonth
+      batchQuery.billMonth = value.billMonth
     }
   },
   { deep: true }

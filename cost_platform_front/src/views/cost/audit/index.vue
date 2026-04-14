@@ -17,79 +17,6 @@
       </div>
     </section>
 
-    <section class="audit-page__panel">
-      <div class="audit-page__section-head">
-        <div>
-          <h3>运行资料</h3>
-          <p>集中提供运行准备、核验记录和平台规则说明，方便业务、运营和交付团队统一查看。</p>
-        </div>
-        <el-button type="primary" plain icon="Refresh" @click="loadReadiness">刷新校验</el-button>
-      </div>
-
-      <div class="audit-page__resource-grid">
-        <div v-for="item in resourceItems" :key="item.label" class="audit-page__resource-card">
-          <div class="audit-page__resource-head">
-            <strong>{{ item.label }}</strong>
-            <el-tag size="small" :type="item.tagType">{{ item.tag }}</el-tag>
-          </div>
-          <p>{{ item.desc }}</p>
-          <code>{{ item.path }}</code>
-          <div class="audit-page__resource-actions">
-            <el-button size="small" type="primary" plain v-copyText="item.path" v-copyText:callback="handleCopySuccess">
-              复制路径
-            </el-button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="audit-page__panel">
-      <div class="audit-page__section-head">
-        <div>
-          <h3>运行准备总览</h3>
-          <p>统一汇总数据库迁移、关键库表、菜单配置和待补充的人工核验事项。</p>
-        </div>
-        <el-tag :type="readinessSummary.ready ? 'success' : 'warning'">
-          {{ readinessSummary.ready ? '已满足运行准备要求' : '仍有待处理事项' }}
-        </el-tag>
-      </div>
-
-      <div class="audit-page__readiness-cards">
-        <div class="audit-page__readiness-card">
-          <span>通过项</span>
-          <strong>{{ readinessSummary.passCount }}</strong>
-          <small>系统已自动确认的校验项</small>
-        </div>
-        <div class="audit-page__readiness-card audit-page__readiness-card--danger">
-          <span>失败项</span>
-          <strong>{{ readinessSummary.failCount }}</strong>
-          <small>需要优先处理的环境、数据或配置问题</small>
-        </div>
-        <div class="audit-page__readiness-card audit-page__readiness-card--warning">
-          <span>待人工项</span>
-          <strong>{{ readinessSummary.pendingCount }}</strong>
-          <small>需要补充业务核验、权限确认或记录留存</small>
-        </div>
-        <div class="audit-page__readiness-card">
-          <span>最近迁移</span>
-          <strong>{{ latestMigration.version || '-' }}</strong>
-          <small>{{ latestMigration.description || '尚未读取到 Flyway 记录' }}</small>
-        </div>
-      </div>
-
-      <el-table :data="readinessChecks" size="small">
-        <el-table-column label="类别" prop="category" width="120" />
-        <el-table-column label="校验项" prop="name" min-width="220" />
-        <el-table-column label="状态" width="120" align="center">
-          <template #default="scope">
-            <el-tag :type="readinessTagType(scope.row.status)">{{ readinessStatusLabel(scope.row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="说明" prop="detail" min-width="280" show-overflow-tooltip />
-        <el-table-column label="下一步" prop="nextAction" min-width="260" show-overflow-tooltip />
-      </el-table>
-    </section>
-
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="88px" v-show="showSearch">
       <el-form-item label="所属场景" prop="sceneId">
         <el-select v-model="queryParams.sceneId" clearable filterable style="width: 240px">
@@ -175,7 +102,7 @@
 </template>
 
 <script setup name="CostAudit">
-import { listAudit, getAuditStats, getGoLiveReadiness } from '@/api/cost/governance'
+import { listAudit, getAuditStats } from '@/api/cost/governance'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 
@@ -189,9 +116,6 @@ const sceneOptions = ref([])
 const detailOpen = ref(false)
 const detailData = ref(null)
 const stats = reactive({ auditCount: 0, sceneCount: 0, operatorCount: 0, todayCount: 0 })
-const readinessSummary = reactive({ ready: false, passCount: 0, failCount: 0, pendingCount: 0 })
-const readinessChecks = ref([])
-const latestMigration = reactive({ version: '', description: '' })
 
 const queryParams = reactive({
   pageNum: 1,
@@ -209,37 +133,6 @@ const metricItems = computed(() => [
   { label: '操作人数', value: stats.operatorCount, desc: '本次查询中出现过的操作人数量' },
   { label: '今日新增', value: stats.todayCount, desc: '当天新增的审计记录数量' }
 ])
-
-const resourceItems = [
-  {
-    label: '总任务台账',
-    tag: '总览',
-    tagType: 'info',
-    desc: '完整拆细后的平台任务清单，适合排定优先级并持续推进。',
-    path: 'D:/Desktop/cost_platform/docs/go_live_task_ledger_utf8.xlsx'
-  },
-  {
-    label: '核验记录模板',
-    tag: '执行',
-    tagType: 'warning',
-    desc: '用于逐条记录核验状态、证明材料、问题编号和处理动作。',
-    path: 'D:/Desktop/cost_platform/docs/go_live_regression_execution_template.xlsx'
-  },
-  {
-    label: '运行准入条件',
-    tag: '口径',
-    tagType: 'success',
-    desc: '明确平台进入稳定运行前需要同时满足的关键条件。',
-    path: 'D:/Desktop/cost_platform/docs/正式核算上线最小放行条件.md'
-  },
-  {
-    label: '关键核验清单',
-    tag: '现场',
-    tagType: 'danger',
-    desc: '聚焦当前最关键的核验事项，便于按统一顺序完成重点检查。',
-    path: 'D:/Desktop/cost_platform/docs/正式核算上线最小执行清单.md'
-  }
-]
 
 async function loadScenes() {
   const resp = await optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
@@ -261,22 +154,6 @@ async function getList() {
   } finally {
     loading.value = false
   }
-}
-
-async function loadReadiness() {
-  const resp = await getGoLiveReadiness()
-  const data = resp?.data || {}
-  Object.assign(readinessSummary, {
-    ready: Boolean(data.summary?.ready),
-    passCount: data.summary?.passCount || 0,
-    failCount: data.summary?.failCount || 0,
-    pendingCount: data.summary?.pendingCount || 0
-  })
-  readinessChecks.value = data.checks || []
-  Object.assign(latestMigration, {
-    version: data.latestMigration?.version || '',
-    description: data.latestMigration?.description || ''
-  })
 }
 
 function handleQuery() {
@@ -314,38 +191,12 @@ function formatJson(text) {
 }
 
 onMounted(() => {
-  loadReadiness()
   getList()
 })
 
 onActivated(() => {
-  loadReadiness()
   getList()
 })
-
-function readinessTagType(status) {
-  if (status === 'PASS') {
-    return 'success'
-  }
-  if (status === 'FAIL') {
-    return 'danger'
-  }
-  return 'warning'
-}
-
-function readinessStatusLabel(status) {
-  if (status === 'PASS') {
-    return '通过'
-  }
-  if (status === 'FAIL') {
-    return '失败'
-  }
-  return '待人工'
-}
-
-function handleCopySuccess() {
-  proxy.$modal.msgSuccess('路径已复制')
-}
 </script>
 
 <style lang="scss" scoped>
@@ -400,19 +251,6 @@ function handleCopySuccess() {
     gap: 16px;
   }
 
-  &__readiness-cards {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 16px;
-    margin-bottom: 18px;
-  }
-
-  &__resource-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-  }
-
   &__metric-card {
     padding: 18px 22px;
     display: flex;
@@ -428,75 +266,6 @@ function handleCopySuccess() {
     small {
       color: #7c8798;
     }
-  }
-
-  &__readiness-card {
-    padding: 18px 22px;
-    border-radius: 18px;
-    border: 1px solid #e7edf7;
-    background: linear-gradient(135deg, #f8fbff, #ffffff);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-
-    strong {
-      color: #0f766e;
-      font-size: 24px;
-    }
-
-    span,
-    small {
-      color: #64748b;
-    }
-  }
-
-  &__readiness-card--danger strong {
-    color: #dc2626;
-  }
-
-  &__readiness-card--warning strong {
-    color: #d97706;
-  }
-
-  &__resource-card {
-    padding: 18px 22px;
-    border-radius: 18px;
-    border: 1px solid #e7edf7;
-    background: linear-gradient(135deg, #f9fbff, #ffffff);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-
-    p {
-      margin: 0;
-      color: #64748b;
-      line-height: 1.7;
-    }
-
-    code {
-      padding: 10px 12px;
-      border-radius: 12px;
-      background: #0f172a;
-      color: #dbeafe;
-      word-break: break-all;
-    }
-  }
-
-  &__resource-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-
-    strong {
-      color: #10233e;
-      font-size: 16px;
-    }
-  }
-
-  &__resource-actions {
-    display: flex;
-    justify-content: flex-end;
   }
 
   &__section-head {
@@ -557,8 +326,6 @@ function handleCopySuccess() {
 
 @media (max-width: 1360px) {
   .audit-page {
-    &__resource-grid,
-    &__readiness-cards,
     &__metrics,
     &__compare {
       grid-template-columns: 1fr;

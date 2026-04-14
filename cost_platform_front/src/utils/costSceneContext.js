@@ -1,18 +1,23 @@
 import cache from '@/plugins/cache'
+import { getCostWorkContext, normalizeSceneId, patchCostWorkContext } from '@/utils/costWorkContext'
 
 const COST_SCENE_CONTEXT_KEY = 'cost.currentSceneId'
 
-function toSceneId(value) {
-  const numberValue = Number(value)
-  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : undefined
-}
-
 export function getCostSceneContextId() {
-  return toSceneId(cache.local.get(COST_SCENE_CONTEXT_KEY))
+  const sceneId = normalizeSceneId(getCostWorkContext().sceneId)
+  if (sceneId) {
+    return sceneId
+  }
+  const legacySceneId = normalizeSceneId(cache.local.get(COST_SCENE_CONTEXT_KEY))
+  if (legacySceneId) {
+    patchCostWorkContext({ sceneId: legacySceneId })
+  }
+  return legacySceneId
 }
 
 export function setCostSceneContextId(sceneId) {
-  const normalized = toSceneId(sceneId)
+  const normalized = normalizeSceneId(sceneId)
+  patchCostWorkContext({ sceneId: normalized })
   if (normalized) {
     cache.local.set(COST_SCENE_CONTEXT_KEY, String(normalized))
     return
@@ -21,9 +26,9 @@ export function setCostSceneContextId(sceneId) {
 }
 
 export function resolvePreferredCostSceneId(sceneOptions = [], ...candidates) {
-  const available = new Set(sceneOptions.map(item => toSceneId(item?.sceneId)).filter(Boolean))
+  const available = new Set(sceneOptions.map(item => normalizeSceneId(item?.sceneId)).filter(Boolean))
   for (const candidate of candidates) {
-    const normalized = toSceneId(candidate)
+    const normalized = normalizeSceneId(candidate)
     if (normalized && available.has(normalized)) {
       return normalized
     }

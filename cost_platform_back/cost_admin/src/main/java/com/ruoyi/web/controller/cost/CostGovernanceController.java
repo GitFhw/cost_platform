@@ -127,12 +127,6 @@ public class CostGovernanceController extends BaseController {
     }
 
     @PreAuthorize("@ss.hasPermi('cost:audit:list')")
-    @GetMapping("/readiness/overview")
-    public AjaxResult readinessOverview() {
-        return success(governanceService.selectGoLiveReadiness());
-    }
-
-    @PreAuthorize("@ss.hasPermi('cost:audit:list')")
     @GetMapping("/audit/list")
     public TableDataInfo auditList(CostAuditLog query) {
         startPage();
