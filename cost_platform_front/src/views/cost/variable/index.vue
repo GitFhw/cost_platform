@@ -659,6 +659,7 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import { optionselectFormula } from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselect as getDictTypeOptionselect } from '@/api/system/dict/type'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import {
   addVariable,
   applyVariableTemplate,
@@ -1409,7 +1410,7 @@ async function submitTemplateApply() {
 }
 
 function openFormulaWorkbench() {
-  proxy.$router.push({ path: '/cost/formula', query: { sceneId: form.value.sceneId || queryParams.value.sceneId || '' } })
+  proxy.$router.push({ path: COST_MENU_ROUTES.formula, query: { sceneId: form.value.sceneId || queryParams.value.sceneId || '' } })
 }
 
 function resolveDictLabel(optionsRef, value) {

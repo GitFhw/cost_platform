@@ -203,7 +203,15 @@
         </el-select>
       </el-form-item>
       <el-form-item label="账期" prop="billMonth">
-        <el-input v-model="queryParams.billMonth" clearable placeholder="yyyy-MM" style="width: 160px"/>
+        <el-date-picker
+          v-model="queryParams.billMonth"
+          clearable
+          type="month"
+          format="YYYY-MM"
+          value-format="YYYY-MM"
+          placeholder="选择账期"
+          style="width: 160px"
+        />
       </el-form-item>
       <el-form-item label="告警级别" prop="alarmLevel">
         <el-select v-model="queryParams.alarmLevel" clearable style="width: 180px">
@@ -330,7 +338,9 @@ import {
   resolveAlarm
 } from '@/api/cost/governance'
 import {getRemoteDictOptionMap} from '@/utils/dictRemote'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import {resolveWorkingCostSceneId} from '@/utils/costSceneContext'
+import {resolveWorkingBillMonth, syncCostWorkContext} from '@/utils/costWorkContext'
 
 const route = useRoute()
 const router = useRouter()
@@ -365,7 +375,7 @@ const queryParams = reactive({
   pageSize: 10,
   sceneId: undefined,
   taskId: route.query.taskId ? Number(route.query.taskId) : undefined,
-  billMonth: '',
+  billMonth: resolveWorkingBillMonth(route.query.billMonth),
   alarmLevel: undefined,
   alarmStatus: undefined,
   alarmTitle: ''
@@ -505,7 +515,7 @@ function resetQuery() {
   queryParams.pageSize = 10
   queryParams.taskId = routeContext.taskId
   queryParams.sceneId = route.query.sceneId ? Number(route.query.sceneId) : queryParams.sceneId
-  queryParams.billMonth = route.query.billMonth || ''
+  queryParams.billMonth = resolveWorkingBillMonth(route.query.billMonth)
   queryParams.alarmStatus = route.query.alarmStatus || undefined
   getList()
 }
@@ -527,7 +537,7 @@ function openTaskCenter(taskId, billMonth, view) {
     return
   }
   router.push({
-    path: '/cost/task',
+    path: COST_MENU_ROUTES.task,
     query: {
       sceneId: queryParams.sceneId,
       billMonth: billMonth || queryParams.billMonth,
@@ -536,6 +546,14 @@ function openTaskCenter(taskId, billMonth, view) {
     }
   })
 }
+
+watch(
+  () => [queryParams.sceneId, queryParams.billMonth],
+  ([sceneId, billMonth]) => {
+    syncCostWorkContext({sceneId, billMonth})
+  },
+  {immediate: true}
+)
 
 async function handleRefreshCache() {
   await ElMessageBox.confirm(

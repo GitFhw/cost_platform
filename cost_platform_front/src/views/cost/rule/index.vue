@@ -713,6 +713,7 @@ import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
 import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 
@@ -1613,7 +1614,7 @@ function handleOpenFormulaLab() {
   if (form.value.amountFormulaCode) {
     query.formulaCode = form.value.amountFormulaCode
   }
-  router.push({ path: '/cost/formula', query })
+  router.push({ path: COST_MENU_ROUTES.formula, query })
 }
 
 function buildTierValidationIssues(tiers) {

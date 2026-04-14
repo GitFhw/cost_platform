@@ -84,13 +84,6 @@ export function getAuditStats(query) {
   })
 }
 
-export function getGoLiveReadiness() {
-  return request({
-    url: '/cost/governance/readiness/overview',
-    method: 'get'
-  })
-}
-
 export function listAudit(query) {
   return request({
     url: '/cost/governance/audit/list',

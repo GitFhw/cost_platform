@@ -1,0 +1,18 @@
+export const COST_MENU_ROUTES = Object.freeze({
+  dict: '/cost/setup/dict',
+  scene: '/cost/setup/scene',
+  fee: '/cost/model/fee',
+  variable: '/cost/model/variable',
+  rule: '/cost/model/rule',
+  formula: '/cost/model/formula',
+  publish: '/cost/model/publish',
+  publishAudit: '/cost/model/publish-audit/index',
+  access: '/cost/execution/access',
+  simulation: '/cost/execution/simulation',
+  task: '/cost/execution/task',
+  taskBatch: '/cost/execution/taskBatch',
+  result: '/cost/execution/result',
+  period: '/cost/ops/period',
+  alert: '/cost/ops/alert',
+  audit: '/cost/ops/audit'
+})

@@ -7,8 +7,8 @@
         <p>先把业务系统宽表载荷整理成标准计费对象，再决定走单费用取价还是正式核算。</p>
       </div>
       <div class="access-page__actions">
-        <el-button icon="Upload" @click="router.push('/cost/task/batch')">导入批次台账</el-button>
-        <el-button type="primary" icon="Promotion" @click="router.push('/cost/task')">正式核算入口</el-button>
+        <el-button icon="Upload" @click="router.push(COST_MENU_ROUTES.taskBatch)">导入批次台账</el-button>
+        <el-button type="primary" icon="Promotion" @click="router.push(COST_MENU_ROUTES.task)">正式核算入口</el-button>
       </div>
     </section>
 
@@ -81,7 +81,7 @@
         </el-form>
         <div class="access-page__actions">
           <el-button type="primary" icon="RefreshLeft" @click="handleBuildTemplate" v-hasPermi="['cost:simulation:list', 'cost:task:list']">生成费用模板</el-button>
-          <el-button icon="Edit" @click="router.push({ path: '/cost/simulation', query: { sceneId: selectionForm.sceneId } })">打开试算中心</el-button>
+          <el-button icon="Edit" @click="router.push({ path: COST_MENU_ROUTES.simulation, query: { sceneId: selectionForm.sceneId, versionId: selectionForm.versionId, billMonth: calcForm.billMonth } })">打开试算中心</el-button>
         </div>
         <el-alert v-if="templateData.message" class="access-page__alert" :closable="false" :title="templateData.message" type="info" />
         <div v-if="templateData.fee?.feeCode" class="access-page__summary">
@@ -108,7 +108,14 @@
         <h3>单费用同步取价</h3>
         <el-form :model="calcForm" label-width="96px">
           <el-form-item label="账期">
-            <el-input v-model="calcForm.billMonth" placeholder="例如 2026-04" />
+            <el-date-picker
+              v-model="calcForm.billMonth"
+              type="month"
+              format="YYYY-MM"
+              value-format="YYYY-MM"
+              placeholder="选择账期"
+              style="width: 100%"
+            />
           </el-form-item>
           <el-form-item label="解释信息">
             <el-switch v-model="calcForm.includeExplain" />
@@ -286,6 +293,8 @@ import { optionselectFee } from '@/api/cost/fee'
 import { calculateFee, createTaskInputBatch, getFeeRunInputTemplate, listVersionOptions, previewBuiltInput } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 
 const route = useRoute()
 const router = useRouter()
@@ -305,14 +314,14 @@ const profileDialogMode = ref('add')
 
 const selectionForm = reactive({
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
-  versionId: route.query.versionId ? Number(route.query.versionId) : undefined,
+  versionId: resolveWorkingVersionId(route.query.versionId ? Number(route.query.versionId) : undefined),
   feeId: route.query.feeId ? Number(route.query.feeId) : undefined,
   feeCode: route.query.feeCode || '',
   taskType: route.query.taskType || 'FORMAL_BATCH'
 })
 
 const calcForm = reactive({
-  billMonth: route.query.billMonth || resolveCurrentBillMonth(),
+  billMonth: resolveWorkingBillMonth(route.query.billMonth),
   includeExplain: true,
   inputJson: ''
 })
@@ -466,6 +475,8 @@ async function handleSceneChange(sceneId) {
   createdBatch.value = {}
   profileOptions.value = []
   selectedProfileId.value = undefined
+  clearCostWorkContext(['versionId'])
+  syncCostWorkContext({ sceneId, billMonth: calcForm.billMonth })
   await Promise.all([loadVersions(sceneId), loadFees(sceneId)])
   await loadProfiles()
 }
@@ -796,18 +807,19 @@ async function handleDeleteProfile() {
 }
 
 function openCreatedBatchLedger() {
-  router.push({ path: '/cost/task/batch', query: { sceneId: selectionForm.sceneId, billMonth: calcForm.billMonth } })
+  router.push({ path: COST_MENU_ROUTES.taskBatch, query: { sceneId: selectionForm.sceneId, versionId: selectionForm.versionId, billMonth: calcForm.billMonth } })
 }
 
 function openCreatedBatchTaskCenter() {
   if (!createdBatch.value?.batch?.batchNo) {
-    router.push({ path: '/cost/task', query: { sceneId: selectionForm.sceneId, billMonth: calcForm.billMonth } })
+    router.push({ path: COST_MENU_ROUTES.task, query: { sceneId: selectionForm.sceneId, versionId: selectionForm.versionId, billMonth: calcForm.billMonth } })
     return
   }
   router.push({
-    path: '/cost/task',
+    path: COST_MENU_ROUTES.task,
     query: {
       sceneId: selectionForm.sceneId,
+      versionId: selectionForm.versionId,
       billMonth: calcForm.billMonth,
       inputSourceType: 'INPUT_BATCH',
       sourceBatchNo: createdBatch.value.batch.batchNo
@@ -843,12 +855,6 @@ function formatJson(value) {
   return JSON.stringify(value, null, 2)
 }
 
-function resolveCurrentBillMonth() {
-  const current = new Date()
-  const month = String(current.getMonth() + 1).padStart(2, '0')
-  return `${current.getFullYear()}-${month}`
-}
-
 async function initializePage() {
   await loadScenes()
   if (selectionForm.sceneId) {
@@ -859,6 +865,14 @@ async function initializePage() {
     }
   }
 }
+
+watch(
+  () => [selectionForm.sceneId, selectionForm.versionId, calcForm.billMonth],
+  ([sceneId, versionId, billMonth]) => {
+    syncCostWorkContext({ sceneId, versionId, billMonth })
+  },
+  { immediate: true }
+)
 
 onMounted(async () => {
   await initializePage()

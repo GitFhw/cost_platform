@@ -36,7 +36,15 @@
         </el-select>
       </el-form-item>
       <el-form-item label="账期" prop="billMonth">
-        <el-input v-model="queryParams.billMonth" clearable placeholder="yyyy-MM" style="width: 160px" />
+        <el-date-picker
+          v-model="queryParams.billMonth"
+          clearable
+          type="month"
+          format="YYYY-MM"
+          value-format="YYYY-MM"
+          placeholder="选择账期"
+          style="width: 160px"
+        />
       </el-form-item>
       <el-form-item label="任务ID" prop="taskId">
         <el-input v-model="queryParams.taskId" clearable style="width: 140px" />
@@ -190,6 +198,7 @@
 import { getResultDetail, getResultStats, getTraceDetail, listResult, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
@@ -219,8 +228,8 @@ const queryParams = reactive({
   pageNum: 1,
   pageSize: 10,
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
-  versionId: undefined,
-  billMonth: route.query.billMonth || '',
+  versionId: resolveWorkingVersionId(route.query.versionId ? Number(route.query.versionId) : undefined),
+  billMonth: resolveWorkingBillMonth(route.query.billMonth),
   taskId: route.query.taskId ? Number(route.query.taskId) : undefined,
   taskNo: '',
   feeCode: '',
@@ -328,7 +337,7 @@ function resetQuery() {
   queryParams.bizNo = ''
   queryParams.resultStatus = undefined
   queryParams.sceneId = route.query.sceneId ? Number(route.query.sceneId) : queryParams.sceneId
-  queryParams.billMonth = route.query.billMonth || ''
+  queryParams.billMonth = resolveWorkingBillMonth(route.query.billMonth)
   versionOptions.value = []
   getList(false)
 }
@@ -336,6 +345,8 @@ function resetQuery() {
 async function handleSceneChange(sceneId) {
   queryParams.sceneId = sceneId
   queryParams.versionId = undefined
+  clearCostWorkContext(['versionId'])
+  syncCostWorkContext({ sceneId, billMonth: queryParams.billMonth })
   await loadVersionOptions(queryParams.sceneId)
 }
 
@@ -388,11 +399,20 @@ function formatJson(value) {
 }
 
 watch(
+  () => [queryParams.sceneId, queryParams.versionId, queryParams.billMonth],
+  ([sceneId, versionId, billMonth]) => {
+    syncCostWorkContext({ sceneId, versionId, billMonth })
+  },
+  { immediate: true }
+)
+
+watch(
   () => route.query,
   value => {
     routeContext.taskId = value.taskId ? Number(value.taskId) : undefined
     queryParams.taskId = routeContext.taskId
     queryParams.sceneId = value.sceneId ? Number(value.sceneId) : queryParams.sceneId
+    queryParams.versionId = value.versionId ? Number(value.versionId) : queryParams.versionId
     queryParams.billMonth = value.billMonth || queryParams.billMonth
   },
   { deep: true }

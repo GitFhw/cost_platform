@@ -29,7 +29,15 @@
         </el-select>
       </el-form-item>
       <el-form-item label="账期" prop="billMonth">
-        <el-input v-model="queryParams.billMonth" clearable placeholder="yyyy-MM" style="width: 160px" />
+        <el-date-picker
+          v-model="queryParams.billMonth"
+          clearable
+          type="month"
+          format="YYYY-MM"
+          value-format="YYYY-MM"
+          placeholder="选择账期"
+          style="width: 160px"
+        />
       </el-form-item>
       <el-form-item label="状态" prop="status">
         <el-select v-model="queryParams.status" clearable style="width: 180px">
@@ -70,7 +78,14 @@
             </el-select>
           </el-form-item>
           <el-form-item label="账期" required>
-            <el-input v-model="form.billMonth" placeholder="yyyy-MM" />
+            <el-date-picker
+              v-model="form.billMonth"
+              type="month"
+              format="YYYY-MM"
+              value-format="YYYY-MM"
+              placeholder="选择账期"
+              style="width: 100%"
+            />
           </el-form-item>
           <el-form-item label="输入 JSON" required>
             <el-input v-model="form.inputJson" type="textarea" :rows="14" maxlength="10000" show-word-limit />
@@ -193,6 +208,7 @@
 import { executeSimulation, executeSimulationBatch, getRunInputTemplate, getSimulationDetail, getSimulationStats, listSimulation, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -218,16 +234,16 @@ const queryParams = reactive({
   pageNum: 1,
   pageSize: 10,
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
-  billMonth: route.query.billMonth || '',
-  versionId: undefined,
+  billMonth: resolveWorkingBillMonth(route.query.billMonth),
+  versionId: resolveWorkingVersionId(route.query.versionId ? Number(route.query.versionId) : undefined),
   status: undefined
 })
 
 const form = reactive({
   executeMode: 'SINGLE',
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
-  billMonth: route.query.billMonth || resolveCurrentBillMonth(),
-  versionId: undefined,
+  billMonth: resolveWorkingBillMonth(route.query.billMonth),
+  versionId: resolveWorkingVersionId(route.query.versionId ? Number(route.query.versionId) : undefined),
   inputJson: ''
 })
 
@@ -293,7 +309,7 @@ function resetQuery() {
   proxy.resetForm('queryRef')
   queryParams.pageNum = 1
   queryParams.pageSize = 10
-  queryParams.billMonth = ''
+  queryParams.billMonth = resolveWorkingBillMonth(route.query.billMonth, form.billMonth)
   versionOptions.value = []
   getList()
 }
@@ -302,6 +318,9 @@ async function handleQuerySceneChange(sceneId) {
   queryParams.versionId = undefined
   queryParams.sceneId = sceneId
   form.sceneId = sceneId
+  form.versionId = undefined
+  clearCostWorkContext(['versionId'])
+  syncCostWorkContext({ sceneId, billMonth: form.billMonth })
   await loadVersionOptions(sceneId, versionOptions)
   await loadVersionOptions(sceneId, formVersionOptions)
   await fillExample()
@@ -310,7 +329,10 @@ async function handleQuerySceneChange(sceneId) {
 async function handleFormSceneChange(sceneId) {
   form.versionId = undefined
   queryParams.sceneId = sceneId
+  queryParams.versionId = undefined
   form.sceneId = sceneId
+  clearCostWorkContext(['versionId'])
+  syncCostWorkContext({ sceneId, billMonth: form.billMonth })
   await loadVersionOptions(sceneId, formVersionOptions)
   await loadVersionOptions(sceneId, versionOptions)
   await fillExample()
@@ -390,11 +412,13 @@ function summarizeBatchJson(value) {
   return text.length > 120 ? `${text.slice(0, 120)}...` : text
 }
 
-function resolveCurrentBillMonth() {
-  const current = new Date()
-  const month = String(current.getMonth() + 1).padStart(2, '0')
-  return `${current.getFullYear()}-${month}`
-}
+watch(
+  () => [form.sceneId, form.versionId, form.billMonth],
+  ([sceneId, versionId, billMonth]) => {
+    syncCostWorkContext({ sceneId, versionId, billMonth })
+  },
+  { immediate: true }
+)
 
 onMounted(async () => {
   await getList()

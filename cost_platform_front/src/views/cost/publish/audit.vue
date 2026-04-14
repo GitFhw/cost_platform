@@ -323,6 +323,7 @@
 import { getPublishDiff, getPublishStats, getPublishVersion, listPublish } from '@/api/cost/publish'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
@@ -448,7 +449,7 @@ function resetQuery() {
 }
 
 function handleBackToPublish() {
-  router.push({ path: '/cost/publish', query: queryParams.sceneId ? { sceneId: queryParams.sceneId } : {} })
+  router.push({ path: COST_MENU_ROUTES.publish, query: queryParams.sceneId ? { sceneId: queryParams.sceneId } : {} })
 }
 
 async function handleDetail(row) {

@@ -487,6 +487,7 @@ import { listPublish } from '@/api/cost/publish'
 import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listScene, updateScene } from '@/api/cost/scene'
 import { deptTreeSelect } from '@/api/system/user'
 import { getCostSceneContextId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { formatLegacyOrgLabel } from '@/utils/costOptionLabel'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
@@ -773,7 +774,7 @@ function handleExport() {
 
 function handleOpenDictView() {
   router.push({
-    path: '/cost/dict',
+    path: COST_MENU_ROUTES.dict,
     query: {
       dictType: 'cost_',
       scope: 'cost'
@@ -783,7 +784,7 @@ function handleOpenDictView() {
 
 function handleOpenBusinessDomain() {
   router.push({
-    path: '/cost/dict',
+    path: COST_MENU_ROUTES.dict,
     query: {
       dictType: 'cost_business_domain',
       scope: 'cost'
@@ -793,7 +794,7 @@ function handleOpenBusinessDomain() {
 
 function handleOpenPublishCenter(row) {
   router.push({
-    path: '/cost/publish',
+    path: COST_MENU_ROUTES.publish,
     query: {
       sceneId: row.sceneId
     }
@@ -805,7 +806,7 @@ function handleOpenPublishAudit() {
     return
   }
   router.push({
-    path: '/cost/publish-audit/index',
+    path: COST_MENU_ROUTES.publishAudit,
     query: {
       sceneId: currentSceneInfo.value.sceneId
     }

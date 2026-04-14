@@ -392,6 +392,7 @@ import { ElMessageBox } from 'element-plus'
 import { activatePublishVersion, addPublishVersion, getPublishDiff, getPublishPrecheck, getPublishStats, getPublishVersion, listPublish, rollbackPublishVersion } from '@/api/cost/publish'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
@@ -532,7 +533,7 @@ function handleQuerySceneChange(sceneId) {
 }
 
 function handleOpenAudit() {
-  router.push({ path: '/cost/publish-audit/index', query: queryParams.sceneId ? { sceneId: queryParams.sceneId } : {} })
+  router.push({ path: COST_MENU_ROUTES.publishAudit, query: queryParams.sceneId ? { sceneId: queryParams.sceneId } : {} })
 }
 
 function handlePublishSceneChange(sceneId) {

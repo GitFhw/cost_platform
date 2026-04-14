@@ -7,8 +7,8 @@
         <p class="batch-page__subtitle">统一查看正式核算导入批次、预览样例明细，并从批次回到任务提交链路。</p>
       </div>
       <div class="batch-page__hero-actions">
-        <el-button icon="Back" @click="router.push('/cost/task')">返回任务中心</el-button>
-        <el-button type="primary" icon="Promotion" @click="router.push({ path: '/cost/task', query: { sceneId: queryParams.sceneId } })">去提交任务</el-button>
+        <el-button icon="Back" @click="router.push(COST_MENU_ROUTES.task)">返回任务中心</el-button>
+        <el-button type="primary" icon="Promotion" @click="router.push({ path: COST_MENU_ROUTES.task, query: { sceneId: queryParams.sceneId } })">去提交任务</el-button>
       </div>
     </section>
 
@@ -119,6 +119,7 @@
 import { getTaskInputBatchDetail, listTaskInputBatch } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 
 const router = useRouter()
 const route = useRoute()
@@ -196,7 +197,7 @@ async function handleDetail(row) {
 }
 
 function handleUseBatch(row) {
-  router.push({ path: '/cost/task', query: { sceneId: row.sceneId, sourceBatchNo: row.batchNo, inputSourceType: 'INPUT_BATCH' } })
+  router.push({ path: COST_MENU_ROUTES.task, query: { sceneId: row.sceneId, sourceBatchNo: row.batchNo, inputSourceType: 'INPUT_BATCH' } })
 }
 
 function summarizeJson(value) {

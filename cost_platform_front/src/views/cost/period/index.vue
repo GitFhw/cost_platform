@@ -26,7 +26,15 @@
         </el-select>
       </el-form-item>
       <el-form-item label="账期" prop="billMonth">
-        <el-input v-model="queryParams.billMonth" placeholder="yyyy-MM" clearable style="width: 160px" />
+        <el-date-picker
+          v-model="queryParams.billMonth"
+          clearable
+          type="month"
+          format="YYYY-MM"
+          value-format="YYYY-MM"
+          placeholder="选择账期"
+          style="width: 160px"
+        />
       </el-form-item>
       <el-form-item label="账期状态" prop="periodStatus">
         <el-select v-model="queryParams.periodStatus" clearable style="width: 180px">
@@ -56,7 +64,14 @@
             </el-select>
           </el-form-item>
           <el-form-item label="账期" required>
-            <el-input v-model="periodForm.billMonth" placeholder="yyyy-MM" />
+            <el-date-picker
+              v-model="periodForm.billMonth"
+              type="month"
+              format="YYYY-MM"
+              value-format="YYYY-MM"
+              placeholder="选择账期"
+              style="width: 100%"
+            />
           </el-form-item>
           <el-form-item label="默认版本">
             <el-select v-model="periodForm.activeVersionId" clearable filterable style="width: 100%">
@@ -87,7 +102,14 @@
             </el-select>
           </el-form-item>
           <el-form-item label="账期" required>
-            <el-input v-model="recalcForm.billMonth" placeholder="yyyy-MM" />
+            <el-date-picker
+              v-model="recalcForm.billMonth"
+              type="month"
+              format="YYYY-MM"
+              value-format="YYYY-MM"
+              placeholder="选择账期"
+              style="width: 100%"
+            />
           </el-form-item>
           <el-form-item label="目标版本" required>
             <el-select v-model="recalcForm.versionId" filterable style="width: 100%">
@@ -257,6 +279,7 @@ import {
 } from '@/api/cost/governance'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 
 const { proxy } = getCurrentInstance()
 
@@ -281,21 +304,21 @@ const queryParams = reactive({
   pageNum: 1,
   pageSize: 10,
   sceneId: undefined,
-  billMonth: '',
+  billMonth: resolveWorkingBillMonth(),
   periodStatus: undefined
 })
 
 const periodForm = reactive({
   sceneId: undefined,
-  billMonth: currentBillMonth(),
-  activeVersionId: undefined,
+  billMonth: resolveWorkingBillMonth(),
+  activeVersionId: resolveWorkingVersionId(),
   remark: ''
 })
 
 const recalcForm = reactive({
   sceneId: undefined,
-  billMonth: currentBillMonth(),
-  versionId: undefined,
+  billMonth: resolveWorkingBillMonth(),
+  versionId: resolveWorkingVersionId(),
   baselineTaskId: undefined,
   applyReason: '',
   requestNo: '',
@@ -389,6 +412,7 @@ function resetQuery() {
   proxy.resetForm('queryRef')
   queryParams.pageNum = 1
   queryParams.pageSize = 10
+  queryParams.billMonth = resolveWorkingBillMonth(periodForm.billMonth, recalcForm.billMonth)
   getList()
 }
 
@@ -396,6 +420,8 @@ async function handlePeriodSceneChange(sceneId) {
   const targetSceneId = sceneId
   periodForm.sceneId = targetSceneId
   periodForm.activeVersionId = undefined
+  clearCostWorkContext(['versionId'])
+  syncCostWorkContext({ sceneId: targetSceneId, billMonth: periodForm.billMonth })
   await loadVersions(targetSceneId, versionOptions)
 }
 
@@ -404,6 +430,8 @@ async function handleRecalcSceneChange(sceneId) {
   recalcForm.sceneId = targetSceneId
   recalcForm.versionId = undefined
   recalcForm.baselineTaskId = undefined
+  clearCostWorkContext(['versionId'])
+  syncCostWorkContext({ sceneId: targetSceneId, billMonth: recalcForm.billMonth })
   await Promise.all([
     loadVersions(targetSceneId, recalcVersionOptions),
     loadBaselineTasks(targetSceneId, recalcForm.billMonth)
@@ -411,8 +439,9 @@ async function handleRecalcSceneChange(sceneId) {
 }
 
 function fillCurrentMonth() {
-  periodForm.billMonth = currentBillMonth()
-  recalcForm.billMonth = currentBillMonth()
+  const workingBillMonth = resolveWorkingBillMonth()
+  periodForm.billMonth = workingBillMonth
+  recalcForm.billMonth = workingBillMonth
 }
 
 async function handleCreatePeriod() {
@@ -493,11 +522,21 @@ function formatAmount(value) {
   return Number(value).toFixed(2)
 }
 
-function currentBillMonth() {
-  const now = new Date()
-  const month = `${now.getMonth() + 1}`.padStart(2, '0')
-  return `${now.getFullYear()}-${month}`
-}
+watch(
+  () => [periodForm.sceneId, periodForm.activeVersionId, periodForm.billMonth],
+  ([sceneId, versionId, billMonth]) => {
+    syncCostWorkContext({ sceneId, versionId, billMonth })
+  },
+  { immediate: true }
+)
+
+watch(
+  () => [recalcForm.sceneId, recalcForm.versionId, recalcForm.billMonth],
+  ([sceneId, versionId, billMonth]) => {
+    syncCostWorkContext({ sceneId, versionId, billMonth })
+  },
+  { immediate: true }
+)
 
 onMounted(() => {
   fillCurrentMonth()

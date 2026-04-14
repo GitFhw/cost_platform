@@ -2,7 +2,7 @@
    <div class="app-container">
       <el-alert
          v-if="isCostScope"
-         title="当前已切换到核算字典视角，默认按 cost_ 前缀过滤，用于集中维护业务域字典与系统字典规划。"
+         title="当前已切换到核算字典视角，默认按 cost_ 前缀过滤，用于集中维护平台运行支撑字典。"
          type="info"
          show-icon
          :closable="false"
@@ -21,9 +21,9 @@
                <small>状态为正常的字典类型</small>
             </div>
             <div class="cost-dict-board__stat">
-               <span>规划字典</span>
-               <strong>{{ planningReadyText }}</strong>
-               <small>第一阶段预留的系统字典规划</small>
+               <span>支撑字典</span>
+               <strong>{{ runtimeReadyText }}</strong>
+               <small>费用、变量、规则等运行字典</small>
             </div>
          </div>
          <div class="cost-dict-board__cards">
@@ -45,8 +45,8 @@
             </article>
          </div>
          <div class="cost-dict-board__tags">
-            <span class="cost-dict-board__tags-label">规划字典：</span>
-            <el-tag v-for="item in planningDictTypes" :key="item.dictType" size="small" effect="plain">
+            <span class="cost-dict-board__tags-label">支撑字典：</span>
+            <el-tag v-for="item in runtimeDictTypes" :key="item.dictType" size="small" effect="plain">
                {{ item.label }}
             </el-tag>
          </div>
@@ -278,16 +278,16 @@ const drawerVisible = ref(false)
 const drawerRow = ref({})
 const COST_DICT_PREFIX = "cost_"
 const isCostScope = computed(() => route.query.scope === "cost")
-const planningDictTypes = [
-  { dictType: "cost_cargo_type", label: "货种" },
-  { dictType: "cost_trade_type", label: "内外贸" },
-  { dictType: "cost_shift_type", label: "班次" },
-  { dictType: "cost_job_type", label: "工种" },
-  { dictType: "cost_post_type", label: "岗位" },
-  { dictType: "cost_customer_level", label: "客户等级" },
-  { dictType: "cost_currency", label: "币种" },
-  { dictType: "cost_partner_team", label: "协力队" },
-  { dictType: "cost_mine_three_flag", label: "是否矿三" }
+const runtimeDictTypes = [
+  { dictType: "cost_fee_status", label: "费用状态" },
+  { dictType: "cost_variable_status", label: "变量状态" },
+  { dictType: "cost_variable_type", label: "变量类型" },
+  { dictType: "cost_variable_source_type", label: "变量来源" },
+  { dictType: "cost_rule_status", label: "规则状态" },
+  { dictType: "cost_rule_type", label: "规则类型" },
+  { dictType: "cost_publish_version_status", label: "发布状态" },
+  { dictType: "cost_unit_code", label: "计量单位" },
+  { dictType: "cost_formula_status", label: "公式状态" }
 ]
 
 const data = reactive({
@@ -323,10 +323,10 @@ const costFormSuffix = computed({
   }
 })
 const enabledCostCatalogCount = computed(() => costCatalog.value.filter(item => item.status === "0").length)
-const planningReadyCount = computed(() =>
-  planningDictTypes.filter(item => costCatalog.value.some(dict => dict.dictType === item.dictType)).length
+const runtimeReadyCount = computed(() =>
+  runtimeDictTypes.filter(item => costCatalog.value.some(dict => dict.dictType === item.dictType)).length
 )
-const planningReadyText = computed(() => `${planningReadyCount.value}/${planningDictTypes.length}`)
+const runtimeReadyText = computed(() => `${runtimeReadyCount.value}/${runtimeDictTypes.length}`)
 const costFocusCards = computed(() => {
   const businessDomain = findCostDict("cost_business_domain")
   const sceneStatus = findCostDict("cost_scene_status")
@@ -347,9 +347,9 @@ const costFocusCards = computed(() => {
       queryType: "cost_scene_"
     },
     {
-      title: "规划字典",
-      desc: "承接后续费用、变量、规则中心的业务口径规划。",
-      meta: `已建档 ${planningReadyText.value}`,
+      title: "运行支撑字典",
+      desc: "覆盖费用、变量、规则、发布、单位和公式等平台运行口径。",
+      meta: `已建档 ${runtimeReadyText.value}`,
       dictType: undefined,
       queryType: "cost_"
     }
