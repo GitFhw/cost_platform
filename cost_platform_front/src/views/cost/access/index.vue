@@ -308,6 +308,7 @@ const templateData = ref({})
 const feeResult = ref({})
 const buildPreview = ref({})
 const createdBatch = ref({})
+const autoMappingJson = ref('')
 const selectedProfileId = ref(undefined)
 const profileDialogVisible = ref(false)
 const profileDialogMode = ref('add')
@@ -468,11 +469,22 @@ async function loadProfiles() {
   }
 }
 
-async function handleSceneChange(sceneId) {
+function resetFeeScopedState(options = {}) {
+  const { resetAutoMapping = false } = options
   templateData.value = {}
   feeResult.value = {}
   buildPreview.value = {}
   createdBatch.value = {}
+  if (resetAutoMapping && builderForm.mappingJson && builderForm.mappingJson === autoMappingJson.value) {
+    builderForm.mappingJson = ''
+  }
+  if (resetAutoMapping) {
+    autoMappingJson.value = ''
+  }
+}
+
+async function handleSceneChange(sceneId) {
+  resetFeeScopedState({ resetAutoMapping: true })
   profileOptions.value = []
   selectedProfileId.value = undefined
   clearCostWorkContext(['versionId'])
@@ -484,6 +496,7 @@ async function handleSceneChange(sceneId) {
 async function handleFeeChange(feeId) {
   const current = feeOptions.value.find(item => item.feeId === feeId)
   selectionForm.feeCode = current?.feeCode || ''
+  resetFeeScopedState({ resetAutoMapping: true })
   await loadProfiles()
 }
 
@@ -505,8 +518,14 @@ async function handleBuildTemplate() {
   if (templateData.value.inputJson) {
     calcForm.inputJson = formatJson(templateData.value.inputJson)
   }
-  if (!builderForm.mappingJson && templateData.value.fields?.length) {
-    builderForm.mappingJson = formatJson(createMappingDraft(templateData.value.fields))
+  if (templateData.value.fields?.length) {
+    const draft = formatJson(createMappingDraft(templateData.value.fields))
+    if (!builderForm.mappingJson || builderForm.mappingJson === autoMappingJson.value) {
+      builderForm.mappingJson = draft
+    }
+    autoMappingJson.value = draft
+  } else {
+    autoMappingJson.value = ''
   }
 }
 
@@ -689,6 +708,7 @@ async function handleProfileChange(profileId) {
   selectionForm.taskType = detail.taskType || selectionForm.taskType
   if (detail.mappingJson) {
     builderForm.mappingJson = formatJson(detail.mappingJson)
+    autoMappingJson.value = ''
   }
   if (detail.sourceType === 'HTTP_API') {
     builderForm.requestPayloadJson = detail.samplePayloadJson ? formatJson(detail.samplePayloadJson) : ''

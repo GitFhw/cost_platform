@@ -8,7 +8,7 @@
           统一管理业务输入、字典取值、第三方接入和公式变量，支撑规则配置、批量运行和结果追溯的输入口径。
         </p>
       </div>
-      <el-tag type="info">支持来源系统、鉴权方式、字段映射、缓存策略和异常兜底配置</el-tag>
+      <el-tag type="info">变量编码优先，接入中心映射优先，上下文路径可选</el-tag>
     </section>
 
     <section class="variable-center__metrics">
@@ -92,7 +92,7 @@
         <div class="variable-center__guide-list">
           <div class="variable-center__guide-item">
             <el-tag type="success" size="small">INPUT</el-tag>
-            <span>直接承接业务输入，适合第三方已经整理好的计费对象字段。</span>
+            <span>直接承接业务输入，优先按变量编码取值；上下文路径只作为标准 JSON 直传的可选兼容。</span>
           </div>
           <div class="variable-center__guide-item">
             <el-tag type="info" size="small">DICT</el-tag>
@@ -221,6 +221,14 @@
           <el-col :span="12"><el-form-item label="状态" prop="status"><el-radio-group v-model="form.status"><el-radio v-for="item in variableStatusOptions" :key="item.value" :label="item.value">{{ item.label }}</el-radio></el-radio-group></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="默认值" prop="defaultValue"><el-input v-model="form.defaultValue" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="精度" prop="precisionScale"><el-input-number v-model="form.precisionScale" :min="0" :max="8" style="width: 100%" /></el-form-item></el-col>
+          <el-col v-if="['INPUT', 'REMOTE'].includes(form.sourceType)" :span="24">
+            <el-form-item label="上下文路径" prop="dataPath">
+              <el-input v-model="form.dataPath" placeholder="可选，如 job.weightTon；接入中心已按变量编码绑定时可不填" />
+            </el-form-item>
+            <div class="variable-center__drawer-tip variable-center__drawer-tip--compact">
+              运行时优先按变量编码取值；上下文路径仅用于兼容标准 JSON 直传或旧版路径模型。
+            </div>
+          </el-col>
         </el-row>
         <el-form-item v-if="form.sourceType === 'DICT'" label="字典类型" prop="dictType">
           <el-select v-model="form.dictType" clearable filterable style="width: 100%" placeholder="请选择系统字典或核算字典">
@@ -254,7 +262,6 @@
             <el-col :span="24"><el-form-item label="请求头JSON" prop="requestHeadersJson"><el-input v-model="form.requestHeadersJson" type="textarea" :rows="4" placeholder='如 {"Referer":"...","User-Agent":"...","Cookie":"..."}' /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="请求体模板" prop="bodyTemplateJson"><el-input v-model="form.bodyTemplateJson" type="textarea" :rows="4" placeholder='POST/PUT 时可配置 JSON 请求体或原始文本模板' /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="鉴权方式" prop="authType"><el-select v-model="form.authType" style="width: 100%"><el-option v-for="item in authTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="字段映射路径" prop="dataPath"><el-input v-model="form.dataPath" placeholder="如 rows / data.items[]" /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="鉴权配置JSON" prop="authConfigJson"><el-input v-model="form.authConfigJson" type="textarea" :rows="4" placeholder='如 {"token":"..."} / {"username":"...","password":"..."}' /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="响应提取配置JSON" prop="responseConfigJson"><el-input v-model="form.responseConfigJson" type="textarea" :rows="4" placeholder='如 {"successPath":"code","successValues":[200],"messagePath":"msg","listPath":"rows","totalPath":"total"}' /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="映射配置JSON" prop="mappingConfigJson"><el-input v-model="form.mappingConfigJson" type="textarea" :rows="4" placeholder='如 {"sourceCode":"code","sourceName":"name","mappedValue":"price"}' /></el-form-item></el-col>
@@ -326,7 +333,7 @@
           <el-table :data="previewResult.mappedRows" height="260" size="small">
             <el-table-column prop="variableCode" label="变量编码" />
             <el-table-column prop="mappedValue" label="映射值" />
-            <el-table-column prop="dataPath" label="映射路径" />
+            <el-table-column prop="dataPath" label="上下文路径" />
             <el-table-column prop="rawJson" label="映射依据" min-width="220" show-overflow-tooltip />
           </el-table>
         </el-col>
@@ -594,7 +601,7 @@
           <el-descriptions-item label="内容类型">{{ detailInfo.contentType || '-' }}</el-descriptions-item>
           <el-descriptions-item label="适配器类型">{{ resolveRemoteOptionLabel(adapterTypeOptions, detailInfo.adapterType) }}</el-descriptions-item>
           <el-descriptions-item label="鉴权方式">{{ resolveDictLabel(authTypeOptions, detailInfo.authType) }}</el-descriptions-item>
-          <el-descriptions-item label="数据路径">{{ detailInfo.dataPath || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="上下文路径">{{ detailInfo.dataPath || '未配置，按变量编码取值' }}</el-descriptions-item>
           <el-descriptions-item label="同步方式">{{ resolveDictLabel(syncModeOptions, detailInfo.syncMode) }}</el-descriptions-item>
           <el-descriptions-item label="缓存策略">{{ resolveDictLabel(cachePolicyOptions, detailInfo.cachePolicy) }}</el-descriptions-item>
           <el-descriptions-item label="失败兜底">{{ resolveDictLabel(fallbackPolicyOptions, detailInfo.fallbackPolicy) }}</el-descriptions-item>

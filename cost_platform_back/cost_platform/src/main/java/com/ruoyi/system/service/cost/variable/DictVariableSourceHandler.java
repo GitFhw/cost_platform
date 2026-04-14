@@ -20,5 +20,6 @@ public class DictVariableSourceHandler extends AbstractVariableSourceHandler {
         clearSourceSystem(variable);
         clearRemote(variable);
         clearFormula(variable);
+        clearDataPath(variable);
     }
 }

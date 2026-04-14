@@ -70,6 +70,7 @@ class CostVariableServiceManualIT {
         assertThat(stored.getSourceType()).isEqualTo("INPUT");
         assertThat(stored.getDictType()).isEmpty();
         assertThat(stored.getSourceSystem()).isEmpty();
+        assertThat(stored.getDataPath()).isEqualTo("payload.code");
         assertThat(stored.getRemoteApi()).isEmpty();
         assertThat(stored.getRequestMethod()).isEqualTo("GET");
         assertThat(stored.getContentType()).isEqualTo("application/json");

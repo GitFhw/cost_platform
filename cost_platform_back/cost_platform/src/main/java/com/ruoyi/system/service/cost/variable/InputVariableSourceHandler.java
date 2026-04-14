@@ -20,5 +20,6 @@ public class InputVariableSourceHandler extends AbstractVariableSourceHandler {
         clearDict(variable);
         clearRemote(variable);
         clearFormula(variable);
+        normalizeDataPath(variable);
     }
 }

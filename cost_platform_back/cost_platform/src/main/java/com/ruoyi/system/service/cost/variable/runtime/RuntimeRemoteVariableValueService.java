@@ -212,11 +212,11 @@ public class RuntimeRemoteVariableValueService {
         if (StringUtils.isNotEmpty(configuredValuePath)) {
             paths.add(configuredValuePath);
         }
-        if (StringUtils.isNotEmpty(variable.dataPath)) {
-            paths.add(variable.dataPath);
-        }
         if (StringUtils.isNotEmpty(variable.variableCode)) {
             paths.add(variable.variableCode);
+        }
+        if (StringUtils.isNotEmpty(variable.dataPath)) {
+            paths.add(variable.dataPath);
         }
         paths.add("mappedValue");
         paths.add("value");
@@ -224,8 +224,14 @@ public class RuntimeRemoteVariableValueService {
     }
 
     private String resolveRemoteValuePath(CostRunServiceImpl.RuntimeVariable variable, Map<String, Object> mapping) {
-        List<String> paths = buildRemoteValuePaths(variable, mapping);
-        return paths.isEmpty() ? "value" : paths.get(0);
+        String configuredValuePath = stringValue(mapping.get("valuePath"));
+        if (StringUtils.isNotEmpty(configuredValuePath)) {
+            return configuredValuePath;
+        }
+        if (StringUtils.isNotEmpty(variable.dataPath)) {
+            return variable.dataPath;
+        }
+        return firstNonBlank(variable.variableCode, "value");
     }
 
     private Object resolveRemoteFallbackValue(CostRunServiceImpl.RuntimeVariable variable, Map<String, Object> baseContext) {

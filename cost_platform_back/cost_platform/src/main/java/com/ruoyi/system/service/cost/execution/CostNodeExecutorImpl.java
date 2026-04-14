@@ -52,7 +52,13 @@ public class CostNodeExecutorImpl implements CostNodeExecutor {
         LinkedHashMap<String, Object> feeResultContext = new LinkedHashMap<>();
         for (CostRunServiceImpl.RuntimeFee fee : feesToExecute) {
             List<CostRunServiceImpl.RuntimeRule> rules = snapshot.rulesByFeeCode.getOrDefault(fee.feeCode, Collections.emptyList());
-            RuleMatchResult matchResult = ruleMatchExecutor.matchRule(rules, variableValues, baseContext, includeExplain, pricingSupport);
+            RuleMatchResult matchResult = ruleMatchExecutor.matchRule(
+                    rules,
+                    variableValues,
+                    baseContext,
+                    snapshot.variablesByCode,
+                    includeExplain,
+                    pricingSupport);
             if (matchResult == null || matchResult.rule == null) {
                 if (includeExplain) {
                     result.skippedFeeExplains.put(fee.feeCode,

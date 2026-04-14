@@ -58,6 +58,41 @@ class RuntimeVariableResolverChainTest {
     }
 
     @Test
+    void shouldPreferVariableCodeOverOptionalDataPathWhenResolvingInputValue() {
+        RuntimeVariableResolverChain chain = new RuntimeVariableResolverChain(
+                new FormulaRuntimeVariableResolver(),
+                new RemoteRuntimeVariableResolver(),
+                new InputRuntimeVariableResolver(),
+                new DictRuntimeVariableResolver(),
+                new FallbackRuntimeVariableResolver());
+        RuntimeVariableResolutionService service = new RuntimeVariableResolutionService(chain, new FakeExpressionService());
+
+        CostRunServiceImpl.RuntimeVariable input = new CostRunServiceImpl.RuntimeVariable();
+        input.variableCode = "INPUT_A";
+        input.sourceType = "INPUT";
+        input.dataPath = "legacy.inputA";
+
+        CostRunServiceImpl.RuntimeSnapshot snapshot = new CostRunServiceImpl.RuntimeSnapshot();
+        snapshot.variablesByCode.put(input.variableCode, input);
+
+        Map<String, Object> baseContext = Map.of(
+                "INPUT_A", 9,
+                "legacy", Map.of("inputA", 5));
+
+        Object value = service.resolve(
+                snapshot,
+                input,
+                baseContext,
+                new LinkedHashMap<>(),
+                snapshot.variablesByCode,
+                new LinkedHashSet<>(),
+                (variable, context) -> null,
+                (rawValue, variable) -> rawValue);
+
+        assertThat(value).isEqualTo(9);
+    }
+
+    @Test
     void shouldResolveFormulaVariableThroughDependencyAwareChain() {
         RuntimeVariableResolverChain chain = new RuntimeVariableResolverChain(
                 new FormulaRuntimeVariableResolver(),
