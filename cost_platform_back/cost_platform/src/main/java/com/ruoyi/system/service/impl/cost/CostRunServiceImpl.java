@@ -2100,9 +2100,9 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private String buildInputTemplateMessage(RuntimeSnapshot snapshot) {
         if (isDraftSnapshot(snapshot)) {
-            return "当前场景尚无生效版本，已按现有配置生成输入模板；公式变量无需手工输入，其余变量优先按 dataPath/变量编码生成命名空间结构。";
+            return "当前场景尚无生效版本，已按现有配置生成输入模板；公式变量无需手工输入，其余变量优先按变量编码生成取值锚点，上下文路径仅作可选兼容。";
         }
-        return "已按发布快照生成输入模板；公式变量无需手工输入，其余变量优先按 dataPath/变量编码生成命名空间结构。";
+        return "已按发布快照生成输入模板；公式变量无需手工输入，其余变量优先按变量编码生成取值锚点，上下文路径仅作可选兼容。";
     }
 
     private String buildFeeTemplateMessage(RuntimeSnapshot snapshot, boolean noRule) {
@@ -2159,8 +2159,13 @@ public class CostRunServiceImpl implements ICostRunService {
             if (StringUtils.isEmpty(path) || populatedPaths.contains(path)) {
                 continue;
             }
-            populatePathValue(template, path, buildTemplateValue(variable, index));
+            Object exampleValue = buildTemplateValue(variable, index);
+            populatePathValue(template, path, exampleValue);
             populatedPaths.add(path);
+            if (StringUtils.isNotEmpty(variable.variableCode) && !populatedPaths.contains(variable.variableCode)) {
+                populatePathValue(template, variable.variableCode, exampleValue);
+                populatedPaths.add(variable.variableCode);
+            }
         }
         return template;
     }
@@ -2183,8 +2188,13 @@ public class CostRunServiceImpl implements ICostRunService {
             if (StringUtils.isEmpty(path) || populatedPaths.contains(path)) {
                 continue;
             }
-            populatePathValue(template, path, buildTemplateValue(variable, index));
+            Object exampleValue = buildTemplateValue(variable, index);
+            populatePathValue(template, path, exampleValue);
             populatedPaths.add(path);
+            if (StringUtils.isNotEmpty(variable.variableCode) && !populatedPaths.contains(variable.variableCode)) {
+                populatePathValue(template, variable.variableCode, exampleValue);
+                populatedPaths.add(variable.variableCode);
+            }
         }
         return template;
     }

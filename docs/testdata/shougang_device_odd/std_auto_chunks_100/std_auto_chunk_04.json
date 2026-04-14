@@ -1,0 +1,802 @@
+[
+  {
+    "bizNo": "SGWT202603050045",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603050032",
+    "objectDimension": "????",
+    "objectCode": "BY-SGMTGS",
+    "objectName": "首钢博誉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2.5
+  },
+  {
+    "bizNo": "SGWT202603050025",
+    "objectDimension": "????",
+    "objectCode": "TP-SGMTGS",
+    "objectName": "首钢腾鹏",
+    "DEVICE_ODD_PROJECT_ID": "14108523792311734",
+    "DEVICE_ODD_QUANTITY": 4
+  },
+  {
+    "bizNo": "SGWT202603050020",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1.5
+  },
+  {
+    "bizNo": "SGWT202603040034",
+    "objectDimension": "????",
+    "objectCode": "FX-SGMTGS",
+    "objectName": "首钢福兴",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 0.5
+  },
+  {
+    "bizNo": "SGWT202603040030",
+    "objectDimension": "????",
+    "objectCode": "JC-SGMTGS",
+    "objectName": "首钢金成",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1.5
+  },
+  {
+    "bizNo": "SGWT202603030046",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603030044",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603030039",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "14108525500507574",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603030038",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "14108525500507574",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603030037",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603030034",
+    "objectDimension": "????",
+    "objectCode": "BY-SGMTGS",
+    "objectName": "首钢博誉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603030024",
+    "objectDimension": "????",
+    "objectCode": "FX-SGMTGS",
+    "objectName": "首钢福兴",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 3.5
+  },
+  {
+    "bizNo": "SGWT202603030023",
+    "objectDimension": "????",
+    "objectCode": "FX-SGMTGS",
+    "objectName": "首钢福兴",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2.5
+  },
+  {
+    "bizNo": "SGWT202603020560",
+    "objectDimension": "????",
+    "objectCode": "JC-SGMTGS",
+    "objectName": "首钢金成",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603020558",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603020556",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603020554",
+    "objectDimension": "????",
+    "objectCode": "BY-SGMTGS",
+    "objectName": "首钢博誉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603020549",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090887916101765",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603020548",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "14108525500507574",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603020546",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603020544",
+    "objectDimension": "????",
+    "objectCode": "RH-K3",
+    "objectName": "矿三荣辉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603020518",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603020517",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603020516",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603020515",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603020514",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 1.5
+  },
+  {
+    "bizNo": "SGWT202603020513",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 4
+  },
+  {
+    "bizNo": "SGWT202603010010",
+    "objectDimension": "????",
+    "objectCode": "JC-SGMTGS",
+    "objectName": "首钢金成",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603010009",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090887916101765",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603010008",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "14108525500507574",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603010005",
+    "objectDimension": "????",
+    "objectCode": "RH-K3",
+    "objectName": "矿三荣辉",
+    "DEVICE_ODD_PROJECT_ID": "14108523792311734",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603010004",
+    "objectDimension": "????",
+    "objectCode": "WL-GBYGS",
+    "objectName": "一公司万利",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603190036",
+    "objectDimension": "????",
+    "objectCode": "WL-K3",
+    "objectName": "矿三万利",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603190008",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 1.5
+  },
+  {
+    "bizNo": "SGWT202603190007",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 1.5
+  },
+  {
+    "bizNo": "SGWT202603190006",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 5
+  },
+  {
+    "bizNo": "SGWT202603190005",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 0.5
+  },
+  {
+    "bizNo": "SGWT202603190004",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603180096",
+    "objectDimension": "????",
+    "objectCode": "FX-SGMTGS",
+    "objectName": "首钢福兴",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 3
+  },
+  {
+    "bizNo": "SGWT202603180095",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603180094",
+    "objectDimension": "????",
+    "objectCode": "HY-GBYGS",
+    "objectName": "一公司华运",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603180086",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 3
+  },
+  {
+    "bizNo": "SGWT202603180081",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "14108525500507574",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603180075",
+    "objectDimension": "????",
+    "objectCode": "BY-SGMTGS",
+    "objectName": "首钢博誉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 0.5
+  },
+  {
+    "bizNo": "SGWT202603180071",
+    "objectDimension": "????",
+    "objectCode": "BY-SGMTGS",
+    "objectName": "首钢博誉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 3.5
+  },
+  {
+    "bizNo": "SGWT202603180069",
+    "objectDimension": "????",
+    "objectCode": "BY-SGMTGS",
+    "objectName": "首钢博誉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2.5
+  },
+  {
+    "bizNo": "SGWT202603180064",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "14108525500507574",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603180060",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 0.5
+  },
+  {
+    "bizNo": "SGWT202603180050",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2.5
+  },
+  {
+    "bizNo": "SGWT202603180049",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 4
+  },
+  {
+    "bizNo": "SGWT202603180048",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 3
+  },
+  {
+    "bizNo": "SGWT202603180047",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 3
+  },
+  {
+    "bizNo": "SGWT202603180046",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 3
+  },
+  {
+    "bizNo": "SGWT202603180045",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603180044",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603180042",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603180036",
+    "objectDimension": "????",
+    "objectCode": "CX2-SGMTGS",
+    "objectName": "首钢昌勋",
+    "DEVICE_ODD_PROJECT_ID": "14108523792311734",
+    "DEVICE_ODD_QUANTITY": 2.5
+  },
+  {
+    "bizNo": "SGWT202603180007",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 3
+  },
+  {
+    "bizNo": "SGWT202603180006",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 3
+  },
+  {
+    "bizNo": "SGWT202603170059",
+    "objectDimension": "????",
+    "objectCode": "BY-SGMTGS",
+    "objectName": "首钢博誉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603170058",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 4
+  },
+  {
+    "bizNo": "SGWT202603170057",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090887916101765",
+    "DEVICE_ODD_QUANTITY": 5
+  },
+  {
+    "bizNo": "SGWT202603170056",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "14108525500507574",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603170050",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 0.5
+  },
+  {
+    "bizNo": "SGWT202603100049",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090887916101765",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603100048",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 8.5
+  },
+  {
+    "bizNo": "SGWT202603100047",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "14108525500507574",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603100046",
+    "objectDimension": "????",
+    "objectCode": "BY-SGMTGS",
+    "objectName": "首钢博誉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603100045",
+    "objectDimension": "????",
+    "objectCode": "JC-SGMTGS",
+    "objectName": "首钢金成",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 0.5
+  },
+  {
+    "bizNo": "SGWT202603100044",
+    "objectDimension": "????",
+    "objectCode": "RH-SGMTGS",
+    "objectName": "首钢荣辉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 4.5
+  },
+  {
+    "bizNo": "SGWT202603100043",
+    "objectDimension": "????",
+    "objectCode": "JC-SGMTGS",
+    "objectName": "首钢金成",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603100042",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603100040",
+    "objectDimension": "????",
+    "objectCode": "HY-GBYGS",
+    "objectName": "一公司华运",
+    "DEVICE_ODD_PROJECT_ID": "14108523792311734",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603100039",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603100031",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 7.5
+  },
+  {
+    "bizNo": "SGWT202603090578",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603090577",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603090576",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 2
+  },
+  {
+    "bizNo": "SGWT202603090573",
+    "objectDimension": "????",
+    "objectCode": "BY-SGMTGS",
+    "objectName": "首钢博誉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603090572",
+    "objectDimension": "????",
+    "objectCode": "RH-SGMTGS",
+    "objectName": "首钢荣辉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603090570",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603090566",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090887916101765",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603090565",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "14108525500507574",
+    "DEVICE_ODD_QUANTITY": 4
+  },
+  {
+    "bizNo": "SGWT202603090564",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 9
+  },
+  {
+    "bizNo": "SGWT202603090563",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603090561",
+    "objectDimension": "????",
+    "objectCode": "BY-SGMTGS",
+    "objectName": "首钢博誉",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 6
+  },
+  {
+    "bizNo": "SGWT202603090560",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "14108525500507574",
+    "DEVICE_ODD_QUANTITY": 8
+  },
+  {
+    "bizNo": "SGWT202603090559",
+    "objectDimension": "????",
+    "objectCode": "GP-SGMTGS",
+    "objectName": "首钢港蓬",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603090538",
+    "objectDimension": "????",
+    "objectCode": "JC-SGMTGS",
+    "objectName": "首钢金成",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2.5
+  },
+  {
+    "bizNo": "SGWT202603090537",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 3
+  },
+  {
+    "bizNo": "SGWT202603090536",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 4.5
+  },
+  {
+    "bizNo": "SGWT202603090535",
+    "objectDimension": "????",
+    "objectCode": "HS-SGMTGS",
+    "objectName": "首钢浩顺",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 2.5
+  },
+  {
+    "bizNo": "SGWT202603090522",
+    "objectDimension": "????",
+    "objectCode": "FX-SGMTGS",
+    "objectName": "首钢福兴",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603080063",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 2.5
+  },
+  {
+    "bizNo": "SGWT202603080062",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 2.5
+  },
+  {
+    "bizNo": "SGWT202603080045",
+    "objectDimension": "????",
+    "objectCode": "GH-GBYGS",
+    "objectName": "一公司港河",
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 1.5
+  },
+  {
+    "bizNo": "SGWT202603080044",
+    "objectDimension": "????",
+    "objectCode": null,
+    "objectName": null,
+    "DEVICE_ODD_PROJECT_ID": "665090766193205381",
+    "DEVICE_ODD_QUANTITY": 3
+  },
+  {
+    "bizNo": "SGWT202603080043",
+    "objectDimension": "????",
+    "objectCode": "FX-SGMTGS",
+    "objectName": "首钢福兴",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1
+  },
+  {
+    "bizNo": "SGWT202603080041",
+    "objectDimension": "????",
+    "objectCode": "GH-SGMTGS",
+    "objectName": "首钢港河",
+    "DEVICE_ODD_PROJECT_ID": "665089828246167685",
+    "DEVICE_ODD_QUANTITY": 1.5
+  }
+]

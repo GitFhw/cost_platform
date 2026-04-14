@@ -21,6 +21,7 @@ public class FormulaVariableSourceHandler extends AbstractVariableSourceHandler 
         clearSourceSystem(variable);
         clearDict(variable);
         clearRemote(variable);
+        clearDataPath(variable);
         variable.setFormulaCode(StringUtils.trim(variable.getFormulaCode()));
     }
 }

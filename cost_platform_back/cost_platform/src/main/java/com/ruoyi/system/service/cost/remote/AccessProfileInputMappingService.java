@@ -106,8 +106,11 @@ public class AccessProfileInputMappingService {
             String variableCode = stringValue(field.get("variableCode"));
             Object mappedValue = resolveMappedFieldValue(rawRecord, mapping, path, variableCode);
             if (mappedValue == null) {
-                missingPaths.add(path);
+                missingPaths.add(firstNonBlank(variableCode, path));
                 continue;
+            }
+            if (StringUtils.isNotEmpty(variableCode)) {
+                populatePathValue(target, variableCode, mappedValue);
             }
             populatePathValue(target, path, mappedValue);
         }

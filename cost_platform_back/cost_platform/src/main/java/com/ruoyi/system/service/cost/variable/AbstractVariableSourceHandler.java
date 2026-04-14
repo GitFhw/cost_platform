@@ -24,7 +24,6 @@ abstract class AbstractVariableSourceHandler implements VariableSourceHandler {
         variable.setBodyTemplateJson(null);
         variable.setAuthType("NONE");
         variable.setAuthConfigJson(null);
-        variable.setDataPath("");
         variable.setResponseConfigJson(null);
         variable.setMappingConfigJson(null);
         variable.setPageConfigJson(null);
@@ -35,16 +34,24 @@ abstract class AbstractVariableSourceHandler implements VariableSourceHandler {
         variable.setFallbackPolicy("FAIL_FAST");
     }
 
+    protected void clearDataPath(CostVariable variable) {
+        variable.setDataPath("");
+    }
+
     protected void clearFormula(CostVariable variable) {
         variable.setFormulaExpr(null);
         variable.setFormulaCode("");
+    }
+
+    protected void normalizeDataPath(CostVariable variable) {
+        variable.setDataPath(StringUtils.trim(variable.getDataPath()));
     }
 
     protected void normalizeRemote(CostVariable variable) {
         variable.setRemoteApi(StringUtils.trim(variable.getRemoteApi()));
         variable.setRequestMethod(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getRequestMethod()), "GET").toUpperCase(Locale.ROOT));
         variable.setContentType(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getContentType()), MediaType.APPLICATION_JSON_VALUE));
-        variable.setDataPath(StringUtils.trim(variable.getDataPath()));
+        normalizeDataPath(variable);
         variable.setAuthType(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getAuthType()), "NONE"));
         variable.setSyncMode(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getSyncMode()), "REALTIME"));
         variable.setCachePolicy(StringUtils.defaultIfEmpty(StringUtils.trim(variable.getCachePolicy()), "MANUAL_REFRESH"));

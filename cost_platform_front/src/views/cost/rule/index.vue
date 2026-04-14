@@ -420,7 +420,7 @@
             <div>
               <span>来源：{{ resolveTagLabel(variableSourceOptions, selectedTierVariableMeta.sourceType) || '-' }}</span>
               <span>类型：{{ resolveTagLabel(variableDataTypeOptions, selectedTierVariableMeta.dataType) || '-' }}</span>
-              <span>路径：{{ selectedTierVariableMeta.dataPath || '未配置路径' }}</span>
+              <span>上下文路径：{{ selectedTierVariableMeta.dataPath || '未配置，按变量编码取值' }}</span>
             </div>
           </div>
           <el-alert

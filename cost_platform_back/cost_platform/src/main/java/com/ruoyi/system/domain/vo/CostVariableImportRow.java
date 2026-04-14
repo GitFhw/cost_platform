@@ -45,7 +45,7 @@ public class CostVariableImportRow {
     @Excel(name = "鉴权配置JSON")
     private String authConfigJson;
 
-    @Excel(name = "数据路径")
+    @Excel(name = "上下文路径")
     private String dataPath;
 
     @Excel(name = "字段映射JSON")

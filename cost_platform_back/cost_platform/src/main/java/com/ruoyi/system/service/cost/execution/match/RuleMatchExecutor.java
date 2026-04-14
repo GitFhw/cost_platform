@@ -19,6 +19,7 @@ public class RuleMatchExecutor {
     public RuleMatchResult matchRule(List<CostRunServiceImpl.RuntimeRule> rules,
                                      Map<String, Object> variableValues,
                                      Map<String, Object> baseContext,
+                                     Map<String, CostRunServiceImpl.RuntimeVariable> variableMap,
                                      boolean includeExplain,
                                      PricingSupport support) {
         Map<String, Object> conditionContext = support.mergeContext(baseContext, variableValues, Collections.emptyMap());
@@ -26,6 +27,10 @@ public class RuleMatchExecutor {
         for (CostRunServiceImpl.RuntimeRule rule : rules) {
             List<Map<String, Object>> conditionExplain = new ArrayList<>();
             ConditionMatchResult conditionMatchResult = matchConditions(rule, variableValues, conditionContext, conditionExplain, support);
+            if (conditionMatchResult.matched && !matchQuantityInputPresence(rule, baseContext, variableMap, conditionExplain)) {
+                conditionMatchResult.matched = false;
+                conditionMatchResult.matchedGroupNo = null;
+            }
             if (includeExplain) {
                 fallbackResult.ruleEvaluations.add(buildRuleEvaluation(rule, conditionMatchResult, conditionExplain));
             }
@@ -47,6 +52,34 @@ public class RuleMatchExecutor {
             }
         }
         return fallbackResult;
+    }
+
+    private boolean matchQuantityInputPresence(CostRunServiceImpl.RuntimeRule rule,
+                                               Map<String, Object> baseContext,
+                                               Map<String, CostRunServiceImpl.RuntimeVariable> variableMap,
+                                               List<Map<String, Object>> explain) {
+        if (StringUtils.isEmpty(rule.quantityVariableCode)) {
+            return true;
+        }
+        CostRunServiceImpl.RuntimeVariable quantityVariable = variableMap == null
+                ? null
+                : variableMap.get(rule.quantityVariableCode);
+        if (quantityVariable == null || !"INPUT".equalsIgnoreCase(quantityVariable.sourceType)) {
+            return true;
+        }
+        boolean provided = hasInputPath(baseContext, quantityVariable.variableCode)
+                || hasInputPath(baseContext, quantityVariable.dataPath);
+        LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+        item.put("groupNo", null);
+        item.put("displayName", "数量变量输入存在校验");
+        item.put("variableCode", rule.quantityVariableCode);
+        item.put("leftValue", resolveInputValue(baseContext, quantityVariable));
+        item.put("operatorCode", "PRESENT");
+        item.put("compareValue", true);
+        item.put("pass", provided);
+        item.put("systemCheck", true);
+        explain.add(item);
+        return provided;
     }
 
     private Map<String, Object> buildRuleEvaluation(CostRunServiceImpl.RuntimeRule rule,
@@ -209,5 +242,38 @@ public class RuleMatchExecutor {
             }
         }
         return result;
+    }
+
+    private Object resolveInputValue(Map<String, Object> input, CostRunServiceImpl.RuntimeVariable variable) {
+        if (variable == null) {
+            return null;
+        }
+        Object value = resolveByPath(input, variable.variableCode);
+        if (value == null) {
+            value = resolveByPath(input, variable.dataPath);
+        }
+        return value;
+    }
+
+    private boolean hasInputPath(Map<String, Object> input, String path) {
+        return resolveByPath(input, path) != null;
+    }
+
+    private Object resolveByPath(Map<String, Object> input, String path) {
+        if (input == null || StringUtils.isEmpty(path)) {
+            return null;
+        }
+        String[] pieces = path.split("\\.");
+        Object current = input;
+        for (String piece : pieces) {
+            if (!(current instanceof Map)) {
+                return null;
+            }
+            current = ((Map<?, ?>) current).get(piece);
+            if (current == null) {
+                return null;
+            }
+        }
+        return current;
     }
 }
