@@ -14,6 +14,7 @@ import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.service.cost.ICostFeeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
@@ -35,6 +36,9 @@ public class CostFeeServiceImpl implements ICostFeeService {
 
     @Autowired
     private SysDictDataMapper dictDataMapper;
+
+    @Autowired
+    private CostGovernanceImpactSupport governanceImpactSupport;
 
     /**
      * 查询费用列表
@@ -103,6 +107,7 @@ public class CostFeeServiceImpl implements ICostFeeService {
                 : "请先解除规则依赖、发布版本引用和结果台账影响，再删除费用。");
         check.setDisableAdvice(check.getCanDisable() ? buildDisableAdvice(check)
                 : "请先处理发布版本或结果台账引用，再执行停用。");
+        check.setImpactItems(governanceImpactSupport.buildFeeImpacts(check));
         return check;
     }
 
@@ -147,7 +152,11 @@ public class CostFeeServiceImpl implements ICostFeeService {
      * 删除前先执行治理预检查，避免被规则、版本或结果链路引用时误删。
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int deleteFeeByIds(Long[] feeIds) {
+        if (feeIds == null || feeIds.length == 0) {
+            return 0;
+        }
         for (Long feeId : feeIds) {
             CostFeeGovernanceCheckVo check = selectFeeGovernanceCheck(feeId);
             if (StringUtils.isNull(check)) {
@@ -157,6 +166,7 @@ public class CostFeeServiceImpl implements ICostFeeService {
                 throw new ServiceException(String.format("%1$s不能删除：%2$s", check.getFeeName(), check.getRemoveBlockingReason()));
             }
         }
+        feeMapper.deleteFeeVariableRelByFeeIds(feeIds);
         return feeMapper.deleteBatchIds(Arrays.asList(feeIds));
     }
 

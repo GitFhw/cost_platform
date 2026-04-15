@@ -196,4 +196,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </if>
     </select>
 
+    <delete id="deleteFeeVariableRelByVariableIds">
+        delete from cost_fee_variable_rel
+        where variable_id in
+        <foreach collection="array" item="variableId" open="(" separator="," close=")">
+            #{variableId}
+        </foreach>
+    </delete>
+
 </mapper>

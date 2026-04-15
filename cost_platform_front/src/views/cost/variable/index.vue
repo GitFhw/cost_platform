@@ -258,15 +258,15 @@
             <el-col :span="8"><el-form-item label="适配器类型" prop="adapterType"><el-select v-model="form.adapterType" style="width: 100%"><el-option v-for="item in adapterTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="第三方接口" prop="remoteApi"><el-input v-model="form.remoteApi" placeholder="http/https 接口地址" /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="内容类型" prop="contentType"><el-select v-model="form.contentType" style="width: 100%" filterable allow-create default-first-option><el-option v-for="item in contentTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="查询参数JSON" prop="queryConfigJson"><el-input v-model="form.queryConfigJson" type="textarea" :rows="3" placeholder='如 {"pageNum":1,"pageSize":20}' /></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="请求头JSON" prop="requestHeadersJson"><el-input v-model="form.requestHeadersJson" type="textarea" :rows="4" placeholder='如 {"Referer":"...","User-Agent":"...","Cookie":"..."}' /></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="请求体模板" prop="bodyTemplateJson"><el-input v-model="form.bodyTemplateJson" type="textarea" :rows="4" placeholder='POST/PUT 时可配置 JSON 请求体或原始文本模板' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="查询参数JSON" prop="queryConfigJson"><JsonEditor v-model="form.queryConfigJson" title="查询参数 JSON" :rows="3" placeholder='如 {"pageNum":1,"pageSize":20}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="请求头JSON" prop="requestHeadersJson"><JsonEditor v-model="form.requestHeadersJson" title="请求头 JSON" :rows="4" placeholder='如 {"Referer":"...","User-Agent":"...","Cookie":"..."}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="请求体模板" prop="bodyTemplateJson"><JsonEditor v-model="form.bodyTemplateJson" title="请求体模板" :lang="requestBodyLang" :rows="4" :validate-on-blur="false" placeholder='POST/PUT 时可配置 JSON 请求体或原始文本模板' /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="鉴权方式" prop="authType"><el-select v-model="form.authType" style="width: 100%"><el-option v-for="item in authTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="鉴权配置JSON" prop="authConfigJson"><el-input v-model="form.authConfigJson" type="textarea" :rows="4" placeholder='如 {"token":"..."} / {"username":"...","password":"..."}' /></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="响应提取配置JSON" prop="responseConfigJson"><el-input v-model="form.responseConfigJson" type="textarea" :rows="4" placeholder='如 {"successPath":"code","successValues":[200],"messagePath":"msg","listPath":"rows","totalPath":"total"}' /></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="映射配置JSON" prop="mappingConfigJson"><el-input v-model="form.mappingConfigJson" type="textarea" :rows="4" placeholder='如 {"sourceCode":"code","sourceName":"name","mappedValue":"price"}' /></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="分页策略JSON" prop="pageConfigJson"><el-input v-model="form.pageConfigJson" type="textarea" :rows="3" placeholder='如 {"pageNumKey":"pageNum","pageSizeKey":"pageSize","previewPageNum":1,"previewPageSize":20}' /></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="适配器配置JSON" prop="adapterConfigJson"><el-input v-model="form.adapterConfigJson" type="textarea" :rows="3" placeholder='如 {"listPathCandidates":["data.rows","rows"]}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="鉴权配置JSON" prop="authConfigJson"><JsonEditor v-model="form.authConfigJson" title="鉴权配置 JSON" :rows="4" placeholder='如 {"token":"..."} / {"username":"...","password":"..."}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="响应提取配置JSON" prop="responseConfigJson"><JsonEditor v-model="form.responseConfigJson" title="响应提取配置 JSON" :rows="4" placeholder='如 {"successPath":"code","successValues":[200],"messagePath":"msg","listPath":"rows","totalPath":"total"}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="映射配置JSON" prop="mappingConfigJson"><JsonEditor v-model="form.mappingConfigJson" title="映射配置 JSON" :rows="4" placeholder='如 {"sourceCode":"code","sourceName":"name","mappedValue":"price"}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="分页策略JSON" prop="pageConfigJson"><JsonEditor v-model="form.pageConfigJson" title="分页策略 JSON" :rows="3" placeholder='如 {"pageNumKey":"pageNum","pageSizeKey":"pageSize","previewPageNum":1,"previewPageSize":20}' /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="适配器配置JSON" prop="adapterConfigJson"><JsonEditor v-model="form.adapterConfigJson" title="适配器配置 JSON" :rows="3" placeholder='如 {"listPathCandidates":["data.rows","rows"]}' /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="同步方式" prop="syncMode"><el-select v-model="form.syncMode" style="width: 100%"><el-option v-for="item in syncModeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="缓存策略" prop="cachePolicy"><el-select v-model="form.cachePolicy" style="width: 100%"><el-option v-for="item in cachePolicyOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="失败兜底" prop="fallbackPolicy"><el-select v-model="form.fallbackPolicy" style="width: 100%"><el-option v-for="item in fallbackPolicyOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
@@ -609,20 +609,20 @@
           <el-descriptions-item label="公式编码">{{ detailInfo.formulaCode || '-' }}</el-descriptions-item>
           <el-descriptions-item label="中文公式">{{ detailInfo.businessFormula || '-' }}</el-descriptions-item>
           <el-descriptions-item label="公式表达式">{{ detailInfo.formulaExpr || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="查询参数JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.queryConfigJson) }}</pre></el-descriptions-item>
-          <el-descriptions-item label="请求头JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.requestHeadersJson) }}</pre></el-descriptions-item>
-          <el-descriptions-item label="请求体模板"><pre class="variable-detail__json">{{ formatJson(detailInfo.bodyTemplateJson) }}</pre></el-descriptions-item>
-          <el-descriptions-item label="鉴权配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.authConfigJson) }}</pre></el-descriptions-item>
-          <el-descriptions-item label="响应提取配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.responseConfigJson) }}</pre></el-descriptions-item>
-          <el-descriptions-item label="映射配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.mappingConfigJson) }}</pre></el-descriptions-item>
-          <el-descriptions-item label="分页策略JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.pageConfigJson) }}</pre></el-descriptions-item>
-          <el-descriptions-item label="适配器配置JSON"><pre class="variable-detail__json">{{ formatJson(detailInfo.adapterConfigJson) }}</pre></el-descriptions-item>
+          <el-descriptions-item label="查询参数JSON"><JsonEditor :model-value="formatJson(detailInfo.queryConfigJson)" title="查询参数 JSON" readonly :rows="4" /></el-descriptions-item>
+          <el-descriptions-item label="请求头JSON"><JsonEditor :model-value="formatJson(detailInfo.requestHeadersJson)" title="请求头 JSON" readonly :rows="4" /></el-descriptions-item>
+          <el-descriptions-item label="请求体模板"><JsonEditor :model-value="formatJson(detailInfo.bodyTemplateJson)" title="请求体模板" readonly :rows="4" /></el-descriptions-item>
+          <el-descriptions-item label="鉴权配置JSON"><JsonEditor :model-value="formatJson(detailInfo.authConfigJson)" title="鉴权配置 JSON" readonly :rows="4" /></el-descriptions-item>
+          <el-descriptions-item label="响应提取配置JSON"><JsonEditor :model-value="formatJson(detailInfo.responseConfigJson)" title="响应提取配置 JSON" readonly :rows="4" /></el-descriptions-item>
+          <el-descriptions-item label="映射配置JSON"><JsonEditor :model-value="formatJson(detailInfo.mappingConfigJson)" title="映射配置 JSON" readonly :rows="4" /></el-descriptions-item>
+          <el-descriptions-item label="分页策略JSON"><JsonEditor :model-value="formatJson(detailInfo.pageConfigJson)" title="分页策略 JSON" readonly :rows="4" /></el-descriptions-item>
+          <el-descriptions-item label="适配器配置JSON"><JsonEditor :model-value="formatJson(detailInfo.adapterConfigJson)" title="适配器配置 JSON" readonly :rows="4" /></el-descriptions-item>
           <el-descriptions-item label="备注">{{ detailInfo.remark || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
     </el-drawer>
 
-    <el-drawer v-model="governanceOpen" title="变量治理检查" size="500px" append-to-body>
+    <el-drawer v-model="governanceOpen" title="变量治理检查" size="640px" append-to-body>
       <div v-loading="governanceLoading" v-if="governanceInfo.variableId">
         <div class="variable-governance__summary">
           <div class="variable-governance__item">
@@ -654,6 +654,7 @@
         <el-alert :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon class="mt12" />
         <el-alert title="删除建议" :description="governanceInfo.removeAdvice" type="info" :closable="false" show-icon class="mt12" />
         <el-alert title="停用建议" :description="governanceInfo.disableAdvice" type="info" :closable="false" show-icon class="mt12" />
+        <GovernanceImpactList :impacts="governanceInfo.impactItems" />
       </div>
     </el-drawer>
   </div>
@@ -663,6 +664,8 @@
 import { computed, getCurrentInstance, reactive, ref, toRefs, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
+import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
+import JsonEditor from '@/components/cost/JsonEditor.vue'
 import { optionselectFormula } from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselect as getDictTypeOptionselect } from '@/api/system/dict/type'
@@ -687,6 +690,7 @@ import {
 import { optionselectVariableGroup } from '@/api/cost/variableGroup'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
+import { parseJsonText, safeFormatJson } from '@/utils/jsonTools'
 
 const { proxy } = getCurrentInstance()
 const loading = ref(true)
@@ -802,12 +806,12 @@ const validateRemoteJson = fieldLabel => (_rule, value, callback) => {
     callback()
     return
   }
-  try {
-    JSON.parse(value)
+  const result = parseJsonText(value)
+  if (result.valid) {
     callback()
-  } catch (error) {
-    callback(new Error(`${fieldLabel}格式不合法，请输入有效 JSON`))
+    return
   }
+  callback(new Error(`${fieldLabel}格式不合法，请输入有效 JSON`))
 }
 
 const data = reactive({
@@ -840,6 +844,7 @@ const data = reactive({
   }
 })
 const { queryParams, form, copyForm, templateForm, importForm, rules, copyRules } = toRefs(data)
+const requestBodyLang = computed(() => String(form.value.contentType || '').toLowerCase().includes('json') ? 'json' : 'text')
 
 const metricItems = computed(() => [
   { label: '变量总数', value: statistics.variableCount, desc: '当前筛选条件下的变量规模' },
@@ -1436,12 +1441,7 @@ function resolveDictTypeLabel(dictType) {
 }
 
 function formatJson(value) {
-  if (!value) return '-'
-  try {
-    return JSON.stringify(typeof value === 'string' ? JSON.parse(value) : value, null, 2)
-  } catch (error) {
-    return value
-  }
+  return safeFormatJson(value, '-')
 }
 
 function formatDateTime(value) {

@@ -90,11 +90,11 @@
       <div class="audit-page__compare">
         <div class="audit-page__compare-panel">
           <h4>变更前</h4>
-          <pre>{{ formatJson(detailData.beforeJson) }}</pre>
+          <JsonEditor :model-value="formatJson(detailData.beforeJson)" title="变更前" readonly :rows="16" />
         </div>
         <div class="audit-page__compare-panel">
           <h4>变更后</h4>
-          <pre>{{ formatJson(detailData.afterJson) }}</pre>
+          <JsonEditor :model-value="formatJson(detailData.afterJson)" title="变更后" readonly :rows="16" />
         </div>
       </div>
     </el-drawer>
@@ -102,6 +102,7 @@
 </template>
 
 <script setup name="CostAudit">
+import JsonEditor from '@/components/cost/JsonEditor.vue'
 import { listAudit, getAuditStats } from '@/api/cost/governance'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'

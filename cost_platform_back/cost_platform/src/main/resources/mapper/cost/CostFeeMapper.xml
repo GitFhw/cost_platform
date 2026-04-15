@@ -121,4 +121,57 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where f.fee_id = #{feeId}
     </select>
 
+    <insert id="insertFeeVariableRels">
+        insert into cost_fee_variable_rel (
+            scene_id,
+            fee_id,
+            variable_id,
+            relation_type,
+            source_type,
+            source_rule_id,
+            source_code,
+            sort_no,
+            remark,
+            create_by,
+            create_time,
+            update_by,
+            update_time
+        )
+        values
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.sceneId},
+                #{item.feeId},
+                #{item.variableId},
+                #{item.relationType},
+                #{item.sourceType},
+                #{item.sourceRuleId},
+                #{item.sourceCode},
+                #{item.sortNo},
+                #{item.remark},
+                'system',
+                sysdate(),
+                'system',
+                sysdate()
+            )
+        </foreach>
+    </insert>
+
+    <delete id="deleteRuleDerivedFeeVariableRelByFeeIds">
+        delete from cost_fee_variable_rel
+        where source_type = 'RULE_DERIVED'
+          and fee_id in
+        <foreach collection="array" item="feeId" open="(" separator="," close=")">
+            #{feeId}
+        </foreach>
+    </delete>
+
+    <delete id="deleteFeeVariableRelByFeeIds">
+        delete from cost_fee_variable_rel
+        where fee_id in
+        <foreach collection="array" item="feeId" open="(" separator="," close=")">
+            #{feeId}
+        </foreach>
+    </delete>
+
 </mapper>

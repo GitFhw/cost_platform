@@ -684,7 +684,7 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="governanceOpen" title="规则治理检查" size="500px" append-to-body>
+    <el-drawer v-model="governanceOpen" title="规则治理检查" size="640px" append-to-body>
       <div v-loading="governanceLoading" v-if="governanceInfo.ruleId">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="规则">{{ governanceInfo.ruleCode }} / {{ governanceInfo.ruleName }}</el-descriptions-item>
@@ -696,6 +696,7 @@
         </el-descriptions>
         <el-alert :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon class="mt12" />
         <el-alert :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon class="mt12" />
+        <GovernanceImpactList :impacts="governanceInfo.impactItems" />
       </div>
     </el-drawer>
   </div>
@@ -705,6 +706,7 @@
 import { ElMessageBox } from 'element-plus'
 import ConditionValueEditor from '@/components/cost/ConditionValueEditor.vue'
 import ExpressionResourcePanel from '@/components/cost/ExpressionResourcePanel.vue'
+import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import RuleTierEditor from '@/components/cost/RuleTierEditor.vue'
 import { optionselectFee } from '@/api/cost/fee'
 import { optionselectFormula } from '@/api/cost/formula'

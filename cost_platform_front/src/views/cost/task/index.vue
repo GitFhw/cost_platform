@@ -248,7 +248,7 @@
 
           <template v-if="form.inputSourceType === 'INLINE_JSON'">
             <el-form-item label="输入 JSON" required>
-              <el-input v-model="form.inputJson" type="textarea" :rows="14" maxlength="20000" show-word-limit />
+              <JsonEditor v-model="form.inputJson" title="输入 JSON" :rows="14" :max-length="20000" :allow-empty="false" />
             </el-form-item>
             <el-alert
               v-if="inlineInputInsight"
@@ -575,7 +575,7 @@
           <el-input v-model="batchForm.remark" type="textarea" :rows="2" maxlength="500" show-word-limit />
         </el-form-item>
         <el-form-item label="批量 JSON" required>
-          <el-input v-model="batchForm.inputJson" type="textarea" :rows="16" maxlength="60000" show-word-limit placeholder="请输入 JSON 数组，例如 [{...}, {...}]" />
+          <JsonEditor v-model="batchForm.inputJson" title="批量 JSON" :rows="16" :max-length="60000" :allow-empty="false" placeholder="请输入 JSON 数组，例如 [{...}, {...}]" />
         </el-form-item>
       </el-form>
 
@@ -714,6 +714,7 @@
 
 <script setup name="CostTask">
 import { ElMessageBox } from 'element-plus'
+import JsonEditor from '@/components/cost/JsonEditor.vue'
 import {
   cancelTask,
   createTaskInputBatch,

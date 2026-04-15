@@ -167,10 +167,10 @@
 
       <el-tabs class="result-page__tabs">
         <el-tab-pane label="结果记录">
-          <pre>{{ formatJson(detailData.ledger) }}</pre>
+          <JsonEditor :model-value="detailData.ledger" title="结果记录" readonly :rows="12" />
         </el-tab-pane>
         <el-tab-pane label="追溯解释">
-          <pre>{{ formatJson(detailData.trace) }}</pre>
+          <JsonEditor :model-value="detailData.trace" title="追溯解释" readonly :rows="12" />
         </el-tab-pane>
       </el-tabs>
     </el-drawer>
@@ -178,16 +178,16 @@
     <el-drawer v-model="traceOpen" title="追溯解释" size="980px" append-to-body>
       <el-tabs class="result-page__tabs">
         <el-tab-pane label="变量值">
-          <pre>{{ formatJson(traceData.variables) }}</pre>
+          <JsonEditor :model-value="traceData.variables" title="变量值" readonly :rows="12" />
         </el-tab-pane>
         <el-tab-pane label="条件命中">
-          <pre>{{ formatJson(traceData.conditions) }}</pre>
+          <JsonEditor :model-value="traceData.conditions" title="条件命中" readonly :rows="12" />
         </el-tab-pane>
         <el-tab-pane label="定价过程">
-          <pre>{{ formatJson(traceData.pricing) }}</pre>
+          <JsonEditor :model-value="traceData.pricing" title="定价过程" readonly :rows="12" />
         </el-tab-pane>
         <el-tab-pane label="执行时间线">
-          <pre>{{ formatJson(traceData.timeline) }}</pre>
+          <JsonEditor :model-value="traceData.timeline" title="执行时间线" readonly :rows="12" />
         </el-tab-pane>
       </el-tabs>
     </el-drawer>
@@ -195,6 +195,7 @@
 </template>
 
 <script setup name="CostResult">
+import JsonEditor from '@/components/cost/JsonEditor.vue'
 import { getResultDetail, getResultStats, getTraceDetail, listResult, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
@@ -392,10 +393,6 @@ function formatUnitPrice(row) {
   }
   const unitLabel = resolveUnitLabel(row.unitCode)
   return unitLabel === '-' ? String(row.unitPrice) : `${row.unitPrice} / ${unitLabel}`
-}
-
-function formatJson(value) {
-  return JSON.stringify(value || {}, null, 2)
 }
 
 watch(
