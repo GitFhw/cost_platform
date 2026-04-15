@@ -207,7 +207,7 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="governanceOpen" title="费用治理检查" size="520px" append-to-body>
+    <el-drawer v-model="governanceOpen" title="费用治理检查" size="640px" append-to-body>
       <div v-loading="governanceLoading" class="fee-governance" v-if="governanceInfo.feeId">
         <div class="fee-governance__header">
           <div>
@@ -224,6 +224,7 @@
         </div>
         <el-alert :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon />
         <el-alert :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon />
+        <GovernanceImpactList :impacts="governanceInfo.impactItems" />
         <div class="fee-governance__advice">
           <p>删除建议：{{ governanceInfo.removeAdvice }}</p>
           <p>停用建议：{{ governanceInfo.disableAdvice }}</p>
@@ -235,6 +236,7 @@
 
 <script setup name="CostFee">
 import { ElMessageBox } from 'element-plus'
+import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import { addFee, delFee, getFee, getFeeGovernance, getFeeStats, listFee, updateFee } from '@/api/cost/fee'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
@@ -533,7 +535,8 @@ function normalizeGovernanceInfo(data = {}) {
     removeBlockingReason: data.removeBlockingReason || '当前费用可以删除',
     disableBlockingReason: data.disableBlockingReason || '当前费用可以停用',
     removeAdvice: data.removeAdvice || '',
-    disableAdvice: data.disableAdvice || ''
+    disableAdvice: data.disableAdvice || '',
+    impactItems: Array.isArray(data.impactItems) ? data.impactItems : []
   }
 }
 

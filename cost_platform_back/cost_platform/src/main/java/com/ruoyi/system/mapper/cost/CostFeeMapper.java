@@ -2,7 +2,9 @@ package com.ruoyi.system.mapper.cost;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ruoyi.system.domain.cost.CostFeeItem;
+import com.ruoyi.system.domain.cost.CostFeeVariableRel;
 import com.ruoyi.system.domain.vo.CostFeeGovernanceCheckVo;
+import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 import java.util.Map;
@@ -48,4 +50,24 @@ public interface CostFeeMapper extends BaseMapper<CostFeeItem> {
      * @return 结果
      */
     CostFeeGovernanceCheckVo selectFeeGovernanceCheck(Long feeId);
+
+    int insertFeeVariableRels(@Param("list") List<CostFeeVariableRel> list);
+
+    /**
+     * 按费用主键批量删除规则派生的费用-变量关系。
+     *
+     * @param feeIds 费用主键数组
+     *
+     * @return 删除条数
+     */
+    int deleteRuleDerivedFeeVariableRelByFeeIds(Long[] feeIds);
+
+    /**
+     * 按费用主键批量删除费用-变量关系。
+     *
+     * @param feeIds 费用主键数组
+     *
+     * @return 删除条数
+     */
+    int deleteFeeVariableRelByFeeIds(Long[] feeIds);
 }

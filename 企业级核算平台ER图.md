@@ -68,7 +68,7 @@ erDiagram
 - `cost_fee_item`
 - `cost_variable_group`
 - `cost_variable`
-- `cost_fee_variable_rel`
+- `cost_fee_variable_rel`：费用输入契约，按 `source_type` 区分规则派生关系和人工维护关系
 - `cost_rule`
 - `cost_rule_condition`
 - `cost_rule_tier`

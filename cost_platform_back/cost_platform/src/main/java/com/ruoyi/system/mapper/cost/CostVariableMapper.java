@@ -34,6 +34,15 @@ public interface CostVariableMapper extends BaseMapper<CostVariable> {
     CostVariableGovernanceCheckVo selectVariableGovernanceCheck(Long variableId);
 
     /**
+     * 按变量主键批量删除费用-变量关系。
+     *
+     * @param variableIds 变量主键数组
+     *
+     * @return 删除条数
+     */
+    int deleteFeeVariableRelByVariableIds(Long[] variableIds);
+
+    /**
      * 查询远程来源变量数量
      */
     Long countRemoteVariableByScene(Long sceneId);

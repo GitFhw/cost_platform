@@ -2,6 +2,9 @@ package com.ruoyi.system.domain.vo;
 
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 变量治理预检查结果
  *
@@ -93,4 +96,9 @@ public class CostVariableGovernanceCheckVo {
      * 停用治理建议
      */
     private String disableAdvice;
+
+    /**
+     * 关联影响明细
+     */
+    private List<CostGovernanceImpactVo> impactItems = new ArrayList<>();
 }

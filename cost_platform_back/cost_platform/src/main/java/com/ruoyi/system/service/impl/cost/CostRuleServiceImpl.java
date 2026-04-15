@@ -47,6 +47,11 @@ public class CostRuleServiceImpl implements ICostRuleService {
     private static final String RULE_TYPE_TIER_RATE = "TIER_RATE";
     private static final String PRICING_MODE_TYPED = "TYPED";
     private static final String PRICING_MODE_GROUPED = "GROUPED";
+    private static final String REL_TYPE_REQUIRED = "REQUIRED";
+    private static final String REL_TYPE_TIER_BASIS = "TIER_BASIS";
+    private static final String REL_TYPE_FORMULA_INPUT = "FORMULA_INPUT";
+    private static final String REL_SOURCE_RULE_DERIVED = "RULE_DERIVED";
+    private static final String OP_EXPR = "EXPR";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -70,6 +75,9 @@ public class CostRuleServiceImpl implements ICostRuleService {
 
     @Autowired
     private ICostExpressionService expressionService;
+
+    @Autowired
+    private CostGovernanceImpactSupport governanceImpactSupport;
 
     /**
      * 查询规则列表
@@ -120,6 +128,7 @@ public class CostRuleServiceImpl implements ICostRuleService {
                 : "请先发布解除引用的新版本，并确保历史追溯不再依赖当前规则后再删除。");
         check.setDisableAdvice(check.getCanDisable() ? "当前规则可停用，停用后不会再参与新的规则匹配。"
                 : "当前规则已进入发布或结果追溯链路，请先替换并发布新版本后再停用。");
+        check.setImpactItems(governanceImpactSupport.buildRuleImpacts(check));
         return check;
     }
 
@@ -163,6 +172,7 @@ public class CostRuleServiceImpl implements ICostRuleService {
         CostRule entity = buildAndValidateRule(rule, false);
         int rows = ruleMapper.insert(entity);
         saveChildren(entity.getRuleId(), entity.getSceneId(), rule);
+        rebuildFeeVariableContracts(Collections.singleton(entity.getFeeId()));
         return rows;
     }
 
@@ -175,10 +185,17 @@ public class CostRuleServiceImpl implements ICostRuleService {
         if (rule.getRuleId() == null) {
             throw new ServiceException("规则主键不能为空");
         }
+        CostRule current = ruleMapper.selectById(rule.getRuleId());
         validateDisableBeforeUpdate(rule);
         CostRule entity = buildAndValidateRule(rule, true);
         int rows = ruleMapper.updateById(entity);
         replaceChildren(entity.getRuleId(), entity.getSceneId(), rule);
+        LinkedHashSet<Long> rebuildFeeIds = new LinkedHashSet<>();
+        if (current != null && current.getFeeId() != null) {
+            rebuildFeeIds.add(current.getFeeId());
+        }
+        rebuildFeeIds.add(entity.getFeeId());
+        rebuildFeeVariableContracts(rebuildFeeIds);
         return rows;
     }
 
@@ -284,7 +301,15 @@ public class CostRuleServiceImpl implements ICostRuleService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int deleteRuleByIds(Long[] ruleIds) {
+        if (ruleIds == null || ruleIds.length == 0) {
+            return 0;
+        }
+        LinkedHashSet<Long> rebuildFeeIds = new LinkedHashSet<>();
         for (Long ruleId : ruleIds) {
+            CostRule rule = ruleMapper.selectById(ruleId);
+            if (rule != null && rule.getFeeId() != null) {
+                rebuildFeeIds.add(rule.getFeeId());
+            }
             CostRuleGovernanceCheckVo check = selectRuleGovernanceCheck(ruleId);
             if (StringUtils.isNotNull(check) && !Boolean.TRUE.equals(check.getCanDelete())) {
                 throw new ServiceException(String.format("%1$s不能删除：%2$s", check.getRuleCode(), check.getRemoveBlockingReason()));
@@ -292,7 +317,9 @@ public class CostRuleServiceImpl implements ICostRuleService {
         }
         ruleMapper.deleteConditionsByRuleIds(ruleIds);
         ruleMapper.deleteTiersByRuleIds(ruleIds);
-        return ruleMapper.deleteBatchIds(Arrays.asList(ruleIds));
+        int rows = ruleMapper.deleteBatchIds(Arrays.asList(ruleIds));
+        rebuildFeeVariableContracts(rebuildFeeIds);
+        return rows;
     }
 
     /**
@@ -943,6 +970,154 @@ public class CostRuleServiceImpl implements ICostRuleService {
                 tierMapper.insert(tier);
             }
         }
+    }
+
+    /**
+     * Rebuild the fee input contract from the current rule graph.
+     */
+    private void rebuildFeeVariableContracts(Collection<Long> feeIds) {
+        LinkedHashSet<Long> normalizedFeeIds = new LinkedHashSet<>();
+        if (feeIds != null) {
+            for (Long feeId : feeIds) {
+                if (feeId != null) {
+                    normalizedFeeIds.add(feeId);
+                }
+            }
+        }
+        if (normalizedFeeIds.isEmpty()) {
+            return;
+        }
+
+        Long[] feeIdArray = normalizedFeeIds.toArray(new Long[0]);
+        feeMapper.deleteRuleDerivedFeeVariableRelByFeeIds(feeIdArray);
+
+        List<CostRule> rules = ruleMapper.selectList(Wrappers.<CostRule>lambdaQuery()
+                .in(CostRule::getFeeId, normalizedFeeIds));
+        if (rules == null || rules.isEmpty()) {
+            return;
+        }
+
+        Map<Long, Map<String, CostVariable>> sceneVariableMap = new HashMap<>();
+        LinkedHashMap<String, CostFeeVariableRel> relationMap = new LinkedHashMap<>();
+        for (CostRule rule : rules) {
+            if (rule == null || rule.getRuleId() == null || rule.getSceneId() == null || rule.getFeeId() == null) {
+                continue;
+            }
+            Map<String, CostVariable> variableMap = sceneVariableMap.computeIfAbsent(rule.getSceneId(), this::loadSceneVariableMap);
+            collectRuleFeeVariableContracts(rule, variableMap, relationMap);
+        }
+
+        if (!relationMap.isEmpty()) {
+            feeMapper.insertFeeVariableRels(new ArrayList<>(relationMap.values()));
+        }
+    }
+
+    private Map<String, CostVariable> loadSceneVariableMap(Long sceneId) {
+        LinkedHashMap<String, CostVariable> result = new LinkedHashMap<>();
+        if (sceneId == null) {
+            return result;
+        }
+        List<CostVariable> variables = variableMapper.selectList(Wrappers.<CostVariable>lambdaQuery()
+                .eq(CostVariable::getSceneId, sceneId));
+        for (CostVariable variable : variables) {
+            if (variable != null && StringUtils.isNotEmpty(variable.getVariableCode())) {
+                result.put(variable.getVariableCode(), variable);
+            }
+        }
+        return result;
+    }
+
+    private void collectRuleFeeVariableContracts(CostRule rule, Map<String, CostVariable> variableMap,
+                                                 LinkedHashMap<String, CostFeeVariableRel> relationMap) {
+        if (variableMap == null || variableMap.isEmpty()) {
+            return;
+        }
+        String quantityVariableCode = StringUtils.trim(rule.getQuantityVariableCode());
+        if (StringUtils.isNotEmpty(quantityVariableCode)) {
+            CostVariable quantityVariable = variableMap.get(quantityVariableCode);
+            String relationType = RULE_TYPE_TIER_RATE.equals(rule.getRuleType())
+                    ? REL_TYPE_TIER_BASIS
+                    : resolveVariableRelationType(quantityVariable, REL_TYPE_REQUIRED);
+            addFeeVariableContract(rule, quantityVariable, relationType, relationMap);
+            collectFormulaVariableDependencies(rule, quantityVariable, variableMap, relationMap, new LinkedHashSet<>());
+        }
+
+        for (CostRuleCondition condition : ruleMapper.selectConditionsByRuleId(rule.getRuleId())) {
+            if (condition == null) {
+                continue;
+            }
+            CostVariable conditionVariable = variableMap.get(StringUtils.trim(condition.getVariableCode()));
+            addFeeVariableContract(rule, conditionVariable,
+                    resolveVariableRelationType(conditionVariable, REL_TYPE_REQUIRED), relationMap);
+            collectFormulaVariableDependencies(rule, conditionVariable, variableMap, relationMap, new LinkedHashSet<>());
+
+            if (OP_EXPR.equalsIgnoreCase(StringUtils.defaultString(condition.getOperatorCode()))) {
+                for (String variableCode : expressionService.extractReferencedCodes(condition.getCompareValue(), variableMap.keySet())) {
+                    CostVariable expressionVariable = variableMap.get(variableCode);
+                    addFeeVariableContract(rule, expressionVariable, REL_TYPE_FORMULA_INPUT, relationMap);
+                    collectFormulaVariableDependencies(rule, expressionVariable, variableMap, relationMap, new LinkedHashSet<>());
+                }
+            }
+        }
+
+        if (RULE_TYPE_FORMULA.equals(rule.getRuleType()) && StringUtils.isNotEmpty(rule.getAmountFormula())) {
+            for (String variableCode : expressionService.extractReferencedCodes(rule.getAmountFormula(), variableMap.keySet())) {
+                CostVariable formulaVariable = variableMap.get(variableCode);
+                addFeeVariableContract(rule, formulaVariable, REL_TYPE_FORMULA_INPUT, relationMap);
+                collectFormulaVariableDependencies(rule, formulaVariable, variableMap, relationMap, new LinkedHashSet<>());
+            }
+        }
+    }
+
+    private void collectFormulaVariableDependencies(CostRule rule, CostVariable variable, Map<String, CostVariable> variableMap,
+                                                    LinkedHashMap<String, CostFeeVariableRel> relationMap,
+                                                    Set<String> dependencyStack) {
+        if (variable == null || !SOURCE_TYPE_FORMULA.equalsIgnoreCase(StringUtils.defaultString(variable.getSourceType()))
+                || StringUtils.isEmpty(variable.getFormulaExpr()) || !dependencyStack.add(variable.getVariableCode())) {
+            return;
+        }
+        try {
+            for (String dependencyCode : expressionService.extractReferencedCodes(variable.getFormulaExpr(), variableMap.keySet())) {
+                if (Objects.equals(variable.getVariableCode(), dependencyCode)) {
+                    continue;
+                }
+                CostVariable dependency = variableMap.get(dependencyCode);
+                addFeeVariableContract(rule, dependency, REL_TYPE_FORMULA_INPUT, relationMap);
+                collectFormulaVariableDependencies(rule, dependency, variableMap, relationMap, dependencyStack);
+            }
+        } finally {
+            dependencyStack.remove(variable.getVariableCode());
+        }
+    }
+
+    private String resolveVariableRelationType(CostVariable variable, String defaultRelationType) {
+        if (variable != null && SOURCE_TYPE_FORMULA.equalsIgnoreCase(StringUtils.defaultString(variable.getSourceType()))) {
+            return REL_TYPE_FORMULA_INPUT;
+        }
+        return defaultRelationType;
+    }
+
+    private void addFeeVariableContract(CostRule rule, CostVariable variable, String relationType,
+                                        LinkedHashMap<String, CostFeeVariableRel> relationMap) {
+        if (rule == null || variable == null || variable.getVariableId() == null) {
+            return;
+        }
+        String resolvedRelationType = StringUtils.isEmpty(relationType) ? REL_TYPE_REQUIRED : relationType;
+        String key = rule.getFeeId() + ":" + variable.getVariableId() + ":" + resolvedRelationType + ":" + rule.getRuleId();
+        if (relationMap.containsKey(key)) {
+            return;
+        }
+        CostFeeVariableRel relation = new CostFeeVariableRel();
+        relation.setSceneId(rule.getSceneId());
+        relation.setFeeId(rule.getFeeId());
+        relation.setVariableId(variable.getVariableId());
+        relation.setRelationType(resolvedRelationType);
+        relation.setSourceType(REL_SOURCE_RULE_DERIVED);
+        relation.setSourceRuleId(rule.getRuleId());
+        relation.setSourceCode(StringUtils.defaultString(rule.getRuleCode()));
+        relation.setSortNo((relationMap.size() + 1) * 10);
+        relation.setRemark("Derived from rule " + StringUtils.defaultString(rule.getRuleCode()));
+        relationMap.put(key, relation);
     }
 
     /**

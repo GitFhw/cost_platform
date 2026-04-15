@@ -226,7 +226,7 @@
 
         <div class="formula-lab__test-card">
           <div class="formula-lab__section-title"><span>试算上下文</span><el-button link type="primary" @click="handleGenerateSample">按变量生成示例</el-button></div>
-          <el-input v-model="testInputJson" type="textarea" :rows="6" placeholder="请输入测试 JSON，上下文建议按 V/C/I/F/T 命名空间组织。" />
+          <JsonEditor v-model="testInputJson" title="试算上下文 JSON" :rows="6" placeholder="请输入测试 JSON，上下文建议按 V/C/I/F/T 命名空间组织。" />
           <div class="formula-lab__test-result">
             <div><strong>试算结果：</strong>{{ testResultDisplay }}</div>
           </div>
@@ -363,6 +363,7 @@
 <script setup name="CostFormula">
 import { ElMessageBox } from 'element-plus'
 import ExpressionResourcePanel from '@/components/cost/ExpressionResourcePanel.vue'
+import JsonEditor from '@/components/cost/JsonEditor.vue'
 import {
   addFormula,
   delFormula,

@@ -215,6 +215,8 @@ public class CostPublishServiceImpl implements ICostPublishService {
         result.put("fromVersion", fromVersion);
         result.put("toVersion", toVersion);
         result.put("summary", summary);
+        result.put("fromScene", fromBundle.sceneSnapshot);
+        result.put("toScene", toBundle.sceneSnapshot);
         result.put("sceneDiffs", sceneDiffs);
         result.put("feeDiffs", feeDiffs);
         result.put("ruleDiffs", ruleDiffs);

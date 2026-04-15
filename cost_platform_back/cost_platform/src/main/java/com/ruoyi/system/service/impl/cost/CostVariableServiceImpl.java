@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
@@ -104,6 +105,9 @@ public class CostVariableServiceImpl implements ICostVariableService {
     @Autowired
     private VariableSourceHandlerChain variableSourceHandlerChain;
 
+    @Autowired
+    private CostGovernanceImpactSupport governanceImpactSupport;
+
     @Override
     public List<CostVariable> selectVariableList(CostVariable variable) {
         return variableMapper.selectVariableList(variable);
@@ -150,14 +154,16 @@ public class CostVariableServiceImpl implements ICostVariableService {
         boolean hasRuleQuantityRef = check.getRuleQuantityCount() > 0;
         boolean hasPublishedVersionRef = check.getPublishedVersionCount() > 0;
 
-        check.setCanDelete(!hasFeeRelRef && !hasRuleConditionRef && !hasRuleQuantityRef && !hasPublishedVersionRef);
+        check.setCanDelete(!hasRuleConditionRef && !hasRuleQuantityRef && !hasPublishedVersionRef);
         check.setCanDisable(!hasPublishedVersionRef);
         check.setRemoveBlockingReason(buildRemoveBlockingReason(check, hasFeeRelRef, hasRuleConditionRef, hasRuleQuantityRef, hasPublishedVersionRef));
         check.setDisableBlockingReason(buildDisableBlockingReason(check, hasPublishedVersionRef));
-        check.setRemoveAdvice(check.getCanDelete() ? "当前变量未被费用、规则和版本占用，可直接删除。"
-                : "请先解除费用关系、规则引用与发布版本引用后再删除变量。");
+        check.setRemoveAdvice(check.getCanDelete()
+                ? (hasFeeRelRef ? "当前变量未被规则和版本占用，费用变量关系会随删除自动清理。" : "当前变量未被规则和版本占用，可直接删除。")
+                : "请先解除规则引用与发布版本引用后再删除变量；费用变量关系不单独阻断删除。");
         check.setDisableAdvice(check.getCanDisable() ? "变量停用后将不再出现在新增配置中，历史配置保留。"
                 : "当前变量已进入发布版本，请先替换并发布新版本后再停用。");
+        check.setImpactItems(governanceImpactSupport.buildVariableImpacts(check));
         return check;
     }
 
@@ -189,13 +195,18 @@ public class CostVariableServiceImpl implements ICostVariableService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int deleteVariableByIds(Long[] variableIds) {
+        if (variableIds == null || variableIds.length == 0) {
+            return 0;
+        }
         for (Long variableId : variableIds) {
             CostVariableGovernanceCheckVo check = selectVariableGovernanceCheck(variableId);
             if (check != null && !Boolean.TRUE.equals(check.getCanDelete())) {
                 throw new ServiceException(String.format("%s不能删除：%s", check.getVariableName(), check.getRemoveBlockingReason()));
             }
         }
+        variableMapper.deleteFeeVariableRelByVariableIds(variableIds);
         return variableMapper.deleteBatchIds(Arrays.asList(variableIds));
     }
 
@@ -667,13 +678,13 @@ public class CostVariableServiceImpl implements ICostVariableService {
      */
     private String buildRemoveBlockingReason(CostVariableGovernanceCheckVo check, boolean hasFeeRelRef, boolean hasRuleConditionRef,
                                              boolean hasRuleQuantityRef, boolean hasPublishedVersionRef) {
-        if (!hasFeeRelRef && !hasRuleConditionRef && !hasRuleQuantityRef && !hasPublishedVersionRef) {
-            return "当前变量未被费用、规则和版本占用";
+        if (!hasRuleConditionRef && !hasRuleQuantityRef && !hasPublishedVersionRef) {
+            if (hasFeeRelRef) {
+                return String.format("当前变量未被规则和版本占用；已有%d条费用变量关系将随删除自动清理", check.getFeeRelCount());
+            }
+            return "当前变量未被规则和版本占用";
         }
         StringJoiner joiner = new StringJoiner("；");
-        if (hasFeeRelRef) {
-            joiner.add(String.format("已有%d条费用变量关系引用", check.getFeeRelCount()));
-        }
         if (hasRuleConditionRef) {
             joiner.add(String.format("已有%d条规则条件引用", check.getRuleConditionCount()));
         }
@@ -682,6 +693,9 @@ public class CostVariableServiceImpl implements ICostVariableService {
         }
         if (hasPublishedVersionRef) {
             joiner.add(String.format("已有%d个发布版本快照引用", check.getPublishedVersionCount()));
+        }
+        if (hasFeeRelRef) {
+            joiner.add(String.format("另有%d条费用变量关系记录，不作为删除阻断", check.getFeeRelCount()));
         }
         return joiner.toString();
     }

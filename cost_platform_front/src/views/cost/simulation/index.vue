@@ -88,7 +88,7 @@
             />
           </el-form-item>
           <el-form-item label="输入 JSON" required>
-            <el-input v-model="form.inputJson" type="textarea" :rows="14" maxlength="10000" show-word-limit />
+            <JsonEditor v-model="form.inputJson" title="输入 JSON" :rows="14" :max-length="10000" :allow-empty="false" />
           </el-form-item>
         </el-form>
 
@@ -163,16 +163,16 @@
 
       <el-tabs class="run-page__tabs">
         <el-tab-pane label="输入数据">
-          <pre>{{ formatJson(detailData.input) }}</pre>
+          <JsonEditor :model-value="detailData.input" title="输入数据" readonly :rows="12" />
         </el-tab-pane>
         <el-tab-pane label="变量结果">
-          <pre>{{ formatJson(detailData.variables) }}</pre>
+          <JsonEditor :model-value="detailData.variables" title="变量结果" readonly :rows="12" />
         </el-tab-pane>
         <el-tab-pane label="费用结果">
-          <pre>{{ formatJson(detailData.result) }}</pre>
+          <JsonEditor :model-value="detailData.result" title="费用结果" readonly :rows="12" />
         </el-tab-pane>
         <el-tab-pane label="解释时间线">
-          <pre>{{ formatJson(detailData.explain) }}</pre>
+          <JsonEditor :model-value="detailData.explain" title="解释时间线" readonly :rows="12" />
         </el-tab-pane>
       </el-tabs>
     </el-drawer>
@@ -205,6 +205,7 @@
 </template>
 
 <script setup name="CostSimulation">
+import JsonEditor from '@/components/cost/JsonEditor.vue'
 import { executeSimulation, executeSimulationBatch, getRunInputTemplate, getSimulationDetail, getSimulationStats, listSimulation, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
@@ -401,10 +402,6 @@ async function handleExecuteModeChange() {
 
 function resolveSimulationStatus(value) {
   return simulationStatusOptions.value.find(item => item.value === value)?.label || value
-}
-
-function formatJson(value) {
-  return JSON.stringify(value || {}, null, 2)
 }
 
 function summarizeBatchJson(value) {

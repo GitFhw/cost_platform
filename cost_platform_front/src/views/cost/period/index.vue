@@ -256,13 +256,14 @@
         <el-descriptions-item label="基准任务">{{ recalcDetail.order.baselineTaskNo || '-' }}</el-descriptions-item>
         <el-descriptions-item label="目标任务">{{ recalcDetail.order.targetTaskNo || '-' }}</el-descriptions-item>
       </el-descriptions>
-      <pre class="governance-page__json">{{ JSON.stringify(recalcDetail.diffSummary || {}, null, 2) }}</pre>
+      <JsonEditor :model-value="recalcDetail.diffSummary || {}" title="差异摘要" readonly :rows="12" />
     </el-drawer>
   </div>
 </template>
 
 <script setup name="CostPeriod">
 import { ElMessageBox } from 'element-plus'
+import JsonEditor from '@/components/cost/JsonEditor.vue'
 import { optionselectScene } from '@/api/cost/scene'
 import { listTask, listVersionOptions } from '@/api/cost/run'
 import {

@@ -414,7 +414,7 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="governanceOpen" title="场景治理检查" size="520px" append-to-body>
+    <el-drawer v-model="governanceOpen" title="场景治理检查" size="640px" append-to-body>
       <div v-loading="governanceLoading" class="scene-governance">
         <template v-if="governanceInfo.sceneId">
           <div class="scene-governance__header">
@@ -469,6 +469,7 @@
             :closable="false"
             show-icon
           />
+          <GovernanceImpactList :impacts="governanceInfo.impactItems" />
 
           <div class="scene-governance__advice">
             <div class="scene-governance__advice-title">治理建议</div>
@@ -483,6 +484,7 @@
 
 <script setup name="CostScene">
 import { ElMessageBox } from 'element-plus'
+import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import { listPublish } from '@/api/cost/publish'
 import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listScene, updateScene } from '@/api/cost/scene'
 import { deptTreeSelect } from '@/api/system/user'
@@ -866,7 +868,8 @@ function normalizeGovernanceInfo(data = {}) {
     removeBlockingReason: data.removeBlockingReason || '当前场景可以删除',
     disableBlockingReason: data.disableBlockingReason || '当前场景可以停用',
     removeAdvice: data.removeAdvice || '',
-    disableAdvice: data.disableAdvice || ''
+    disableAdvice: data.disableAdvice || '',
+    impactItems: Array.isArray(data.impactItems) ? data.impactItems : []
   }
 }
 

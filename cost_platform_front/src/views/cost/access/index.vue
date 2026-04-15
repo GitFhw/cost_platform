@@ -121,7 +121,7 @@
             <el-switch v-model="calcForm.includeExplain" />
           </el-form-item>
           <el-form-item label="输入 JSON" required>
-            <el-input v-model="calcForm.inputJson" type="textarea" :rows="11" maxlength="30000" show-word-limit placeholder="请输入标准计费对象数组，建议至少包含 objectDimension、objectCode、objectName。" />
+            <JsonEditor v-model="calcForm.inputJson" title="输入 JSON" :rows="11" :max-length="30000" :allow-empty="false" placeholder="请输入标准计费对象数组，建议至少包含 objectDimension、objectCode、objectName。" />
           </el-form-item>
         </el-form>
         <div class="access-page__actions">
@@ -144,8 +144,8 @@
           <el-table-column label="金额" prop="amountValue" min-width="120" />
         </el-table>
         <el-tabs v-if="feeResult.recordCount" class="access-page__tabs">
-          <el-tab-pane label="完整结果"><pre>{{ formatJson(feeResult) }}</pre></el-tab-pane>
-          <el-tab-pane label="模板示例"><pre>{{ formattedTemplateJson }}</pre></el-tab-pane>
+          <el-tab-pane label="完整结果"><JsonEditor :model-value="feeResult" title="完整结果" readonly :rows="10" /></el-tab-pane>
+          <el-tab-pane label="模板示例"><JsonEditor :model-value="formattedTemplateJson" title="模板示例" readonly :rows="10" /></el-tab-pane>
         </el-tabs>
       </div>
     </section>
@@ -154,13 +154,13 @@
       <h3>标准计费对象预演</h3>
       <el-form :model="builderForm" label-width="112px">
         <el-form-item v-if="currentProfile?.sourceType === 'HTTP_API'" label="请求载荷 JSON">
-          <el-input v-model="builderForm.requestPayloadJson" type="textarea" :rows="8" maxlength="30000" show-word-limit placeholder="用于调用业务 HTTP 接口的请求载荷；留空则回退为方案内保存的样例请求。" />
+          <JsonEditor v-model="builderForm.requestPayloadJson" title="请求载荷 JSON" :rows="8" :max-length="30000" placeholder="用于调用业务 HTTP 接口的请求载荷；留空则回退为方案内保存的样例请求。" />
         </el-form-item>
         <el-form-item label="原始 JSON" required>
-          <el-input v-model="builderForm.rawJson" type="textarea" :rows="10" maxlength="30000" show-word-limit placeholder="支持 JSON 对象或对象数组。" />
+          <JsonEditor v-model="builderForm.rawJson" title="原始 JSON" :rows="10" :max-length="30000" :allow-empty="false" placeholder="支持 JSON 对象或对象数组。" />
         </el-form-item>
         <el-form-item label="字段映射 JSON">
-          <el-input v-model="builderForm.mappingJson" type="textarea" :rows="8" maxlength="20000" show-word-limit placeholder='可选，例如 {"bizNo":"source.bizNo","objectDimension":"source.teamType","objectCode":"source.teamCode","objectName":"source.teamName","FIELD":{"path":"nested.value"}}。' />
+          <JsonEditor v-model="builderForm.mappingJson" title="字段映射 JSON" :rows="8" :max-length="20000" placeholder='可选，例如 {"bizNo":"source.bizNo","objectDimension":"source.teamType","objectCode":"source.teamCode","objectName":"source.teamName","FIELD":{"path":"nested.value"}}。' />
         </el-form-item>
       </el-form>
       <div class="access-page__actions">
@@ -212,9 +212,9 @@
         </el-table-column>
       </el-table>
       <el-tabs v-if="buildPreviewRecords.length || buildPreview.fetchedPayloadJson" class="access-page__tabs">
-        <el-tab-pane label="标准计费对象"><pre>{{ formatJson(buildPreviewRecords) }}</pre></el-tab-pane>
-        <el-tab-pane v-if="buildPreview.fetchedPayloadJson" label="接口返回原始报文"><pre>{{ formatJson(buildPreview.fetchedPayloadJson) }}</pre></el-tab-pane>
-        <el-tab-pane label="完整预演结果"><pre>{{ formattedBuildPreviewJson }}</pre></el-tab-pane>
+        <el-tab-pane label="标准计费对象"><JsonEditor :model-value="buildPreviewRecords" title="标准计费对象" readonly :rows="10" /></el-tab-pane>
+        <el-tab-pane v-if="buildPreview.fetchedPayloadJson" label="接口返回原始报文"><JsonEditor :model-value="buildPreview.fetchedPayloadJson" title="接口返回原始报文" readonly :rows="10" /></el-tab-pane>
+        <el-tab-pane label="完整预演结果"><JsonEditor :model-value="formattedBuildPreviewJson" title="完整预演结果" readonly :rows="10" /></el-tab-pane>
       </el-tabs>
     </section>
 
@@ -261,10 +261,10 @@
           </el-select>
         </el-form-item>
         <el-form-item v-if="profileForm.sourceType === 'HTTP_API'" label="鉴权配置 JSON">
-          <el-input v-model="profileForm.authConfigJson" type="textarea" :rows="5" maxlength="4000" show-word-limit placeholder='例如 {"token":"xxx"}、{"username":"u","password":"p"}，也支持 {"headers":{"X-App":"cost"}}。' />
+          <JsonEditor v-model="profileForm.authConfigJson" title="鉴权配置 JSON" :rows="5" :max-length="4000" placeholder='例如 {"token":"xxx"}、{"username":"u","password":"p"}，也支持 {"headers":{"X-App":"cost"}}。' />
         </el-form-item>
         <el-form-item v-if="profileForm.sourceType === 'HTTP_API'" label="拉取策略 JSON">
-          <el-input v-model="profileForm.fetchConfigJson" type="textarea" :rows="6" maxlength="8000" show-word-limit placeholder='例如 {"recordsPath":"data.records","paging":{"mode":"PAGE_NO","pageField":"pageNo","pageSizeField":"pageSize","pageSize":500,"startPage":1,"maxPages":200,"hasMorePath":"data.hasMore"}}。' />
+          <JsonEditor v-model="profileForm.fetchConfigJson" title="拉取策略 JSON" :rows="6" :max-length="8000" placeholder='例如 {"recordsPath":"data.records","paging":{"mode":"PAGE_NO","pageField":"pageNo","pageSizeField":"pageSize","pageSize":500,"startPage":1,"maxPages":200,"hasMorePath":"data.hasMore"}}。' />
         </el-form-item>
         <el-form-item label="状态">
           <el-radio-group v-model="profileForm.status">
@@ -288,6 +288,7 @@
 </template>
 
 <script setup name="CostDataAccess">
+import JsonEditor from '@/components/cost/JsonEditor.vue'
 import { addAccessProfile, createInputBatchByAccessProfile, getAccessProfile, optionselectAccessProfile, previewAccessProfileFetch, removeAccessProfile, updateAccessProfile } from '@/api/cost/access'
 import { optionselectFee } from '@/api/cost/fee'
 import { calculateFee, createTaskInputBatch, getFeeRunInputTemplate, listVersionOptions, previewBuiltInput } from '@/api/cost/run'
@@ -295,6 +296,7 @@ import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
+import { safeFormatJson } from '@/utils/jsonTools'
 
 const route = useRoute()
 const router = useRouter()
@@ -864,15 +866,7 @@ function resolveRecordTagType(status) {
 }
 
 function formatJson(value) {
-  if (!value && value !== 0 && value !== false) return '{}'
-  if (typeof value === 'string') {
-    try {
-      return JSON.stringify(JSON.parse(value), null, 2)
-    } catch (error) {
-      return value
-    }
-  }
-  return JSON.stringify(value, null, 2)
+  return safeFormatJson(value)
 }
 
 async function initializePage() {

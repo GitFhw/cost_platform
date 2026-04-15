@@ -121,7 +121,7 @@
             <el-table v-if="detailValidation.items?.length" :data="detailValidation.items" size="small">
               <el-table-column label="级别" width="100" align="center">
                 <template #default="scope">
-                  <el-tag :type="resolveCheckTag(scope.row.level)">{{ scope.row.level }}</el-tag>
+                  <el-tag :type="resolveCheckLevelMeta(scope.row.level).type">{{ resolveCheckLevelMeta(scope.row.level).label }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="检查项" prop="title" min-width="180" />
@@ -133,7 +133,11 @@
             <el-table :data="detailData.impactedFees || []" size="small">
               <el-table-column label="费用编码" prop="feeCode" width="160" />
               <el-table-column label="费用名称" prop="feeName" min-width="180" />
-              <el-table-column label="变化类型" prop="changeType" width="120" />
+              <el-table-column label="变化类型" width="120" align="center">
+                <template #default="scope">
+                  <el-tag :type="resolveCostChangeTypeMeta(scope.row.changeType).type">{{ resolveCostChangeTypeMeta(scope.row.changeType).label }}</el-tag>
+                </template>
+              </el-table-column>
               <el-table-column label="摘要" prop="summaryText" min-width="260" />
             </el-table>
           </el-tab-pane>
@@ -147,9 +151,9 @@
               <el-descriptions-item label="阶梯">{{ detailData.snapshotCounts?.tier || 0 }}</el-descriptions-item>
             </el-descriptions>
             <el-collapse class="publish-audit__collapse">
-              <el-collapse-item title="费用快照" name="fee"><pre>{{ formatJson(detailData.snapshotGroups?.fees || []) }}</pre></el-collapse-item>
-              <el-collapse-item title="变量快照" name="variable"><pre>{{ formatJson(detailData.snapshotGroups?.variables || []) }}</pre></el-collapse-item>
-              <el-collapse-item title="规则快照" name="rule"><pre>{{ formatJson(detailData.snapshotGroups?.rules || []) }}</pre></el-collapse-item>
+              <el-collapse-item title="费用快照" name="fee"><JsonEditor :model-value="detailData.snapshotGroups?.fees || []" title="费用快照" readonly :rows="10" /></el-collapse-item>
+              <el-collapse-item title="变量快照" name="variable"><JsonEditor :model-value="detailData.snapshotGroups?.variables || []" title="变量快照" readonly :rows="10" /></el-collapse-item>
+              <el-collapse-item title="规则快照" name="rule"><JsonEditor :model-value="detailData.snapshotGroups?.rules || []" title="规则快照" readonly :rows="10" /></el-collapse-item>
             </el-collapse>
           </el-tab-pane>
         </el-tabs>
@@ -206,64 +210,60 @@
 
         <el-tabs>
           <el-tab-pane label="场景差异">
-            <el-table :data="diffData.sceneDiffs || []" size="small">
-              <el-table-column label="字段" prop="fieldLabel" width="160" />
-              <el-table-column label="旧值" prop="fromValue" min-width="200" />
-              <el-table-column label="新值" prop="toValue" min-width="200" />
-            </el-table>
+            <JsonDiffViewer
+              title="场景主数据"
+              subtitle="先看字段级差异摘要，再看场景快照的左右并排对比。"
+              :left-title="diffData.fromVersion?.versionNo || '-'"
+              :right-title="diffData.toVersion?.versionNo || '-'"
+              :left-value="sceneDiffLeftValue"
+              :right-value="sceneDiffRightValue"
+              :rows="12"
+            />
           </el-tab-pane>
           <el-tab-pane label="费用级差异">
             <el-table :data="diffData.feeDiffs || []" size="small" highlight-current-row row-key="feeCode" @current-change="handleFeeDiffRowChange">
               <el-table-column label="费用编码" prop="feeCode" width="150" />
               <el-table-column label="费用名称" prop="feeName" min-width="180" />
-              <el-table-column label="变化类型" prop="changeType" width="110" />
+              <el-table-column label="变化类型" width="110" align="center">
+                <template #default="scope">
+                  <el-tag :type="resolveCostChangeTypeMeta(scope.row.changeType).type">{{ resolveCostChangeTypeMeta(scope.row.changeType).label }}</el-tag>
+                </template>
+              </el-table-column>
               <el-table-column label="规则变化数" prop="ruleChangeCount" width="120" />
               <el-table-column label="变量变化数" prop="variableChangeCount" width="120" />
               <el-table-column label="摘要" prop="summaryText" min-width="260" />
             </el-table>
 
             <div v-if="selectedFeeDiff" class="publish-audit__diff-detail">
-              <div class="publish-audit__bc-section">
-                <div class="publish-audit__bc-title">费用主数据</div>
-                <div class="publish-audit__bc-header">
-                  <span>{{ diffData.fromVersion?.versionNo || '-' }}</span>
-                  <span>{{ diffData.toVersion?.versionNo || '-' }}</span>
-                </div>
-                <div class="publish-audit__bc-body">
-                  <div v-for="(row, index) in buildCompareRows(selectedFeeDiff.fromFee, selectedFeeDiff.toFee)" :key="`fee-main-${index}`" class="publish-audit__bc-row">
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.left }}</pre></div>
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.right }}</pre></div>
-                  </div>
-                </div>
-              </div>
+              <JsonDiffViewer
+                title="费用主数据"
+                subtitle="对比费用定义本身的字段变化。"
+                :left-title="diffData.fromVersion?.versionNo || '-'"
+                :right-title="diffData.toVersion?.versionNo || '-'"
+                :left-value="selectedFeeDiff.fromFee"
+                :right-value="selectedFeeDiff.toFee"
+                :rows="12"
+              />
 
-              <div class="publish-audit__bc-section">
-                <div class="publish-audit__bc-title">关联规则</div>
-                <div class="publish-audit__bc-header">
-                  <span>{{ diffData.fromVersion?.versionNo || '-' }}</span>
-                  <span>{{ diffData.toVersion?.versionNo || '-' }}</span>
-                </div>
-                <div class="publish-audit__bc-body">
-                  <div v-for="(row, index) in buildCompareRows(selectedFeeDiff.fromRules, selectedFeeDiff.toRules)" :key="`fee-rule-${index}`" class="publish-audit__bc-row">
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.left }}</pre></div>
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.right }}</pre></div>
-                  </div>
-                </div>
-              </div>
+              <JsonDiffViewer
+                title="关联规则"
+                subtitle="对比费用下挂规则快照的整体变化。"
+                :left-title="diffData.fromVersion?.versionNo || '-'"
+                :right-title="diffData.toVersion?.versionNo || '-'"
+                :left-value="selectedFeeDiff.fromRules"
+                :right-value="selectedFeeDiff.toRules"
+                :rows="14"
+              />
 
-              <div class="publish-audit__bc-section">
-                <div class="publish-audit__bc-title">引用变量</div>
-                <div class="publish-audit__bc-header">
-                  <span>{{ diffData.fromVersion?.versionNo || '-' }}</span>
-                  <span>{{ diffData.toVersion?.versionNo || '-' }}</span>
-                </div>
-                <div class="publish-audit__bc-body">
-                  <div v-for="(row, index) in buildCompareRows(selectedFeeDiff.fromVariables, selectedFeeDiff.toVariables)" :key="`fee-variable-${index}`" class="publish-audit__bc-row">
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.left }}</pre></div>
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.right }}</pre></div>
-                  </div>
-                </div>
-              </div>
+              <JsonDiffViewer
+                title="引用变量"
+                subtitle="对比该费用关联变量的快照变化。"
+                :left-title="diffData.fromVersion?.versionNo || '-'"
+                :right-title="diffData.toVersion?.versionNo || '-'"
+                :left-value="selectedFeeDiff.fromVariables"
+                :right-value="selectedFeeDiff.toVariables"
+                :rows="12"
+              />
             </div>
           </el-tab-pane>
           <el-tab-pane label="规则级差异">
@@ -271,45 +271,46 @@
               <el-table-column label="费用编码" prop="feeCode" width="140" />
               <el-table-column label="规则编码" prop="ruleCode" width="180" />
               <el-table-column label="规则名称" prop="ruleName" min-width="180" />
-              <el-table-column label="变化类型" prop="changeType" width="110" />
+              <el-table-column label="变化类型" width="110" align="center">
+                <template #default="scope">
+                  <el-tag :type="resolveCostChangeTypeMeta(scope.row.changeType).type">{{ resolveCostChangeTypeMeta(scope.row.changeType).label }}</el-tag>
+                </template>
+              </el-table-column>
               <el-table-column label="条件变化数" prop="conditionChangeCount" width="120" />
               <el-table-column label="阶梯变化数" prop="tierChangeCount" width="120" />
               <el-table-column label="变更字段" min-width="220"><template #default="scope">{{ (scope.row.changedFields || []).join('、') || '-' }}</template></el-table-column>
             </el-table>
 
             <div v-if="selectedRuleDiff" class="publish-audit__diff-detail">
-              <div class="publish-audit__bc-section">
-                <div class="publish-audit__bc-title">规则主数据</div>
-                <div class="publish-audit__bc-header"><span>{{ diffData.fromVersion?.versionNo || '-' }}</span><span>{{ diffData.toVersion?.versionNo || '-' }}</span></div>
-                <div class="publish-audit__bc-body">
-                  <div v-for="(row, index) in buildCompareRows(selectedRuleDiff.fromRule, selectedRuleDiff.toRule)" :key="`rule-main-${index}`" class="publish-audit__bc-row">
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.left }}</pre></div>
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.right }}</pre></div>
-                  </div>
-                </div>
-              </div>
+              <JsonDiffViewer
+                title="规则主数据"
+                subtitle="对比规则自身的字段变化。"
+                :left-title="diffData.fromVersion?.versionNo || '-'"
+                :right-title="diffData.toVersion?.versionNo || '-'"
+                :left-value="selectedRuleDiff.fromRule"
+                :right-value="selectedRuleDiff.toRule"
+                :rows="12"
+              />
 
-              <div class="publish-audit__bc-section">
-                <div class="publish-audit__bc-title">条件明细</div>
-                <div class="publish-audit__bc-header"><span>{{ diffData.fromVersion?.versionNo || '-' }}</span><span>{{ diffData.toVersion?.versionNo || '-' }}</span></div>
-                <div class="publish-audit__bc-body">
-                  <div v-for="(row, index) in buildCompareRows(selectedRuleDiff.fromConditions, selectedRuleDiff.toConditions)" :key="`rule-condition-${index}`" class="publish-audit__bc-row">
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.left }}</pre></div>
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.right }}</pre></div>
-                  </div>
-                </div>
-              </div>
+              <JsonDiffViewer
+                title="条件明细"
+                subtitle="对比规则条件清单的变化。"
+                :left-title="diffData.fromVersion?.versionNo || '-'"
+                :right-title="diffData.toVersion?.versionNo || '-'"
+                :left-value="selectedRuleDiff.fromConditions"
+                :right-value="selectedRuleDiff.toConditions"
+                :rows="14"
+              />
 
-              <div class="publish-audit__bc-section">
-                <div class="publish-audit__bc-title">阶梯明细</div>
-                <div class="publish-audit__bc-header"><span>{{ diffData.fromVersion?.versionNo || '-' }}</span><span>{{ diffData.toVersion?.versionNo || '-' }}</span></div>
-                <div class="publish-audit__bc-body">
-                  <div v-for="(row, index) in buildCompareRows(selectedRuleDiff.fromTiers, selectedRuleDiff.toTiers)" :key="`rule-tier-${index}`" class="publish-audit__bc-row">
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.left }}</pre></div>
-                    <div class="publish-audit__bc-cell" :class="row.same ? 'publish-audit__bc-cell--same' : 'publish-audit__bc-cell--diff'"><pre class="publish-audit__bc-line">{{ row.right }}</pre></div>
-                  </div>
-                </div>
-              </div>
+              <JsonDiffViewer
+                title="阶梯明细"
+                subtitle="对比规则阶梯配置的变化。"
+                :left-title="diffData.fromVersion?.versionNo || '-'"
+                :right-title="diffData.toVersion?.versionNo || '-'"
+                :left-value="selectedRuleDiff.fromTiers"
+                :right-value="selectedRuleDiff.toTiers"
+                :rows="14"
+              />
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -320,10 +321,13 @@
 </template>
 
 <script setup name="CostPublishAudit">
+import JsonEditor from '@/components/cost/JsonEditor.vue'
+import JsonDiffViewer from '@/components/cost/JsonDiffViewer.vue'
 import { getPublishDiff, getPublishStats, getPublishVersion, listPublish } from '@/api/cost/publish'
 import { optionselectScene } from '@/api/cost/scene'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { resolveCheckLevelMeta, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
@@ -365,7 +369,7 @@ const diffForm = reactive({
 const metricItems = computed(() => [
   { label: '已发布场景', value: stats.sceneCount, desc: '当前筛选范围内已形成版本的场景数量' },
   { label: '版本总数', value: stats.versionCount, desc: '发布台账中的版本记录数量' },
-  { label: '生效版本数', value: stats.activeVersionCount, desc: '当前处于 ACTIVE 的版本数' },
+  { label: '生效版本数', value: stats.activeVersionCount, desc: '当前处于生效中的版本数' },
   { label: '已回滚版本', value: stats.rolledBackVersionCount, desc: '历史上被回滚替换的版本数' }
 ])
 
@@ -379,6 +383,8 @@ const hasAnyDiff = computed(() => {
 })
 
 const selectedFeeDiff = computed(() => (diffData.value.feeDiffs || []).find(item => item.feeCode === selectedFeeDiffCode.value))
+const sceneDiffLeftValue = computed(() => diffData.value.fromScene ?? buildSceneSnapshotFromDiffs(diffData.value.sceneDiffs, 'fromValue'))
+const sceneDiffRightValue = computed(() => diffData.value.toScene ?? buildSceneSnapshotFromDiffs(diffData.value.sceneDiffs, 'toValue'))
 
 const filteredRuleDiffs = computed(() => {
   const rows = diffData.value.ruleDiffs || []
@@ -470,6 +476,8 @@ async function handleDiff(row) {
     toVersion: row,
     fromVersion: undefined,
     summary: {},
+    fromScene: undefined,
+    toScene: undefined,
     sceneDiffs: [],
     feeDiffs: [],
     ruleDiffs: []
@@ -491,6 +499,8 @@ async function loadDiff() {
       toVersion: diffData.value.toVersion,
       fromVersion: undefined,
       summary: {},
+      fromScene: undefined,
+      toScene: undefined,
       sceneDiffs: [],
       feeDiffs: [],
       ruleDiffs: []
@@ -513,12 +523,20 @@ function handleRuleDiffRowChange(row) {
   selectedRuleDiffCode.value = row?.ruleCode
 }
 
-function resolveVersionLabel(value) {
-  return versionStatusOptions.value.find(item => item.value === value)?.label || value
+function buildSceneSnapshotFromDiffs(rows = [], valueKey) {
+  if (!Array.isArray(rows) || !rows.length) {
+    return {}
+  }
+  return rows.reduce((result, item) => {
+    if (item?.field) {
+      result[item.field] = item?.[valueKey]
+    }
+    return result
+  }, {})
 }
 
-function resolveCheckTag(level) {
-  return level === 'BLOCK' ? 'danger' : (level === 'WARN' ? 'warning' : 'success')
+function resolveVersionLabel(value) {
+  return versionStatusOptions.value.find(item => item.value === value)?.label || value
 }
 
 function parseValidationResult(value) {
@@ -558,76 +576,6 @@ function buildValidationNote(value) {
     return '未记录检查快照'
   }
   return `阻断 ${meta.blockingCount} / 告警 ${meta.warningCount}`
-}
-
-function formatJson(value) {
-  if (value === null || value === undefined || value === '') {
-    return '{}'
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    if (!trimmed) {
-      return '{}'
-    }
-    try {
-      return JSON.stringify(JSON.parse(trimmed), null, 2)
-    } catch {
-      return trimmed
-    }
-  }
-  return JSON.stringify(value, null, 2)
-}
-
-function normalizeCompareValue(value) {
-  if (value === null || value === undefined || value === '') {
-    return '暂无数据'
-  }
-  return formatJson(value)
-}
-
-function buildCompareRows(leftValue, rightValue) {
-  const leftLines = normalizeCompareValue(leftValue).split('\n')
-  const rightLines = normalizeCompareValue(rightValue).split('\n')
-  const leftLength = leftLines.length
-  const rightLength = rightLines.length
-  const lcs = Array.from({ length: leftLength + 1 }, () => Array(rightLength + 1).fill(0))
-
-  for (let leftIndex = leftLength - 1; leftIndex >= 0; leftIndex--) {
-    for (let rightIndex = rightLength - 1; rightIndex >= 0; rightIndex--) {
-      if (leftLines[leftIndex] === rightLines[rightIndex]) {
-        lcs[leftIndex][rightIndex] = lcs[leftIndex + 1][rightIndex + 1] + 1
-      } else {
-        lcs[leftIndex][rightIndex] = Math.max(lcs[leftIndex + 1][rightIndex], lcs[leftIndex][rightIndex + 1])
-      }
-    }
-  }
-
-  const rows = []
-  let leftIndex = 0
-  let rightIndex = 0
-  while (leftIndex < leftLength && rightIndex < rightLength) {
-    if (leftLines[leftIndex] === rightLines[rightIndex]) {
-      rows.push({ left: leftLines[leftIndex], right: rightLines[rightIndex], same: true })
-      leftIndex++
-      rightIndex++
-    } else if (lcs[leftIndex + 1][rightIndex] >= lcs[leftIndex][rightIndex + 1]) {
-      rows.push({ left: leftLines[leftIndex], right: '', same: false })
-      leftIndex++
-    } else {
-      rows.push({ left: '', right: rightLines[rightIndex], same: false })
-      rightIndex++
-    }
-  }
-
-  while (leftIndex < leftLength) {
-    rows.push({ left: leftLines[leftIndex], right: '', same: false })
-    leftIndex++
-  }
-  while (rightIndex < rightLength) {
-    rows.push({ left: '', right: rightLines[rightIndex], same: false })
-    rightIndex++
-  }
-  return rows
 }
 
 onMounted(() => {
@@ -830,93 +778,17 @@ onMounted(() => {
     margin-top: 16px;
   }
 
-  &__bc-section {
-    border: 1px solid #dbe6f4;
-    border-radius: 18px;
-    overflow: hidden;
-    background: #fff;
-  }
-
-  &__bc-title {
-    padding: 14px 18px;
-    background: #f8fbff;
-    color: #10233e;
-    font-weight: 600;
-  }
-
-  &__bc-header {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    background: #eef4fb;
-    color: #51627a;
-    font-weight: 600;
-
-    span {
-      padding: 12px 16px;
-    }
-
-    span + span {
-      border-left: 1px solid #dbe6f4;
-    }
-  }
-
-  &__bc-body {
-    display: flex;
-    flex-direction: column;
-  }
-
-  &__bc-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  &__bc-row + &__bc-row {
-    border-top: 1px solid #eef3f9;
-  }
-
-  &__bc-cell {
-    min-height: 32px;
-    padding: 10px 14px;
-  }
-
-  &__bc-cell + &__bc-cell {
-    border-left: 1px solid #eef3f9;
-  }
-
-  &__bc-cell--same {
-    background: #ffffff;
-  }
-
-  &__bc-cell--diff {
-    background: #fff7ed;
-  }
-
-  &__bc-line {
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family: Consolas, 'Courier New', monospace;
-    color: #1f2937;
-  }
 }
 
 @media (max-width: 1200px) {
   .publish-audit {
     &__metrics,
-    &__compare-head,
-    &__bc-row,
-    &__bc-header {
+    &__compare-head {
       grid-template-columns: 1fr;
     }
 
     &__compare-arrow {
       justify-content: center;
-    }
-
-    &__bc-cell + &__bc-cell,
-    &__bc-header span + span {
-      border-left: none;
-      border-top: 1px solid #eef3f9;
     }
   }
 }

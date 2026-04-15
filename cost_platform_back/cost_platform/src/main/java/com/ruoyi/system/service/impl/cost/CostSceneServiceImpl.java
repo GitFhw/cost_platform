@@ -32,6 +32,9 @@ public class CostSceneServiceImpl implements ICostSceneService {
     @Autowired
     private SysDictDataMapper dictDataMapper;
 
+    @Autowired
+    private CostGovernanceImpactSupport governanceImpactSupport;
+
     /**
      * 查询场景列表
      *
@@ -119,6 +122,7 @@ public class CostSceneServiceImpl implements ICostSceneService {
                 : "请先清理场景下费用、变量、规则等配置，并解除已发布/生效版本后再删除。");
         check.setDisableAdvice(check.getCanDisable() ? buildDisableAdvice(check)
                 : "请先处理当前生效版本或已发布版本，再执行停用。");
+        check.setImpactItems(governanceImpactSupport.buildSceneImpacts(check));
         return check;
     }
 
