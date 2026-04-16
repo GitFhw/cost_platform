@@ -99,6 +99,20 @@
     </div>
 
     <div class="drawer-item">
+      <span>核算页面模式</span>
+      <span class="comp-style">
+        <el-switch
+          :model-value="settingsStore.costPageMode === 'COMPACT'"
+          inline-prompt
+          active-text="简"
+          inactive-text="标"
+          @change="costPageModeChange"
+          class="drawer-switch"
+        />
+      </span>
+    </div>
+
+    <div class="drawer-item">
       <span>底部版权</span>
       <span class="comp-style">
         <el-switch v-model="settingsStore.footerVisible" class="drawer-switch" />
@@ -156,6 +170,10 @@ function handleNavType(val) {
   navType.value = val
 }
 
+function costPageModeChange(val) {
+  settingsStore.setCostPageMode(val ? 'COMPACT' : 'STANDARD')
+}
+
 /** 菜单导航设置 */
 watch(() => navType, val => {
   if (val.value == 1) {
@@ -188,6 +206,7 @@ function saveSetting() {
     "fixedHeader": storeSettings.value.fixedHeader,
     "sidebarLogo": storeSettings.value.sidebarLogo,
     "dynamicTitle": storeSettings.value.dynamicTitle,
+    "costPageMode": storeSettings.value.costPageMode,
     "footerVisible": storeSettings.value.footerVisible,
     "sideTheme": storeSettings.value.sideTheme,
     "theme": storeSettings.value.theme

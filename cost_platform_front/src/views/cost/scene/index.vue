@@ -1,6 +1,6 @@
 <template>
   <div class="app-container scene-center">
-    <section class="scene-center__hero">
+    <section v-show="!isCompactMode" class="scene-center__hero">
       <div class="scene-center__hero-main">
         <div class="scene-center__eyebrow">场景主数据</div>
         <h2 class="scene-center__title">场景中心</h2>
@@ -48,7 +48,7 @@
       </div>
     </section>
 
-    <section class="scene-center__metrics">
+    <section v-show="!isCompactMode" class="scene-center__metrics">
       <div v-for="item in metricItems" :key="item.label" class="scene-center__metric-card">
         <span class="scene-center__metric-label">{{ item.label }}</span>
         <strong class="scene-center__metric-value">{{ item.value }}</strong>
@@ -56,7 +56,7 @@
       </div>
     </section>
 
-    <section v-if="currentSceneInfo.sceneId" class="scene-center__publish-summary">
+    <section v-if="currentSceneInfo.sceneId && !isCompactMode" class="scene-center__publish-summary">
       <div class="scene-center__publish-summary-header">
         <div>
           <div class="scene-center__publish-summary-eyebrow">发布治理摘要</div>
@@ -100,7 +100,8 @@
       </div>
     </section>
 
-      <el-alert
+    <el-alert
+      v-show="!isCompactMode"
       title="核算相关字典统一维护在系统字典中心，便于业务域、场景、费用、变量和规则共享同一套基础口径。"
       type="info"
       show-icon
@@ -488,6 +489,7 @@ import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import { listPublish } from '@/api/cost/publish'
 import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listScene, updateScene } from '@/api/cost/scene'
 import { deptTreeSelect } from '@/api/system/user'
+import useSettingsStore from '@/store/modules/settings'
 import { getCostSceneContextId, setCostSceneContextId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { formatLegacyOrgLabel } from '@/utils/costOptionLabel'
@@ -495,6 +497,8 @@ import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
 const router = useRouter()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const sceneList = ref([])
 const deptOptions = ref([])

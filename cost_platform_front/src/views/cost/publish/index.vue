@@ -1,7 +1,7 @@
 ﻿
 <template>
   <div class="app-container publish-center">
-    <section class="publish-center__hero">
+    <section v-show="!isCompactMode" class="publish-center__hero">
       <div>
         <div class="publish-center__eyebrow">发布治理</div>
         <h2 class="publish-center__title">发布中心</h2>
@@ -12,7 +12,7 @@
       <el-tag type="success">支持发布检查、版本台账、生效切换、回退和差异对比</el-tag>
     </section>
 
-    <section class="publish-center__metrics">
+    <section v-show="!isCompactMode" class="publish-center__metrics">
       <div v-for="item in metricItems" :key="item.label" class="publish-center__metric-card">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
@@ -394,6 +394,7 @@ import JsonEditor from '@/components/cost/JsonEditor.vue'
 import JsonDiffViewer from '@/components/cost/JsonDiffViewer.vue'
 import { activatePublishVersion, addPublishVersion, getPublishDiff, getPublishPrecheck, getPublishStats, getPublishVersion, listPublish, rollbackPublishVersion } from '@/api/cost/publish'
 import { optionselectScene } from '@/api/cost/scene'
+import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { resolveCheckLevelMeta, resolveCostChangeTypeLabel, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
@@ -402,6 +403,8 @@ import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 const { proxy } = getCurrentInstance()
 const route = useRoute()
 const router = useRouter()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)
