@@ -55,6 +55,11 @@ export default {
   footerVisible: false,
 
   /**
+   * 核算页面模式 STANDARD=标准模式 COMPACT=简洁模式
+   */
+  costPageMode: 'STANDARD',
+
+  /**
    * 底部版权文本内容
    */
   footerContent: 'Copyright © 2026 企业级成本核算平台'

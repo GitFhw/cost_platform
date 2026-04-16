@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="app-container variable-center">
-    <section class="variable-center__hero">
+    <section v-show="!isCompactMode" class="variable-center__hero">
       <div>
         <div class="variable-center__eyebrow">输入治理</div>
         <h2 class="variable-center__title">变量中心</h2>
@@ -11,7 +11,7 @@
       <el-tag type="info">变量编码优先，接入中心映射优先，上下文路径可选</el-tag>
     </section>
 
-    <section class="variable-center__metrics">
+    <section v-show="!isCompactMode" class="variable-center__metrics">
       <div v-for="item in metricItems" :key="item.label" class="variable-center__metric-card">
         <span class="variable-center__metric-label">{{ item.label }}</span>
         <strong class="variable-center__metric-value">{{ item.value }}</strong>
@@ -19,7 +19,7 @@
       </div>
     </section>
 
-    <section class="variable-center__workspace">
+    <section v-show="!isCompactMode" class="variable-center__workspace">
       <div class="variable-center__work-card">
         <div class="variable-center__work-head">
           <div>
@@ -111,6 +111,7 @@
     </section>
 
     <el-alert
+      v-show="!isCompactMode"
       title="变量中心统一承接输入变量、字典变量、第三方接入变量和公式变量，并提供导入预览、复制复用与共享模板能力。"
       type="info"
       :closable="false"
@@ -688,11 +689,14 @@ import {
   updateVariable
 } from '@/api/cost/variable'
 import { optionselectVariableGroup } from '@/api/cost/variableGroup'
+import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { parseJsonText, safeFormatJson } from '@/utils/jsonTools'
 
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 const loading = ref(true)
 const showSearch = ref(true)
 const open = ref(false)

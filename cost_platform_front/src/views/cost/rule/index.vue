@@ -1,6 +1,6 @@
 <template>
   <div class="app-container rule-center">
-    <section class="rule-center__hero">
+    <section v-show="!isCompactMode" class="rule-center__hero">
       <div>
         <div class="rule-center__eyebrow">规则配置</div>
         <h2 class="rule-center__title">规则中心</h2>
@@ -11,7 +11,7 @@
       <el-tag type="success">规则、条件和阶梯会一起进入发布快照，供试算和正式核算复用</el-tag>
     </section>
 
-    <section class="rule-center__metrics">
+    <section v-show="!isCompactMode" class="rule-center__metrics">
       <div v-for="item in metricItems" :key="item.label" class="rule-center__metric-card">
         <span class="rule-center__metric-label">{{ item.label }}</span>
         <strong class="rule-center__metric-value">{{ item.value }}</strong>
@@ -713,6 +713,7 @@ import { optionselectFormula } from '@/api/cost/formula'
 import { addRule, copyRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, previewRuleTier, updateRule } from '@/api/cost/rule'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
+import useSettingsStore from '@/store/modules/settings'
 import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
@@ -721,6 +722,8 @@ import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 
 const router = useRouter()
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(true)
 const feeLoading = ref(false)

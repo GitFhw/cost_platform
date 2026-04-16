@@ -10,6 +10,20 @@
 
     <div class="right-menu">
       <template v-if="appStore.device !== 'mobile'">
+        <el-tooltip
+          v-if="isCostWorkbench"
+          :content="pageModeTooltip"
+          effect="dark"
+          placement="bottom"
+        >
+          <div class="right-menu-item hover-effect page-mode-switch" @click="toggleCostPageMode">
+            <el-icon class="page-mode-switch__icon">
+              <component :is="pageModeIcon" />
+            </el-icon>
+            <span class="page-mode-switch__label">{{ pageModeShortLabel }}</span>
+          </div>
+        </el-tooltip>
+
         <header-search id="header-search" class="right-menu-item" />
 
         <screenfull id="screenfull" class="right-menu-item hover-effect" />
@@ -57,6 +71,7 @@
 </template>
 
 <script setup>
+import { Expand, Fold } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import Breadcrumb from '@/components/Breadcrumb'
 import TopNav from '@/components/TopNav'
@@ -78,6 +93,11 @@ const appStore = useAppStore()
 const userStore = useUserStore()
 const lockStore = useLockStore()
 const settingsStore = useSettingsStore()
+const isCostWorkbench = computed(() => route.path.startsWith('/cost') || route.path === '/index')
+const isCompactPageMode = computed(() => settingsStore.costPageMode === 'COMPACT')
+const pageModeShortLabel = computed(() => isCompactPageMode.value ? '简洁' : '标准')
+const pageModeTooltip = computed(() => `页面模式：${isCompactPageMode.value ? '简洁模式' : '标准模式'}，点击切换为${isCompactPageMode.value ? '标准模式' : '简洁模式'}`)
+const pageModeIcon = computed(() => (isCompactPageMode.value ? Fold : Expand))
 
 function toggleSideBar() {
   appStore.toggleSideBar()
@@ -120,6 +140,10 @@ function lockScreen() {
   const currentPath = route.fullPath
   lockStore.lockScreen(currentPath)
   router.push('/lock')
+}
+
+function toggleCostPageMode() {
+  settingsStore.toggleCostPageMode()
 }
 
 async function toggleTheme(event) {
@@ -253,6 +277,24 @@ async function toggleTheme(event) {
           &:hover {
             transform: scale(1.15);
           }
+        }
+      }
+
+      &.page-mode-switch {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        padding: 0 12px;
+
+        .page-mode-switch__icon {
+          font-size: 16px;
+        }
+
+        .page-mode-switch__label {
+          font-size: 13px;
+          font-weight: 600;
+          letter-spacing: 0.2px;
         }
       }
     }

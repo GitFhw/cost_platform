@@ -1,6 +1,6 @@
 <template>
   <div class="app-container publish-audit">
-    <section class="publish-audit__hero">
+    <section v-show="!isCompactMode" class="publish-audit__hero">
       <div>
         <div class="publish-audit__eyebrow">发布审计</div>
         <h2 class="publish-audit__title">发布审计工作台</h2>
@@ -14,7 +14,7 @@
       </div>
     </section>
 
-    <section class="publish-audit__metrics">
+    <section v-show="!isCompactMode" class="publish-audit__metrics">
       <div v-for="item in metricItems" :key="item.label" class="publish-audit__metric-card">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
@@ -325,6 +325,7 @@ import JsonEditor from '@/components/cost/JsonEditor.vue'
 import JsonDiffViewer from '@/components/cost/JsonDiffViewer.vue'
 import { getPublishDiff, getPublishStats, getPublishVersion, listPublish } from '@/api/cost/publish'
 import { optionselectScene } from '@/api/cost/scene'
+import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { resolveCheckLevelMeta, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
@@ -333,6 +334,8 @@ import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 const { proxy } = getCurrentInstance()
 const route = useRoute()
 const router = useRouter()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)

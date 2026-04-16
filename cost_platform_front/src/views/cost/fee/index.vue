@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="app-container fee-center">
-    <section class="fee-center__hero">
+    <section v-show="!isCompactMode" class="fee-center__hero">
       <div>
         <div class="fee-center__eyebrow">费目治理</div>
         <h2 class="fee-center__title">费用中心</h2>
@@ -11,7 +11,7 @@
       <el-tag type="info">删除前自动校验关联规则、版本和结果记录，保障费用口径稳定</el-tag>
     </section>
 
-    <section class="fee-center__metrics">
+    <section v-show="!isCompactMode" class="fee-center__metrics">
       <div v-for="item in metricItems" :key="item.label" class="fee-center__metric-card">
         <span class="fee-center__metric-label">{{ item.label }}</span>
         <strong class="fee-center__metric-value">{{ item.value }}</strong>
@@ -239,11 +239,14 @@ import { ElMessageBox } from 'element-plus'
 import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import { addFee, delFee, getFee, getFeeGovernance, getFeeStats, listFee, updateFee } from '@/api/cost/fee'
 import { optionselectScene } from '@/api/cost/scene'
+import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const feeList = ref([])
 const sceneOptions = ref([])
