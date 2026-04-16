@@ -1,5 +1,5 @@
 <template>
-  <div id="tags-view-container" class="tags-view-container">
+  <div id="tags-view-container" class="tags-view-container" :class="{ 'tags-view-container--chrome': tagsViewStyle === 'chrome' }">
     <!-- 左切换箭头 -->
     <span class="tags-nav-btn tags-nav-btn--left" :class="{ disabled: !canScrollLeft }" @click="scrollLeft">
       <el-icon><arrow-left /></el-icon>
@@ -14,14 +14,14 @@
         :class="{ 'active': isActive(tag), 'has-icon': tagsIcon }"
         :to="{ path: tag.path, query: tag.query, fullPath: tag.fullPath }"
         class="tags-view-item"
-        :style="activeStyle(tag)"
+        :style="tagActiveStyle(tag)"
         @click.middle="!isAffix(tag) ? closeSelectedTag(tag) : ''"
         @contextmenu.prevent="openMenu(tag, $event)"
       >
-        <svg-icon v-if="tagsIcon && tag.meta && tag.meta.icon && tag.meta.icon !== '#'" :icon-class="tag.meta.icon" />
+        <svg-icon v-if="tagsIcon && tag.meta && tag.meta.icon && tag.meta.icon !== '#'" :icon-class="tag.meta.icon" style="margin-right: 3px;" />
         {{ tag.title }}
-        <span v-if="!isAffix(tag)" @click.prevent.stop="closeSelectedTag(tag)">
-          <close class="el-icon-close" style="width: 1em; height: 1em;vertical-align: middle;" />
+        <span v-if="!isAffix(tag)" @click.prevent.stop="closeSelectedTag(tag)" class="tags-close-btn">
+          <close class="el-icon-close" />
         </span>
       </router-link>
     </scroll-pane>
@@ -96,6 +96,7 @@ const routes = computed(() => usePermissionStore().routes)
 const theme = computed(() => useSettingsStore().theme)
 const tagsIcon = computed(() => useSettingsStore().tagsIcon)
 const tagsViewPersist = computed(() => useSettingsStore().tagsViewPersist)
+const tagsViewStyle = computed(() => useSettingsStore().tagsViewStyle)
 
 // 下拉菜单针对当前激活的 tag
 const selectedDropdownTag = computed(() => visitedViews.value.find(v => isActive(v)) || {})
@@ -140,8 +141,8 @@ function isActive(r) {
   return r.path === route.path
 }
 
-function activeStyle(tag) {
-  if (!isActive(tag)) return {}
+function tagActiveStyle(tag) {
+  if (!isActive(tag) || tagsViewStyle.value !== 'card') return {}
   return {
     'background-color': theme.value,
     'border-color': theme.value
@@ -369,8 +370,10 @@ function handleScroll() {
 </script>
 
 <style lang="scss" scoped>
+$tags-bar-height: 34px;
+
 .tags-view-container {
-  height: 34px;
+  height: $tags-bar-height;
   width: 100%;
   background: var(--tags-bg, #fff);
   border-bottom: 1px solid var(--tags-item-border, #d8dce5);
@@ -391,7 +394,7 @@ function handleScroll() {
     align-items: center;
     justify-content: center;
     width: $btn-width;
-    height: 34px;
+    height: $tags-bar-height;
     cursor: pointer;
     color: $btn-color;
     font-size: 13px;
@@ -418,7 +421,8 @@ function handleScroll() {
     height: 100%;
 
     .tags-view-item {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
       position: relative;
       cursor: pointer;
       height: 26px;
@@ -430,30 +434,33 @@ function handleScroll() {
       font-size: 12px;
       margin-left: 5px;
       border-radius: 3px;
+      text-decoration: none;
+      vertical-align: middle;
+      padding-top: 2px !important;
 
       &:first-of-type { margin-left: 6px; }
       &:last-of-type  { margin-right: 15px; }
-
-      &.active {
-        background-color: #42b983;
-        color: #fff;
-        border-color: #42b983;
-
-        &::before {
-          content: '';
-          background: #fff;
-          display: inline-block;
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          position: relative;
-          margin-right: 5px;
-        }
-      }
     }
   }
 
-  .tags-view-item.active.has-icon::before {
+  &:not(.tags-view-container--chrome) .tags-view-wrapper .tags-view-item.active {
+    background-color: #42b983;
+    color: #fff;
+    border-color: #42b983;
+
+    &::before {
+      content: '';
+      background: #fff;
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      position: relative;
+      margin-right: 5px;
+    }
+  }
+
+  &:not(.tags-view-container--chrome) .tags-view-wrapper .tags-view-item.active.has-icon::before {
     content: none !important;
   }
 
@@ -468,7 +475,7 @@ function handleScroll() {
     align-items: center;
     justify-content: center;
     width: $btn-width;
-    height: 34px;
+    height: $tags-bar-height;
     cursor: pointer;
     color: $btn-color;
     font-size: 13px;
@@ -510,32 +517,154 @@ function handleScroll() {
       }
     }
   }
+
+  &.tags-view-container--chrome {
+    --chrome-strip-bg: #ffffff;
+    --chrome-strip-border: var(--el-border-color-lighter, #e4e7ed);
+    --chrome-tab-active-bg: var(--el-color-primary-light-9);
+    --chrome-tab-text: var(--el-text-color-regular, #606266);
+    --chrome-tab-text-active: var(--el-color-primary);
+    --chrome-wing-r: 10px;
+
+    overflow: visible;
+    background: var(--chrome-strip-bg);
+    border-bottom: 1px solid var(--chrome-strip-border);
+    align-items: flex-end;
+
+    .tags-nav-btn {
+      align-self: stretch;
+      height: auto;
+      min-height: $tags-bar-height;
+      border-color: var(--chrome-strip-border);
+    }
+
+    .tags-action-btn {
+      border-color: var(--chrome-strip-border);
+    }
+
+    .tags-view-wrapper {
+      .tags-view-item {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        z-index: 1;
+        height: 30px;
+        min-height: 30px;
+        margin: 0 0 -1px;
+        padding: 0 12px;
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.2;
+        border: none !important;
+        border-radius: 0;
+        background: transparent !important;
+        color: var(--chrome-tab-text);
+        padding-top: 0 !important;
+        box-shadow: none !important;
+        transition: background 0.12s ease, color 0.12s ease, border-radius 0.12s ease;
+
+        &::before,
+        &::after {
+          content: '' !important;
+          display: block !important;
+          position: absolute;
+          bottom: 0;
+          width: var(--chrome-wing-r);
+          height: var(--chrome-wing-r);
+          margin: 0 !important;
+          pointer-events: none;
+          background: transparent !important;
+          border-radius: 0 !important;
+          transition: box-shadow 0.12s ease;
+        }
+
+        &::before {
+          left: calc(-1 * var(--chrome-wing-r));
+          border-bottom-right-radius: var(--chrome-wing-r) !important;
+          box-shadow: none;
+        }
+
+        &::after {
+          right: calc(-1 * var(--chrome-wing-r));
+          border-bottom-left-radius: var(--chrome-wing-r) !important;
+          box-shadow: none;
+        }
+
+        &:first-of-type {
+          margin-left: 6px;
+        }
+
+        &:last-of-type {
+          margin-right: 10px;
+        }
+
+        &:not(.active) + .tags-view-item:not(.active) {
+          border-left: 1px solid var(--el-border-color-lighter, #e4e7ed);
+          padding-left: 11px;
+        }
+
+        &:hover:not(.active) {
+          background: var(--el-fill-color-light, #f5f7fa) !important;
+          border-radius: 6px 6px 0 0;
+          color: var(--el-text-color-primary, #303133);
+        }
+
+        &.active {
+          height: 31px;
+          min-height: 31px;
+          padding: 0 14px;
+          color: var(--chrome-tab-text-active) !important;
+          font-weight: 500;
+          background: var(--chrome-tab-active-bg) !important;
+          border: none !important;
+          border-radius: var(--chrome-wing-r) var(--chrome-wing-r) 0 0;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+
+          &::before {
+            box-shadow: calc(var(--chrome-wing-r) * 0.5) calc(var(--chrome-wing-r) * 0.5) 0 calc(var(--chrome-wing-r) * 0.5) var(--chrome-tab-active-bg);
+          }
+
+          &::after {
+            box-shadow: calc(var(--chrome-wing-r) * -0.5) calc(var(--chrome-wing-r) * 0.5) 0 calc(var(--chrome-wing-r) * 0.5) var(--chrome-tab-active-bg);
+          }
+        }
+      }
+    }
+  }
 }
 </style>
 
 <style lang="scss">
 .tags-view-wrapper {
   .tags-view-item {
-    .el-icon-close {
+    .tags-close-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       width: 16px;
       height: 16px;
-      vertical-align: 2px;
+      margin-left: 4px;
       border-radius: 50%;
-      text-align: center;
-      transition: all .3s cubic-bezier(.645, .045, .355, 1);
-      transform-origin: 100% 50%;
+      transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+      cursor: pointer;
 
-      &:before {
-        transform: scale(.6);
-        display: inline-block;
-        vertical-align: -3px;
+      .el-icon-close {
+        width: 1em;
+        height: 1em;
+        vertical-align: 0;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
 
       &:hover {
         background-color: var(--tags-close-hover, #b4bccc);
-        color: #fff;
-        width: 12px !important;
-        height: 12px !important;
+
+        .el-icon-close {
+          color: #fff;
+        }
       }
     }
   }
@@ -549,6 +678,8 @@ function handleScroll() {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
+  margin-left: 0 !important;
+  transition: none !important;
 }
 
 .main-container.fullscreen-mode .fixed-header {
@@ -559,6 +690,7 @@ function handleScroll() {
   right: 0;
   width: 100% !important;
   z-index: 1000;
+  transition: none !important;
 }
 
 .main-container.fullscreen-mode .fixed-header .navbar {
