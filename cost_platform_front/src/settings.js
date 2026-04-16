@@ -35,11 +35,6 @@ export default {
   tagsIcon: false,
 
   /**
-   * 标签页样式：`card` 卡片、`chrome` 谷歌页签风格
-   */
-  tagsViewStyle: 'card',
-
-  /**
    * 是否固定头部
    */
   fixedHeader: true,
@@ -69,3 +64,4 @@ export default {
    */
   footerContent: 'Copyright © 2026 企业级成本核算平台'
 }
+

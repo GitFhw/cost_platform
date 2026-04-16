@@ -42,7 +42,8 @@ export default defineConfig(({ mode, command }) => {
     },
     // vite 相关配置
     server: {
-      port: 80,
+      // Avoid using port 80, which is commonly occupied by local services.
+      port: 81,
       host: true,
       open: true,
       proxy: {

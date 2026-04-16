@@ -39,6 +39,7 @@ function smoothScrollTo(target) {
   const duration = 300
   let startTime = null
 
+  // easeInOutQuad »º¶¯º¯Êý
   function ease(t, b, c, d) {
     t /= d / 2
     if (t < 1) return c / 2 * t * t + b
@@ -144,13 +145,16 @@ defineExpose({
   position: relative;
   overflow: hidden;
   width: 100%;
+  height: 100%;
   :deep(.el-scrollbar__bar) {
-    bottom: 0px;
+    display: none;
   }
   :deep(.el-scrollbar__wrap) {
     height: 34px;
     display: flex;
     align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 }
 </style>
