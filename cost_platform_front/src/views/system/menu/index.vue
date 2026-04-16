@@ -46,7 +46,7 @@
             >保存排序</el-button>
          </el-col>
          <el-col :span="1.5">
-            <el-button
+            <el-button 
                type="info"
                plain
                icon="Sort"
@@ -311,7 +311,7 @@ import SvgIcon from "@/components/SvgIcon"
 import IconSelect from "@/components/IconSelect"
 
 const { proxy } = getCurrentInstance()
-const { sys_show_hide, sys_normal_disable } = useDict("sys_show_hide", "sys_normal_disable")
+const { sys_show_hide, sys_normal_disable } = proxy.useDict("sys_show_hide", "sys_normal_disable")
 
 const menuList = ref([])
 const open = ref(false)

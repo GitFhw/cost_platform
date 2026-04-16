@@ -23,7 +23,7 @@
          <el-form-item label="状态" prop="status">
             <el-select v-model="queryParams.status" placeholder="数据状态" clearable style="width: 200px">
                <el-option
-                  v-for="dict in sys_normal_disable"
+                  v-for="dict in statusOptions"
                   :key="dict.value"
                   :label="dict.label"
                   :value="dict.value"
@@ -99,7 +99,7 @@
          <el-table-column label="字典排序" align="center" prop="dictSort" />
          <el-table-column label="状态" align="center" prop="status">
             <template #default="scope">
-               <dict-tag :options="sys_normal_disable" :value="scope.row.status" />
+               <dict-tag :options="statusOptions" :value="scope.row.status" />
             </template>
          </el-table-column>
          <el-table-column label="备注" align="center" prop="remark" :show-overflow-tooltip="true" />
@@ -155,7 +155,7 @@
             <el-form-item label="状态" prop="status">
                <el-radio-group v-model="form.status">
                   <el-radio
-                     v-for="dict in sys_normal_disable"
+                     v-for="dict in statusOptions"
                      :key="dict.value"
                      :value="dict.value"
                   >{{ dict.label }}</el-radio>
@@ -176,12 +176,11 @@
 </template>
 
 <script setup name="Data">
-import useDictStore from '@/store/modules/dict'
 import { optionselect as getDictOptionselect, getType } from "@/api/system/dict/type"
 import { listData, getData, delData, addData, updateData } from "@/api/system/dict/data"
+import { getRemoteDictOptions } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
-const { sys_normal_disable } = useDict("sys_normal_disable")
 
 const dataList = ref([])
 const open = ref(false)
@@ -194,11 +193,12 @@ const total = ref(0)
 const title = ref("")
 const defaultDictType = ref("")
 const typeOptions = ref([])
+const statusOptions = ref([])
 const route = useRoute()
 // 数据标签回显样式
 const listClassOptions = ref([
-  { value: "default", label: "默认" },
-  { value: "primary", label: "主要" },
+  { value: "default", label: "默认" }, 
+  { value: "primary", label: "主要" }, 
   { value: "success", label: "成功" },
   { value: "info", label: "信息" },
   { value: "warning", label: "警告" },
@@ -222,6 +222,10 @@ const data = reactive({
 })
 
 const { queryParams, form, rules } = toRefs(data)
+
+async function loadStatusOptions() {
+  statusOptions.value = await getRemoteDictOptions("sys_normal_disable")
+}
 
 /** 查询字典类型详细 */
 function getTypes(dictId) {
@@ -321,14 +325,12 @@ function submitForm() {
     if (valid) {
       if (form.value.dictCode != undefined) {
         updateData(form.value).then(response => {
-          useDictStore().removeDict(queryParams.value.dictType)
           proxy.$modal.msgSuccess("修改成功")
           open.value = false
           getList()
         })
       } else {
         addData(form.value).then(response => {
-          useDictStore().removeDict(queryParams.value.dictType)
           proxy.$modal.msgSuccess("新增成功")
           open.value = false
           getList()
@@ -346,7 +348,6 @@ function handleDelete(row) {
   }).then(() => {
     getList()
     proxy.$modal.msgSuccess("删除成功")
-    useDictStore().removeDict(queryParams.value.dictType)
   }).catch(() => {})
 }
 
@@ -359,4 +360,5 @@ function handleExport() {
 
 getTypes(route.params && route.params.dictId)
 getTypeList()
+loadStatusOptions()
 </script>

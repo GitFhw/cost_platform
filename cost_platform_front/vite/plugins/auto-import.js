@@ -5,11 +5,7 @@ export default function createAutoImport() {
     imports: [
       'vue',
       'vue-router',
-      'pinia',
-      {
-        '@/utils/dict': ['useDict'],
-        '@/utils/ruoyi': ['selectDictLabel']
-      }
+      'pinia'
     ],
     dts: false
   })

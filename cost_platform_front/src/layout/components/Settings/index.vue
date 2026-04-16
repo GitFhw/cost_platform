@@ -78,16 +78,6 @@
     </div>
 
     <div class="drawer-item">
-      <span>标签页样式</span>
-      <span class="comp-style">
-        <el-radio-group v-model="settingsStore.tagsViewStyle" :disabled="!settingsStore.tagsView" size="small">
-          <el-radio-button label="card">卡片</el-radio-button>
-          <el-radio-button label="chrome">谷歌</el-radio-button>
-        </el-radio-group>
-      </span>
-    </div>
-
-    <div class="drawer-item">
       <span>固定 Header</span>
       <span class="comp-style">
         <el-switch v-model="settingsStore.fixedHeader" class="drawer-switch" />
@@ -212,7 +202,6 @@ function saveSetting() {
     "navType": storeSettings.value.navType,
     "tagsView": storeSettings.value.tagsView,
     "tagsIcon": storeSettings.value.tagsIcon,
-    "tagsViewStyle": storeSettings.value.tagsViewStyle,
     "tagsViewPersist": storeSettings.value.tagsViewPersist,
     "fixedHeader": storeSettings.value.fixedHeader,
     "sidebarLogo": storeSettings.value.sidebarLogo,
