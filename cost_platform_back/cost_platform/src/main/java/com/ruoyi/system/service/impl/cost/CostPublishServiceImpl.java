@@ -116,7 +116,10 @@ public class CostPublishServiceImpl implements ICostPublishService {
         PublishSnapshotBundle activeBundle = snapshotViewService.normalizeBundle(activeVersion == null ? null : loadSnapshotBundle(activeVersion.getVersionId()));
         CostPublishVersion latestVersion = publishVersionMapper.selectLatestVersionByScene(sceneId);
 
-        List<Map<String, Object>> impactedFees = snapshotViewService.buildFeeDiffSummary(activeBundle, draftBundle, null);
+        boolean sameAsActiveSnapshot = activeVersion != null && snapshotViewService.isSnapshotEquivalent(activeBundle, draftBundle);
+        List<Map<String, Object>> impactedFees = sameAsActiveSnapshot
+                ? Collections.emptyList()
+                : snapshotViewService.buildFeeDiffSummary(activeBundle, draftBundle, null);
         List<com.ruoyi.system.domain.vo.CostPublishCheckItemVo> items = new ArrayList<>();
         publishValidationChain.validate(buildPublishValidationContext(sceneId, draftBundle, activeVersion, impactedFees.size()), items);
         long blockingCount = items.stream().filter(item -> "BLOCK".equals(item.getLevel())).count();
@@ -178,13 +181,16 @@ public class CostPublishServiceImpl implements ICostPublishService {
         PublishSnapshotBundle currentBundle = snapshotViewService.normalizeBundle(loadSnapshotBundle(versionId));
         CostPublishVersion previousVersion = publishVersionMapper.selectPreviousVersion(version.getSceneId(), versionId);
         PublishSnapshotBundle previousBundle = snapshotViewService.normalizeBundle(previousVersion == null ? null : loadSnapshotBundle(previousVersion.getVersionId()));
+        boolean sameAsPreviousSnapshot = previousVersion != null && snapshotViewService.isSnapshotEquivalent(previousBundle, currentBundle);
 
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("version", version);
         result.put("previousVersionId", previousVersion == null ? null : previousVersion.getVersionId());
         result.put("previousVersionNo", previousVersion == null ? null : previousVersion.getVersionNo());
         result.put("validationResult", PublishJsonSupport.parseJsonMap(version.getValidationResultJson()));
-        result.put("impactedFees", snapshotViewService.buildFeeDiffSummary(previousBundle, currentBundle, feeCode));
+        result.put("impactedFees", sameAsPreviousSnapshot
+                ? Collections.emptyList()
+                : snapshotViewService.buildFeeDiffSummary(previousBundle, currentBundle, feeCode));
         result.put("snapshotCounts", snapshotViewService.buildSnapshotCounts(currentBundle, feeCode));
         result.put("snapshotGroups", snapshotViewService.buildSnapshotGroups(currentBundle, feeCode));
         return result;
@@ -199,9 +205,16 @@ public class CostPublishServiceImpl implements ICostPublishService {
         }
         PublishSnapshotBundle fromBundle = snapshotViewService.normalizeBundle(loadSnapshotBundle(fromVersionId));
         PublishSnapshotBundle toBundle = snapshotViewService.normalizeBundle(loadSnapshotBundle(toVersionId));
-        List<Map<String, Object>> feeDiffs = snapshotViewService.buildFeeDiffSummary(fromBundle, toBundle, feeCode);
-        List<Map<String, Object>> ruleDiffs = snapshotViewService.buildRuleDiffSummary(fromBundle, toBundle, feeCode);
-        List<Map<String, Object>> sceneDiffs = snapshotViewService.buildSceneDiffSummary(fromBundle.sceneSnapshot, toBundle.sceneSnapshot);
+        boolean sameSnapshot = snapshotViewService.isSnapshotEquivalent(fromBundle, toBundle);
+        List<Map<String, Object>> feeDiffs = sameSnapshot
+                ? Collections.emptyList()
+                : snapshotViewService.buildFeeDiffSummary(fromBundle, toBundle, feeCode);
+        List<Map<String, Object>> ruleDiffs = sameSnapshot
+                ? Collections.emptyList()
+                : snapshotViewService.buildRuleDiffSummary(fromBundle, toBundle, feeCode);
+        List<Map<String, Object>> sceneDiffs = sameSnapshot
+                ? Collections.emptyList()
+                : snapshotViewService.buildSceneDiffSummary(fromBundle.sceneSnapshot, toBundle.sceneSnapshot);
 
         LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
         summary.put("sceneChangeCount", sceneDiffs.size());

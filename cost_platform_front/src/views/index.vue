@@ -12,6 +12,10 @@
           <el-tag type="info">版本化运行管理</el-tag>
           <el-tag type="warning">结果追溯与治理联动</el-tag>
         </div>
+        <div class="dashboard-hero__actions">
+          <el-button type="primary" icon="Files" @click="openRoute(COST_MENU_ROUTES.architecture)">打开数据架构</el-button>
+          <el-button icon="MagicStick" @click="openRoute(COST_MENU_ROUTES.simulation)">进入试算中心</el-button>
+        </div>
       </div>
       <div class="dashboard-hero__aside">
         <div class="dashboard-highlight-card">
@@ -39,7 +43,13 @@
           </div>
         </template>
         <div class="dashboard-shortcuts">
-          <div v-for="item in shortcuts" :key="item.title" class="dashboard-shortcut">
+          <div
+            v-for="item in shortcuts"
+            :key="item.title"
+            class="dashboard-shortcut"
+            :class="{ 'is-actionable': Boolean(item.route) }"
+            @click="item.route && openRoute(item.route)"
+          >
             <el-icon class="dashboard-shortcut__icon"><component :is="item.icon" /></el-icon>
             <div class="dashboard-shortcut__body">
               <div class="dashboard-shortcut__title">{{ item.title }}</div>
@@ -102,7 +112,11 @@
 </template>
 
 <script setup name="Index">
+import { useRouter } from 'vue-router'
 import { DataAnalysis, Tickets, Connection, Setting, Promotion, Histogram, MagicStick, Files } from '@element-plus/icons-vue'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+
+const router = useRouter()
 
 const metricItems = [
   {
@@ -171,10 +185,11 @@ const shortcuts = [
     icon: MagicStick
   },
   {
-    title: '治理规范',
-    desc: '统一管理数据结构、版本规则、运行边界与追溯要求。',
-    meta: '保障平台配置、运行与治理口径长期一致。',
-    icon: Files
+    title: '数据架构',
+    desc: '把场景、费用、变量、规则、发布、试算和结果台账放进同一张结构图。',
+    meta: '适合研发、实施和治理团队统一对齐表结构与运行主线。',
+    icon: Files,
+    route: COST_MENU_ROUTES.architecture
   }
 ]
 
@@ -238,6 +253,10 @@ const roadmapSteps = [
     desc: '通过试算、正式核算、批量任务、结果台账和告警中心形成闭环。'
   }
 ]
+
+function openRoute(path) {
+  router.push(path)
+}
 </script>
 
 <style scoped lang="scss">
@@ -283,6 +302,13 @@ const roadmapSteps = [
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  margin-top: 18px;
+}
+
+.dashboard-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-top: 18px;
 }
 
@@ -375,6 +401,17 @@ const roadmapSteps = [
   display: flex;
   gap: 14px;
   padding: 18px;
+}
+
+.dashboard-shortcut.is-actionable {
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-shortcut.is-actionable:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--el-color-primary) 28%, var(--el-border-color) 72%);
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.09);
 }
 
 .dashboard-shortcut__icon {

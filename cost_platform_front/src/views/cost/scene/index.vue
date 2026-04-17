@@ -56,48 +56,323 @@
       </div>
     </section>
 
-    <section v-if="currentSceneInfo.sceneId && !isCompactMode" class="scene-center__publish-summary">
-      <div class="scene-center__publish-summary-header">
+    <section v-if="currentSceneInfo.sceneId && !isCompactMode" class="scene-center__publish-workbench">
+      <div class="scene-center__publish-workbench-head">
         <div>
-          <div class="scene-center__publish-summary-eyebrow">发布治理摘要</div>
-          <div class="scene-center__publish-summary-title">{{ currentSceneInfo.sceneName }} 发布概览</div>
-          <div class="scene-center__publish-summary-desc">
-            在场景中心直接查看当前工作场景的已发布版本、生效版本与最近一次发布校验结论，完整列表、详情与差异仍由发布中心承载。
+          <div class="scene-center__publish-workbench-eyebrow">发布治理</div>
+          <div class="scene-center__publish-workbench-title">{{ currentSceneInfo.sceneName }} 发布工作台</div>
+          <div class="scene-center__publish-workbench-desc">
+            场景中心负责当前工作场景的发布检查、首发与快捷回看；跨场景台账、生效切换、回滚与完整差异仍由发布中心统一治理。
           </div>
         </div>
-        <div class="scene-center__publish-summary-actions">
+        <div class="scene-center__publish-workbench-actions">
           <el-button plain icon="Tickets" @click="handleOpenPublishCenter(currentSceneInfo)" v-hasPermi="['cost:publish:list']">
-            查看版本
+            发布中心总台
           </el-button>
           <el-button plain icon="Document" @click="handleOpenPublishAudit" v-hasPermi="['cost:publish:list']">
             发布审计
           </el-button>
         </div>
       </div>
-      <div class="scene-center__publish-summary-grid">
-        <div class="scene-center__publish-summary-card">
-          <span>已发布版本数</span>
-          <strong>{{ publishSummary.publishedVersionCount }}</strong>
-          <small>当前工作场景累计沉淀的正式发布版本</small>
-        </div>
-        <div class="scene-center__publish-summary-card">
-          <span>当前生效版本</span>
-          <strong>{{ publishSummary.activeVersionNo || '未生效' }}</strong>
-          <small>{{ currentSceneInfo.sceneCode }}</small>
-        </div>
-        <div class="scene-center__publish-summary-card">
-          <span>最近发布版本</span>
-          <strong>{{ publishSummary.latestVersionNo || '暂无版本' }}</strong>
-          <small>{{ publishSummary.latestPublishedTime || '尚未产生发布时间' }}</small>
-        </div>
-        <div class="scene-center__publish-summary-card">
-          <span>最近校验结果</span>
-          <div class="scene-center__publish-summary-status">
-            <el-tag :type="publishSummary.validationTag">{{ publishSummary.validationLabel }}</el-tag>
-            <small>{{ publishSummary.validationNote }}</small>
+
+      <el-tabs v-model="publishWorkbenchTab" class="scene-center__publish-tabs">
+        <el-tab-pane label="发布执行" name="publish">
+          <div class="scene-center__publish-exec">
+            <div class="scene-center__publish-exec-grid">
+              <div class="scene-center__publish-exec-card">
+                <span>发布资格</span>
+                <strong>{{ scenePrecheck.checked ? (scenePrecheck.publishable === false ? '暂不允许发布' : '允许发布') : '待检查' }}</strong>
+                <small>{{ scenePrecheck.checked ? '当前工作场景发布前检查结论' : '建议先执行发布前检查' }}</small>
+              </div>
+              <div class="scene-center__publish-exec-card">
+                <span>最近校验</span>
+                <div class="scene-center__publish-exec-status">
+                  <el-tag :type="scenePrecheckMeta.tag">{{ scenePrecheckMeta.label }}</el-tag>
+                  <small>{{ scenePrecheckMeta.note }}</small>
+                </div>
+              </div>
+              <div class="scene-center__publish-exec-card">
+                <span>最近校验告警</span>
+                <strong>{{ scenePrecheckMeta.warningCount }}</strong>
+                <small>当前工作场景最近一次检查中的告警数量</small>
+              </div>
+            </div>
+
+            <el-form label-width="96px" class="scene-center__publish-form">
+              <el-form-item label="发布说明" required>
+                <el-input
+                  v-model="scenePublishForm.publishDesc"
+                  type="textarea"
+                  :rows="4"
+                  maxlength="1000"
+                  show-word-limit
+                  placeholder="请输入本次发布说明、影响范围与业务口径摘要"
+                />
+              </el-form-item>
+              <el-form-item label="发布动作">
+                <el-checkbox v-model="scenePublishForm.activateNow">生成版本后立即设为生效</el-checkbox>
+              </el-form-item>
+            </el-form>
+
+            <div class="scene-center__publish-action-row">
+              <el-button
+                type="primary"
+                icon="CircleCheck"
+                :loading="scenePublishLoading"
+                @click="handleScenePrecheck"
+              >
+                发布前检查
+              </el-button>
+              <el-button
+                type="success"
+                icon="Promotion"
+                :loading="scenePublishLoading"
+                @click="handleScenePublish"
+                v-hasPermi="['cost:publish:add']"
+              >
+                发布当前版本
+              </el-button>
+            </div>
+
+            <el-alert
+              v-if="scenePrecheck.checked && scenePrecheck.publishable === false"
+              title="当前仍有阻断项，处理完成后才能发布当前工作场景。"
+              type="warning"
+              :closable="false"
+              show-icon
+              class="scene-center__publish-exec-alert"
+            />
+            <el-alert
+              v-else-if="scenePrecheck.checked"
+              title="当前检查未发现阻断项，可以直接发布当前工作场景版本。"
+              type="success"
+              :closable="false"
+              show-icon
+              class="scene-center__publish-exec-alert"
+            />
+
+            <div v-if="scenePrecheck.checked" class="scene-center__publish-check-summary">
+              <div class="scene-center__publish-check-card">
+                <span>阻断项</span>
+                <strong>{{ scenePrecheck.blockingCount || 0 }}</strong>
+                <small>必须处理完的发布前置问题</small>
+              </div>
+              <div class="scene-center__publish-check-card">
+                <span>告警项</span>
+                <strong>{{ scenePrecheck.warningCount || 0 }}</strong>
+                <small>不会阻断发布，但建议先确认</small>
+              </div>
+              <div class="scene-center__publish-check-card">
+                <span>受影响费用</span>
+                <strong>{{ scenePrecheck.impactedFeeCount || scenePrecheck.impactedFees?.length || 0 }}</strong>
+                <small>本次发布会影响的费用主线数量</small>
+              </div>
+              <div class="scene-center__publish-check-card">
+                <span>当前生效版本</span>
+                <strong>{{ scenePrecheck.activeVersionNo || publishSummary.activeVersionNo || '未生效' }}</strong>
+                <small>当前工作场景正在使用的正式版本</small>
+              </div>
+            </div>
+
+            <el-table
+              v-if="scenePrecheck.checked && scenePrecheck.items?.length"
+              :data="scenePrecheck.items"
+              size="small"
+              class="scene-center__publish-check-table"
+            >
+              <el-table-column label="级别" width="100" align="center">
+                <template #default="scope">
+                  <el-tag :type="resolveCheckLevelMeta(scope.row.level).type">
+                    {{ resolveCheckLevelMeta(scope.row.level).label }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="检查项" prop="title" min-width="180" />
+              <el-table-column label="说明" prop="message" min-width="360" :show-overflow-tooltip="true" />
+            </el-table>
+            <el-empty
+              v-else-if="scenePrecheck.checked"
+              description="本次发布检查未发现阻断项或告警项。"
+            />
+
+            <div v-if="scenePrecheck.checked && scenePrecheck.impactedFees?.length" class="scene-center__publish-impact">
+              <div class="scene-center__publish-impact-title">受影响费用清单</div>
+              <div class="scene-center__publish-impact-list">
+                <div
+                  v-for="item in scenePrecheck.impactedFees"
+                  :key="item.feeCode"
+                  class="scene-center__publish-impact-card"
+                >
+                  <div class="scene-center__publish-impact-head">
+                    <strong>{{ item.feeName || item.feeCode }}</strong>
+                    <el-tag size="small" :type="resolveCostChangeTypeMeta(item.changeType).type">
+                      {{ resolveCostChangeTypeMeta(item.changeType).label }}
+                    </el-tag>
+                  </div>
+                  <span>{{ item.feeCode }}</span>
+                  <div class="scene-center__publish-impact-metrics">
+                    <span>规则变化 {{ item.ruleChangeCount || 0 }}</span>
+                    <span>变量变化 {{ item.variableChangeCount || 0 }}</span>
+                  </div>
+                  <div v-if="item.changedVariables?.length" class="scene-center__publish-impact-details">
+                    <span class="scene-center__publish-impact-detail-label">涉及变量</span>
+                    <small>{{ resolveChangedVariablePreview(item) }}</small>
+                  </div>
+                  <div v-if="item.changedRules?.length" class="scene-center__publish-impact-details">
+                    <span class="scene-center__publish-impact-detail-label">涉及规则</span>
+                    <small>{{ resolveChangedRulePreview(item) }}</small>
+                  </div>
+                  <small>{{ resolveFeeImpactSummary(item) }}</small>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="版本台账" name="ledger">
+          <div class="scene-center__ledger-metrics">
+            <div class="scene-center__ledger-card">
+              <span>版本总数</span>
+              <strong>{{ sceneVersionTotal }}</strong>
+              <small>当前场景累计形成的发布版本数</small>
+            </div>
+            <div class="scene-center__ledger-card">
+              <span>当前生效版本</span>
+              <strong>{{ publishSummary.activeVersionNo || '未生效' }}</strong>
+              <small>当前工作场景已经切换到的正式版本</small>
+            </div>
+            <div class="scene-center__ledger-card">
+              <span>最近发布版本</span>
+              <strong>{{ publishSummary.latestVersionNo || '暂无版本' }}</strong>
+              <small>{{ publishSummary.latestPublishedTime || '尚未产生发布时间' }}</small>
+            </div>
+            <div class="scene-center__ledger-card">
+              <span>最近检查结论</span>
+              <strong>{{ publishSummary.validationLabel }}</strong>
+              <small>{{ publishSummary.validationNote }}</small>
+            </div>
+          </div>
+
+          <el-table
+            v-if="sceneVersionLedger.length"
+            v-loading="sceneVersionLoading"
+            :data="sceneVersionLedger"
+            size="small"
+            class="scene-center__ledger-table"
+          >
+            <el-table-column label="版本号" prop="versionNo" width="160" align="center" />
+            <el-table-column label="状态" width="120" align="center">
+              <template #default="scope">
+                <dict-tag :options="scenePublishVersionStatusOptions" :value="scope.row.versionStatus" />
+              </template>
+            </el-table-column>
+            <el-table-column label="检查结果" width="150" align="center">
+              <template #default="scope">
+                <el-tag :type="resolveValidationMeta(scope.row.validationResultJson).tag">
+                  {{ resolveValidationMeta(scope.row.validationResultJson).label }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="发布说明" prop="publishDesc" min-width="220" :show-overflow-tooltip="true" />
+            <el-table-column label="发布时间" width="180" align="center">
+              <template #default="scope">{{ parseTime(scope.row.publishedTime) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="220" align="center" fixed="right">
+              <template #default="scope">
+                <el-button link type="primary" icon="Tickets" @click="handleUseAsCompareTarget(scope.row)">
+                  进入对比
+                </el-button>
+                <el-button link type="primary" icon="Right" @click="handleOpenPublishCenter(currentSceneInfo)">
+                  去发布中心
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty
+            v-else-if="!sceneVersionLoading"
+            description="当前场景还没有发布版本，可先在发布中心完成首发。"
+          />
+        </el-tab-pane>
+
+        <el-tab-pane label="版本对比" name="compare">
+          <template v-if="sceneVersionLedger.length >= 2">
+            <div class="scene-center__compare-toolbar">
+              <el-select
+                v-model="sceneCompareForm.fromVersionId"
+                placeholder="请选择基准版本"
+                style="width: 240px"
+                @change="loadSceneCompareDiff"
+              >
+                <el-option
+                  v-for="item in sceneVersionLedger"
+                  :key="item.versionId"
+                  :label="item.versionNo"
+                  :value="item.versionId"
+                />
+              </el-select>
+              <span class="scene-center__compare-vs">VS</span>
+              <el-select
+                v-model="sceneCompareForm.toVersionId"
+                placeholder="请选择目标版本"
+                style="width: 240px"
+                @change="loadSceneCompareDiff"
+              >
+                <el-option
+                  v-for="item in sceneVersionLedger"
+                  :key="item.versionId"
+                  :label="item.versionNo"
+                  :value="item.versionId"
+                />
+              </el-select>
+              <el-button plain icon="Refresh" @click="handleSwapSceneCompare">交换版本</el-button>
+            </div>
+
+            <el-alert
+              v-if="!sceneCompareReady"
+              title="请选择两个不同的发布版本后，再查看场景级差异。"
+              type="info"
+              :closable="false"
+              class="scene-center__compare-alert"
+            />
+
+            <div v-else v-loading="sceneDiffLoading" class="scene-center__compare-body">
+              <el-descriptions :column="4" border class="scene-center__compare-summary">
+                <el-descriptions-item label="场景级变化">{{ sceneCompareData.summary?.sceneChangeCount || 0 }}</el-descriptions-item>
+                <el-descriptions-item label="费用变化">{{ sceneCompareData.summary?.feeChangeCount || 0 }}</el-descriptions-item>
+                <el-descriptions-item label="规则变化">{{ sceneCompareData.summary?.ruleChangeCount || 0 }}</el-descriptions-item>
+                <el-descriptions-item label="新增费用">{{ sceneCompareData.summary?.addedFeeCount || 0 }}</el-descriptions-item>
+              </el-descriptions>
+
+              <JsonDiffViewer
+                title="场景主数据"
+                subtitle="先看字段级差异摘要，再看当前场景两个发布版本的快照对比。"
+                :left-title="sceneCompareData.fromVersion?.versionNo || '基准版本'"
+                :right-title="sceneCompareData.toVersion?.versionNo || '目标版本'"
+                :left-value="sceneDiffLeftValue"
+                :right-value="sceneDiffRightValue"
+                :rows="10"
+              />
+
+              <div v-if="sceneCompareFeeHighlights.length" class="scene-center__compare-impact">
+                <div class="scene-center__compare-impact-title">受影响费用摘要</div>
+                <div class="scene-center__compare-impact-list">
+                  <div
+                    v-for="item in sceneCompareFeeHighlights"
+                    :key="item.feeCode"
+                    class="scene-center__compare-impact-card"
+                  >
+                    <strong>{{ item.feeName || item.feeCode }}</strong>
+                    <span>{{ item.feeCode }}</span>
+                    <small v-if="item.changedVariables?.length">{{ resolveChangedVariablePreview(item) }}</small>
+                    <small>{{ resolveFeeImpactSummary(item) }}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <el-empty v-else description="至少需要两个发布版本，才能在场景中心直接做版本对比。" />
+        </el-tab-pane>
+      </el-tabs>
     </section>
 
     <el-alert
@@ -486,11 +761,13 @@
 <script setup name="CostScene">
 import { ElMessageBox } from 'element-plus'
 import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
-import { listPublish } from '@/api/cost/publish'
+import JsonDiffViewer from '@/components/cost/JsonDiffViewer.vue'
+import { addPublishVersion, getPublishDiff, getPublishPrecheck, listPublish } from '@/api/cost/publish'
 import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listScene, updateScene } from '@/api/cost/scene'
 import { deptTreeSelect } from '@/api/system/user'
 import useSettingsStore from '@/store/modules/settings'
 import { getCostSceneContextId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { resolveCheckLevelMeta, resolveCostChangeTypeLabel, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { formatLegacyOrgLabel } from '@/utils/costOptionLabel'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
@@ -521,6 +798,22 @@ const initialStatus = ref(undefined)
 const governanceInfo = ref({})
 const currentSceneInfo = ref({})
 const publishSummary = reactive(createEmptyPublishSummary())
+const publishWorkbenchTab = ref('publish')
+const sceneVersionLoading = ref(false)
+const sceneDiffLoading = ref(false)
+const sceneVersionLedger = ref([])
+const sceneVersionTotal = ref(0)
+const sceneCompareData = ref(createEmptySceneCompareData())
+const scenePublishLoading = ref(false)
+const scenePrecheck = ref(createEmptyScenePrecheck())
+const sceneCompareForm = reactive({
+  fromVersionId: undefined,
+  toVersionId: undefined
+})
+const scenePublishForm = reactive({
+  publishDesc: '',
+  activateNow: false
+})
 const statistics = reactive({
   sceneCount: 0,
   enabledSceneCount: 0,
@@ -564,6 +857,51 @@ const filterDomainText = computed(() => {
   const option = businessDomainOptions.value.find(item => item.value === queryParams.value.businessDomain)
   const domainText = `业务域：${option ? option.label : queryParams.value.businessDomain}`
   return queryParams.value.orgCode ? `${domainText} · 组织：${resolveOrgLabel(queryParams.value.orgCode)}` : domainText
+})
+
+const scenePublishVersionStatusOptions = computed(() => [
+  { label: '草稿版本', value: 'DRAFT' },
+  { label: '生效中', value: 'ACTIVE' },
+  { label: '已回滚', value: 'ROLLED_BACK' }
+])
+
+const sceneCompareReady = computed(() => {
+  return Boolean(
+    sceneCompareForm.fromVersionId
+      && sceneCompareForm.toVersionId
+      && sceneCompareForm.fromVersionId !== sceneCompareForm.toVersionId
+  )
+})
+
+const sceneDiffLeftValue = computed(() => {
+  return sceneCompareData.value.fromScene ?? buildSceneSnapshotFromDiffs(sceneCompareData.value.sceneDiffs, 'fromValue')
+})
+
+const sceneDiffRightValue = computed(() => {
+  return sceneCompareData.value.toScene ?? buildSceneSnapshotFromDiffs(sceneCompareData.value.sceneDiffs, 'toValue')
+})
+
+const sceneCompareFeeHighlights = computed(() => {
+  return (sceneCompareData.value.feeDiffs || []).slice(0, 6)
+})
+
+const scenePrecheckMeta = computed(() => {
+  const payload = scenePrecheck.value || {}
+  if (!payload.checked) {
+    return {
+      label: '未执行',
+      tag: 'info',
+      note: '建议发布前先执行一次校验',
+      warningCount: 0
+    }
+  }
+  const validation = resolveValidationMeta(payload)
+  return {
+    label: payload.publishable === false ? '阻断' : validation.label,
+    tag: payload.publishable === false ? 'danger' : validation.tag,
+    note: buildValidationNote(payload),
+    warningCount: Number(payload.warningCount || 0)
+  }
 })
 
 const metricItems = computed(() => [
@@ -642,6 +980,7 @@ async function syncCurrentSceneInfo() {
   if (!currentSceneId) {
     currentSceneInfo.value = {}
     resetPublishSummary()
+    resetSceneWorkbench()
     return
   }
   const matched = sceneList.value.find(item => item.sceneId === currentSceneId)
@@ -657,6 +996,7 @@ async function syncCurrentSceneInfo() {
   } catch (error) {
     currentSceneInfo.value = {}
     resetPublishSummary()
+    resetSceneWorkbench()
   }
 }
 
@@ -830,6 +1170,7 @@ function handleClearCurrentScene() {
   setCostSceneContextId(undefined)
   currentSceneInfo.value = {}
   resetPublishSummary()
+  resetSceneWorkbench()
   proxy.$modal.msgSuccess('已清除当前工作场景')
 }
 
@@ -881,18 +1222,24 @@ async function loadCurrentScenePublishSummary(scene) {
   const sceneId = scene?.sceneId
   if (!sceneId) {
     resetPublishSummary()
+    resetSceneWorkbench()
     return
   }
+  scenePublishForm.publishDesc = ''
+  scenePublishForm.activateNow = false
+  sceneVersionLoading.value = true
   try {
-    const [governance, publishResponse] = await Promise.all([
+    const [governance, publishResponse, precheckResponse] = await Promise.all([
       fetchSceneGovernance(sceneId),
       listPublish({
         sceneId,
         pageNum: 1,
-        pageSize: 1
-      })
+        pageSize: 8
+      }),
+      getPublishPrecheck(sceneId)
     ])
-    const latestVersion = Array.isArray(publishResponse?.rows) ? publishResponse.rows[0] : undefined
+    const versionRows = Array.isArray(publishResponse?.rows) ? publishResponse.rows : []
+    const latestVersion = versionRows[0]
     const validationMeta = resolveValidationMeta(latestVersion?.validationResultJson)
     Object.assign(publishSummary, {
       sceneId,
@@ -904,6 +1251,10 @@ async function loadCurrentScenePublishSummary(scene) {
       validationTag: validationMeta.tag,
       validationNote: buildValidationNote(latestVersion?.validationResultJson)
     })
+    scenePrecheck.value = normalizeScenePrecheck(precheckResponse?.data)
+    sceneVersionLedger.value = versionRows
+    sceneVersionTotal.value = Number(publishResponse?.total || versionRows.length || 0)
+    initializeSceneCompare(versionRows)
   } catch (error) {
     Object.assign(publishSummary, {
       sceneId,
@@ -915,6 +1266,10 @@ async function loadCurrentScenePublishSummary(scene) {
       validationTag: 'info',
       validationNote: '暂未获取到发布校验信息'
     })
+    scenePrecheck.value = createEmptyScenePrecheck()
+    resetSceneWorkbench()
+  } finally {
+    sceneVersionLoading.value = false
   }
 }
 
@@ -933,6 +1288,173 @@ function createEmptyPublishSummary() {
 
 function resetPublishSummary() {
   Object.assign(publishSummary, createEmptyPublishSummary())
+}
+
+function createEmptyScenePrecheck() {
+  return {
+    checked: false,
+    publishable: true,
+    blockingCount: 0,
+    warningCount: 0,
+    impactedFeeCount: 0,
+    items: [],
+    impactedFees: []
+  }
+}
+
+function normalizeScenePrecheck(data = {}) {
+  return {
+    ...createEmptyScenePrecheck(),
+    ...data,
+    checked: true
+  }
+}
+
+function createEmptySceneCompareData() {
+  return {
+    summary: {},
+    fromVersion: undefined,
+    toVersion: undefined,
+    fromScene: undefined,
+    toScene: undefined,
+    sceneDiffs: [],
+    feeDiffs: [],
+    ruleDiffs: []
+  }
+}
+
+function resetSceneWorkbench() {
+  sceneVersionLedger.value = []
+  sceneVersionTotal.value = 0
+  publishWorkbenchTab.value = 'publish'
+  sceneCompareForm.fromVersionId = undefined
+  sceneCompareForm.toVersionId = undefined
+  sceneCompareData.value = createEmptySceneCompareData()
+  scenePrecheck.value = createEmptyScenePrecheck()
+  scenePublishForm.publishDesc = ''
+  scenePublishForm.activateNow = false
+}
+
+function initializeSceneCompare(rows = []) {
+  if (!rows.length) {
+    resetSceneWorkbench()
+    return
+  }
+  sceneVersionLedger.value = rows
+  if (rows.length < 2) {
+    sceneCompareForm.fromVersionId = undefined
+    sceneCompareForm.toVersionId = rows[0]?.versionId
+    sceneCompareData.value = createEmptySceneCompareData()
+    return
+  }
+
+  const targetVersion = rows[0]
+  const activeVersion = currentSceneInfo.value?.activeVersionNo
+    ? rows.find(item => item.versionNo === currentSceneInfo.value.activeVersionNo)
+    : undefined
+  const fallbackBase = rows.find(item => item.versionId !== targetVersion.versionId)
+  const baseVersion = activeVersion && activeVersion.versionId !== targetVersion.versionId ? activeVersion : fallbackBase
+
+  sceneCompareForm.fromVersionId = baseVersion?.versionId
+  sceneCompareForm.toVersionId = targetVersion.versionId
+  loadSceneCompareDiff()
+}
+
+function handleUseAsCompareTarget(row) {
+  publishWorkbenchTab.value = 'compare'
+  sceneCompareForm.toVersionId = row.versionId
+  if (!sceneCompareForm.fromVersionId || sceneCompareForm.fromVersionId === row.versionId) {
+    const fallback = sceneVersionLedger.value.find(item => item.versionId !== row.versionId)
+    sceneCompareForm.fromVersionId = fallback?.versionId
+  }
+  loadSceneCompareDiff()
+}
+
+function handleSwapSceneCompare() {
+  if (!sceneCompareReady.value) {
+    return
+  }
+  const nextFrom = sceneCompareForm.toVersionId
+  sceneCompareForm.toVersionId = sceneCompareForm.fromVersionId
+  sceneCompareForm.fromVersionId = nextFrom
+  loadSceneCompareDiff()
+}
+
+async function handleScenePrecheck() {
+  if (!currentSceneInfo.value.sceneId) {
+    proxy.$modal.msgWarning('请先设置当前工作场景')
+    return
+  }
+  scenePublishLoading.value = true
+  try {
+    const response = await getPublishPrecheck(currentSceneInfo.value.sceneId)
+    scenePrecheck.value = normalizeScenePrecheck(response?.data)
+    if (scenePrecheck.value.suggestActivateNow) {
+      scenePublishForm.activateNow = true
+    }
+  } finally {
+    scenePublishLoading.value = false
+  }
+}
+
+async function handleScenePublish() {
+  if (!currentSceneInfo.value.sceneId) {
+    proxy.$modal.msgWarning('请先设置当前工作场景')
+    return
+  }
+  if (!scenePublishForm.publishDesc) {
+    proxy.$modal.msgWarning('请先填写发布说明')
+    return
+  }
+  await handleScenePrecheck()
+  if (scenePrecheck.value.publishable === false) {
+    proxy.$modal.msgWarning('当前仍存在阻断项，请先处理后再发布')
+    return
+  }
+
+  scenePublishLoading.value = true
+  try {
+    await addPublishVersion({
+      sceneId: currentSceneInfo.value.sceneId,
+      publishDesc: scenePublishForm.publishDesc,
+      activateNow: scenePublishForm.activateNow
+    })
+    proxy.$modal.msgSuccess('当前场景版本发布成功')
+    scenePublishForm.publishDesc = ''
+    publishWorkbenchTab.value = 'ledger'
+    await getList()
+  } finally {
+    scenePublishLoading.value = false
+  }
+}
+
+async function loadSceneCompareDiff() {
+  if (!sceneCompareReady.value) {
+    sceneCompareData.value = createEmptySceneCompareData()
+    return
+  }
+  sceneDiffLoading.value = true
+  try {
+    const response = await getPublishDiff({
+      fromVersionId: sceneCompareForm.fromVersionId,
+      toVersionId: sceneCompareForm.toVersionId
+    })
+    sceneCompareData.value = response.data || createEmptySceneCompareData()
+  } finally {
+    sceneDiffLoading.value = false
+  }
+}
+
+function buildSceneSnapshotFromDiffs(rows = [], valueKey) {
+  if (!Array.isArray(rows) || !rows.length) {
+    return {}
+  }
+  return rows.reduce((result, item) => {
+    if (item?.field) {
+      result[item.field] = item?.[valueKey]
+    }
+    return result
+  }, {})
 }
 
 function parseValidationResult(value) {
@@ -972,6 +1494,50 @@ function buildValidationNote(value) {
     return '未记录检查快照'
   }
   return `阻断 ${meta.blockingCount} / 告警 ${meta.warningCount}`
+}
+
+function resolveFeeImpactSummary(item = {}) {
+  if (item.summaryText) {
+    return item.summaryText
+  }
+  if (item.summary) {
+    const details = []
+    const changedRules = resolveChangedRulePreview(item)
+    const changedVariables = resolveChangedVariablePreview(item)
+    if (changedRules) {
+      details.push(`规则：${changedRules}`)
+    }
+    if (changedVariables) {
+      details.push(`变量：${changedVariables}`)
+    }
+    return details.length ? `${item.summary} 涉及${details.join('；')}。` : item.summary
+  }
+  return `费用 ${item.feeName || item.feeCode} 发生“${resolveCostChangeTypeLabel(item.changeType)}”，规则变化 ${item.ruleChangeCount || 0} 处，变量变化 ${item.variableChangeCount || 0} 处。`
+}
+
+function resolveChangedAssetPreview(items = [], codeKey, nameKey) {
+  const source = Array.isArray(items) ? items : []
+  if (!source.length) {
+    return ''
+  }
+  const labels = source.slice(0, 3).map((item) => {
+    const name = item?.[nameKey]
+    const code = item?.[codeKey]
+    if (name && code && name !== code) {
+      return `${name}（${code}）`
+    }
+    return name || code || '-'
+  })
+  const suffix = source.length > 3 ? ` 等 ${source.length} 项` : ''
+  return `${labels.join('、')}${suffix}`
+}
+
+function resolveChangedVariablePreview(item = {}) {
+  return resolveChangedAssetPreview(item.changedVariables, 'variableCode', 'variableName')
+}
+
+function resolveChangedRulePreview(item = {}) {
+  return resolveChangedAssetPreview(item.changedRules, 'ruleCode', 'ruleName')
 }
 
 function normalizeDeptTreeOptions(nodes = []) {
@@ -1149,77 +1715,300 @@ getList()
   font-weight: 700;
 }
 
-.scene-center__publish-summary {
+.scene-center__publish-workbench {
   display: grid;
-  gap: 16px;
+  gap: 18px;
   padding: 20px 22px;
   border: 1px solid var(--el-border-color-light);
   border-radius: 18px;
   background: var(--el-bg-color-overlay);
 }
 
-.scene-center__publish-summary-header {
+.scene-center__publish-workbench-head {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
 }
 
-.scene-center__publish-summary-eyebrow {
-  color: var(--el-color-primary);
+.scene-center__publish-workbench-eyebrow {
+  color: var(--el-color-success);
   font-size: 13px;
   font-weight: 700;
 }
 
-.scene-center__publish-summary-title {
+.scene-center__publish-workbench-title {
   margin-top: 6px;
   font-size: 20px;
   font-weight: 700;
   color: var(--el-text-color-primary);
 }
 
-.scene-center__publish-summary-desc {
+.scene-center__publish-workbench-desc {
   margin-top: 8px;
-  max-width: 720px;
+  max-width: 760px;
   color: var(--el-text-color-regular);
   line-height: 1.8;
 }
 
-.scene-center__publish-summary-actions {
+.scene-center__publish-workbench-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.scene-center__publish-summary-grid {
+.scene-center__publish-tabs :deep(.el-tabs__header) {
+  margin-bottom: 14px;
+}
+
+.scene-center__publish-exec {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.scene-center__publish-exec-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
-.scene-center__publish-summary-card {
+.scene-center__publish-exec-card {
   display: grid;
   gap: 8px;
   padding: 16px 18px;
   border-radius: 14px;
   border: 1px solid var(--el-border-color-light);
-  background: color-mix(in srgb, var(--el-color-primary-light-9) 14%, var(--el-bg-color-overlay));
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 16%, var(--el-bg-color-overlay));
 }
 
-.scene-center__publish-summary-card span,
-.scene-center__publish-summary-card small {
+.scene-center__publish-exec-card span,
+.scene-center__publish-exec-card small {
   color: var(--el-text-color-secondary);
 }
 
-.scene-center__publish-summary-card strong {
-  color: var(--el-text-color-primary);
+.scene-center__publish-exec-card strong {
   font-size: 24px;
-  line-height: 1.3;
+  line-height: 1.2;
+  color: var(--el-text-color-primary);
 }
 
-.scene-center__publish-summary-status {
+.scene-center__publish-exec-status {
   display: grid;
   gap: 8px;
+}
+
+.scene-center__publish-form {
+  padding: 18px 18px 2px;
+  border-radius: 14px;
+  border: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color-overlay);
+}
+
+.scene-center__publish-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.scene-center__publish-exec-alert,
+.scene-center__publish-check-table {
+  margin-top: 4px;
+}
+
+.scene-center__publish-check-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.scene-center__publish-check-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--el-border-color-light);
+  background: color-mix(in srgb, var(--el-color-success-light-9) 16%, var(--el-bg-color-overlay));
+}
+
+.scene-center__publish-check-card span,
+.scene-center__publish-check-card small {
+  color: var(--el-text-color-secondary);
+}
+
+.scene-center__publish-check-card strong {
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--el-text-color-primary);
+}
+
+.scene-center__publish-impact {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--el-border-color-light);
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 18%, var(--el-bg-color-overlay));
+}
+
+.scene-center__publish-impact-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.scene-center__publish-impact-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.scene-center__publish-impact-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color-overlay);
+}
+
+.scene-center__publish-impact-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.scene-center__publish-impact-card strong {
+  color: var(--el-text-color-primary);
+}
+
+.scene-center__publish-impact-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scene-center__publish-impact-metrics span {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 36%, var(--el-bg-color-page));
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.scene-center__publish-impact-details {
+  display: grid;
+  gap: 4px;
+}
+
+.scene-center__publish-impact-detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
+}
+
+.scene-center__publish-impact-card span,
+.scene-center__publish-impact-card small {
+  color: var(--el-text-color-secondary);
+}
+
+.scene-center__ledger-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.scene-center__ledger-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--el-border-color-light);
+  background: color-mix(in srgb, var(--el-color-success-light-9) 24%, var(--el-bg-color-overlay));
+}
+
+.scene-center__ledger-card span,
+.scene-center__ledger-card small {
+  color: var(--el-text-color-secondary);
+}
+
+.scene-center__ledger-card strong {
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--el-text-color-primary);
+}
+
+.scene-center__compare-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.scene-center__compare-vs {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--el-border-color-light);
+  color: var(--el-color-primary);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 24%, var(--el-bg-color-overlay));
+}
+
+.scene-center__compare-alert,
+.scene-center__compare-summary {
+  margin-bottom: 16px;
+}
+
+.scene-center__compare-body {
+  display: grid;
+  gap: 16px;
+}
+
+.scene-center__compare-impact {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--el-border-color-light);
+  background: color-mix(in srgb, var(--el-color-warning-light-9) 20%, var(--el-bg-color-overlay));
+}
+
+.scene-center__compare-impact-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.scene-center__compare-impact-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.scene-center__compare-impact-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color-overlay);
+}
+
+.scene-center__compare-impact-card strong {
+  color: var(--el-text-color-primary);
+}
+
+.scene-center__compare-impact-card span,
+.scene-center__compare-impact-card small {
+  color: var(--el-text-color-secondary);
 }
 
 .scene-center__alert,
@@ -1320,7 +2109,11 @@ getList()
 @media (max-width: 1200px) {
   .scene-center__hero,
   .scene-center__metrics,
-  .scene-center__publish-summary-grid {
+  .scene-center__publish-exec-grid,
+  .scene-center__publish-check-summary,
+  .scene-center__ledger-metrics,
+  .scene-center__compare-impact-list,
+  .scene-center__publish-impact-list {
     grid-template-columns: 1fr;
   }
 
@@ -1328,7 +2121,7 @@ getList()
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .scene-center__publish-summary-header {
+  .scene-center__publish-workbench-head {
     flex-direction: column;
   }
 }

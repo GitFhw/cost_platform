@@ -5,6 +5,7 @@ export const COST_MENU_ROUTES = Object.freeze({
   variable: '/cost/model/variable',
   rule: '/cost/model/rule',
   formula: '/cost/model/formula',
+  architecture: '/cost/model/architecture/index',
   publish: '/cost/model/publish',
   publishAudit: '/cost/model/publish-audit/index',
   access: '/cost/execution/access',
