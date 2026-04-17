@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="rootRef"
     class="json-editor"
     :class="{
       'is-readonly': readonly,
@@ -52,6 +53,7 @@ import 'ace-builds/src-noconflict/mode-javascript'
 import 'ace-builds/src-noconflict/mode-java'
 import 'ace-builds/src-noconflict/mode-text'
 import 'ace-builds/src-noconflict/theme-chrome'
+import 'ace-builds/src-noconflict/theme-tomorrow_night_eighties'
 import { formatJsonText, minifyJsonText, normalizeJsonText, parseJsonText } from '@/utils/jsonTools'
 
 const props = defineProps({
@@ -147,6 +149,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'valid', 'parsed'])
 
+const rootRef = ref()
 const editorRef = ref()
 const editor = ref()
 const innerValue = ref('')
@@ -154,6 +157,7 @@ const statusType = ref('info')
 const statusText = ref('')
 const statusMessage = ref('')
 const isFullscreen = ref(false)
+let resizeObserver
 let syncingEditor = false
 
 const isReadOnly = computed(() => props.readonly || props.disabled)
@@ -227,9 +231,11 @@ watch(
 
 onMounted(() => {
   initEditor()
+  initResizeObserver()
 })
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
   editor.value?.destroy()
   editor.value?.container?.remove()
 })
@@ -438,6 +444,17 @@ function resizeEditor() {
   })
 }
 
+function initResizeObserver() {
+  if (!rootRef.value || typeof ResizeObserver === 'undefined') {
+    return
+  }
+  resizeObserver?.disconnect()
+  resizeObserver = new ResizeObserver(() => {
+    resizeEditor()
+  })
+  resizeObserver.observe(rootRef.value)
+}
+
 function clearAnnotations() {
   editor.value?.session.clearAnnotations()
 }
@@ -510,10 +527,13 @@ function resolveHeight() {
 <style scoped lang="scss">
 .json-editor {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .json-editor__toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
@@ -527,6 +547,7 @@ function resolveHeight() {
 .json-editor__title {
   display: flex;
   align-items: center;
+  flex: 1 1 240px;
   gap: 8px;
   min-width: 0;
   color: #334155;
@@ -535,13 +556,16 @@ function resolveHeight() {
 
 .json-editor__actions {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 2px 8px;
+  min-width: 0;
 }
 
 .json-editor__body {
   position: relative;
+  min-width: 0;
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
   overflow: hidden;
@@ -554,6 +578,7 @@ function resolveHeight() {
 
 .json-editor__ace {
   width: 100%;
+  min-width: 0;
   line-height: 1.55;
 }
 
@@ -573,6 +598,7 @@ function resolveHeight() {
   justify-content: space-between;
   gap: 12px;
   margin-top: 6px;
+  min-width: 0;
 }
 
 .json-editor__message {
@@ -610,10 +636,20 @@ function resolveHeight() {
 .json-editor.is-compact {
   .json-editor__toolbar {
     padding: 6px 8px;
+    gap: 6px 10px;
   }
 
   .json-editor__title {
     font-size: 12px;
+  }
+
+  .json-editor__actions {
+    gap: 0 6px;
+  }
+
+  .json-editor__footer {
+    flex-wrap: wrap;
+    gap: 4px 12px;
   }
 }
 

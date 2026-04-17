@@ -68,6 +68,19 @@ export const constantRoutes = [
     ]
   },
   {
+    path: '/cost/model/architecture',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: 'index',
+        component: () => import('@/views/cost/architecture/index.vue'),
+        name: 'CostDataArchitecture',
+        meta: { title: '数据架构' }
+      }
+    ]
+  },
+  {
     path: '/lock',
     component: () => import('@/views/lock'),
     hidden: true,

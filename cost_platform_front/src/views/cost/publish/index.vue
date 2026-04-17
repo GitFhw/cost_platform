@@ -95,9 +95,26 @@
           <h4>本次受影响费用</h4>
           <div class="publish-center__impact-list">
             <div v-for="item in precheck.impactedFees" :key="item.feeCode" class="publish-center__impact-item">
-              <strong>{{ item.feeName }}</strong>
+              <div class="publish-center__impact-head">
+                <strong>{{ item.feeName || item.feeCode }}</strong>
+                <el-tag size="small" :type="resolveCostChangeTypeMeta(item.changeType).type">
+                  {{ resolveCostChangeTypeMeta(item.changeType).label }}
+                </el-tag>
+              </div>
               <span>{{ item.feeCode }}</span>
-              <small>{{ item.summaryText }}</small>
+              <div class="publish-center__impact-metrics">
+                <span>规则变化 {{ item.ruleChangeCount || 0 }}</span>
+                <span>变量变化 {{ item.variableChangeCount || 0 }}</span>
+              </div>
+              <div v-if="item.changedVariables?.length" class="publish-center__impact-details">
+                <span class="publish-center__impact-detail-label">涉及变量</span>
+                <small>{{ resolveChangedVariablePreview(item) }}</small>
+              </div>
+              <div v-if="item.changedRules?.length" class="publish-center__impact-details">
+                <span class="publish-center__impact-detail-label">涉及规则</span>
+                <small>{{ resolveChangedRulePreview(item) }}</small>
+              </div>
+              <small>{{ resolveFeeImpactSummary(item) }}</small>
             </div>
           </div>
         </div>
@@ -196,7 +213,9 @@
                   <el-tag :type="resolveCostChangeTypeMeta(scope.row.changeType).type">{{ resolveCostChangeTypeMeta(scope.row.changeType).label }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="摘要" prop="summaryText" min-width="260" />
+              <el-table-column label="摘要" min-width="260">
+                <template #default="scope">{{ resolveFeeImpactSummary(scope.row) }}</template>
+              </el-table-column>
             </el-table>
           </el-tab-pane>
           <el-tab-pane label="快照对象">
@@ -289,7 +308,9 @@
               </el-table-column>
               <el-table-column label="规则变化数" prop="ruleChangeCount" width="120" />
               <el-table-column label="变量变化数" prop="variableChangeCount" width="120" />
-              <el-table-column label="摘要" prop="summaryText" min-width="260" />
+              <el-table-column label="摘要" min-width="260">
+                <template #default="scope">{{ resolveFeeImpactSummary(scope.row) }}</template>
+              </el-table-column>
             </el-table>
 
             <div v-if="selectedFeeDiff" class="publish-center__diff-detail">
@@ -712,8 +733,52 @@ function buildValidationNote(value) {
   return `阻断 ${meta.blockingCount} / 告警 ${meta.warningCount}`
 }
 
+function resolveFeeImpactSummary(item = {}) {
+  if (item.summaryText) {
+    return item.summaryText
+  }
+  if (item.summary) {
+    const details = []
+    const changedRules = resolveChangedRulePreview(item)
+    const changedVariables = resolveChangedVariablePreview(item)
+    if (changedRules) {
+      details.push(`规则：${changedRules}`)
+    }
+    if (changedVariables) {
+      details.push(`变量：${changedVariables}`)
+    }
+    return details.length ? `${item.summary} 涉及${details.join('；')}。` : item.summary
+  }
+  return buildFeeDiffNarrative(item)
+}
+
 function buildFeeDiffNarrative(item) {
   return `费用 ${item.feeName || item.feeCode} 在两个发布版本之间发生“${resolveCostChangeTypeLabel(item.changeType)}”，规则变化 ${item.ruleChangeCount || 0} 处，变量变化 ${item.variableChangeCount || 0} 处。`
+}
+
+function resolveChangedAssetPreview(items = [], codeKey, nameKey) {
+  const source = Array.isArray(items) ? items : []
+  if (!source.length) {
+    return ''
+  }
+  const labels = source.slice(0, 3).map((item) => {
+    const name = item?.[nameKey]
+    const code = item?.[codeKey]
+    if (name && code && name !== code) {
+      return `${name}（${code}）`
+    }
+    return name || code || '-'
+  })
+  const suffix = source.length > 3 ? ` 等 ${source.length} 项` : ''
+  return `${labels.join('、')}${suffix}`
+}
+
+function resolveChangedVariablePreview(item = {}) {
+  return resolveChangedAssetPreview(item.changedVariables, 'variableCode', 'variableName')
+}
+
+function resolveChangedRulePreview(item = {}) {
+  return resolveChangedAssetPreview(item.changedRules, 'ruleCode', 'ruleName')
 }
 
 function buildRuleDiffNarrative(item) {
@@ -1124,6 +1189,40 @@ getList()
   border-radius: 12px;
   border: 1px solid var(--el-border-color-light);
   background: color-mix(in srgb, var(--el-color-success-light-9) 20%, var(--el-bg-color-overlay));
+}
+
+.publish-center__impact-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.publish-center__impact-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.publish-center__impact-metrics span {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 36%, var(--el-bg-color-page));
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.publish-center__impact-details {
+  display: grid;
+  gap: 4px;
+}
+
+.publish-center__impact-detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
 }
 
 .publish-center__impact-item span,

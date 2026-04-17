@@ -7,6 +7,7 @@
         <p>先把业务系统宽表载荷整理成标准计费对象，再决定走单费用取价还是正式核算。</p>
       </div>
       <div class="access-page__actions">
+        <el-button icon="Files" @click="router.push(COST_MENU_ROUTES.architecture)">数据架构</el-button>
         <el-button icon="Upload" @click="router.push(COST_MENU_ROUTES.taskBatch)">导入批次台账</el-button>
         <el-button type="primary" icon="Promotion" @click="router.push(COST_MENU_ROUTES.task)">正式核算入口</el-button>
       </div>

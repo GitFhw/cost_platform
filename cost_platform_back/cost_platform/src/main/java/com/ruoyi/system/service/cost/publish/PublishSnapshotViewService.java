@@ -14,11 +14,23 @@ public class PublishSnapshotViewService {
         return bundle == null ? new PublishSnapshotBundle() : bundle;
     }
 
+    public boolean isSnapshotEquivalent(PublishSnapshotBundle fromBundle, PublishSnapshotBundle toBundle) {
+        fromBundle = normalizeBundle(fromBundle);
+        toBundle = normalizeBundle(toBundle);
+        if (StringUtils.isEmpty(fromBundle.snapshotHash) || StringUtils.isEmpty(toBundle.snapshotHash)) {
+            return false;
+        }
+        return StringUtils.equals(fromBundle.snapshotHash, toBundle.snapshotHash);
+    }
+
     public List<Map<String, Object>> buildFeeDiffSummary(PublishSnapshotBundle fromBundle,
                                                          PublishSnapshotBundle toBundle,
                                                          String feeCode) {
         fromBundle = normalizeBundle(fromBundle);
         toBundle = normalizeBundle(toBundle);
+        if (isSnapshotEquivalent(fromBundle, toBundle)) {
+            return new ArrayList<>();
+        }
         Set<String> feeCodes = new TreeSet<>();
         feeCodes.addAll(fromBundle.feesByCode.keySet());
         feeCodes.addAll(toBundle.feesByCode.keySet());
@@ -30,8 +42,10 @@ public class PublishSnapshotViewService {
             Map<String, Object> fromFee = fromBundle.feesByCode.get(code);
             Map<String, Object> toFee = toBundle.feesByCode.get(code);
             String changeType = determineChangeType(fromFee, toFee);
-            int ruleChangeCount = countFeeRuleChanges(fromBundle, toBundle, code);
-            int variableChangeCount = countFeeVariableChanges(fromBundle, toBundle, code);
+            List<Map<String, Object>> changedRules = buildChangedRuleList(fromBundle, toBundle, code);
+            List<Map<String, Object>> changedVariables = buildChangedVariableList(fromBundle, toBundle, code);
+            int ruleChangeCount = changedRules.size();
+            int variableChangeCount = changedVariables.size();
             boolean feeDirectChanged = !"UNCHANGED".equals(changeType);
             if (!feeDirectChanged && ruleChangeCount == 0 && variableChangeCount == 0) {
                 continue;
@@ -46,6 +60,8 @@ public class PublishSnapshotViewService {
             item.put("ruleChangeCount", ruleChangeCount);
             item.put("variableChangeCount", variableChangeCount);
             item.put("summary", buildFeeSummaryText(changeType, feeDirectChanged, ruleChangeCount, variableChangeCount));
+            item.put("changedRules", changedRules);
+            item.put("changedVariables", changedVariables);
             item.put("fromFee", fromFee);
             item.put("toFee", toFee);
             item.put("fromRules", buildFeeRuleCompositeList(fromBundle, code));
@@ -62,6 +78,9 @@ public class PublishSnapshotViewService {
                                                           String feeCode) {
         fromBundle = normalizeBundle(fromBundle);
         toBundle = normalizeBundle(toBundle);
+        if (isSnapshotEquivalent(fromBundle, toBundle)) {
+            return new ArrayList<>();
+        }
         Set<String> ruleCodes = new TreeSet<>();
         if (StringUtils.isEmpty(feeCode)) {
             ruleCodes.addAll(fromBundle.rulesByCode.keySet());
@@ -186,49 +205,74 @@ public class PublishSnapshotViewService {
     }
 
     public int countFeeRuleChanges(PublishSnapshotBundle fromBundle, PublishSnapshotBundle toBundle, String feeCode) {
-        Set<String> ruleCodes = new TreeSet<>();
-        if (fromBundle != null) ruleCodes.addAll(fromBundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>()));
-        if (toBundle != null) ruleCodes.addAll(toBundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>()));
-        int count = 0;
-        for (String ruleCode : ruleCodes) {
-            if (!"UNCHANGED".equals(determineChangeType(buildRuleComposite(fromBundle, ruleCode), buildRuleComposite(toBundle, ruleCode)))) {
-                count++;
-            }
-        }
-        return count;
+        return buildChangedRuleList(fromBundle, toBundle, feeCode).size();
     }
 
     public int countFeeVariableChanges(PublishSnapshotBundle fromBundle, PublishSnapshotBundle toBundle, String feeCode) {
+        return buildChangedVariableList(fromBundle, toBundle, feeCode).size();
+    }
+
+    public List<Map<String, Object>> buildChangedRuleList(PublishSnapshotBundle fromBundle, PublishSnapshotBundle toBundle, String feeCode) {
+        Set<String> ruleCodes = new TreeSet<>();
+        if (fromBundle != null) ruleCodes.addAll(fromBundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>()));
+        if (toBundle != null) ruleCodes.addAll(toBundle.feeRuleCodes.getOrDefault(feeCode, new TreeSet<>()));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (String ruleCode : ruleCodes) {
+            Map<String, Object> fromRule = fromBundle == null ? null : fromBundle.rulesByCode.get(ruleCode);
+            Map<String, Object> toRule = toBundle == null ? null : toBundle.rulesByCode.get(ruleCode);
+            String changeType = determineChangeType(buildRuleComposite(fromBundle, ruleCode), buildRuleComposite(toBundle, ruleCode));
+            if ("UNCHANGED".equals(changeType)) {
+                continue;
+            }
+            LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+            item.put("ruleCode", ruleCode);
+            item.put("ruleName", firstNonBlank(
+                    stringValue(firstNonNull(fromRule == null ? null : fromRule.get("ruleName"), toRule == null ? null : toRule.get("ruleName"))),
+                    ruleCode));
+            item.put("changeType", changeType);
+            item.put("changedFields", compareChangedFields(fromRule, toRule));
+            result.add(item);
+        }
+        return result;
+    }
+
+    public List<Map<String, Object>> buildChangedVariableList(PublishSnapshotBundle fromBundle, PublishSnapshotBundle toBundle, String feeCode) {
         Set<String> variableCodes = new TreeSet<>();
         if (fromBundle != null)
             variableCodes.addAll(fromBundle.feeReferencedVariables.getOrDefault(feeCode, new TreeSet<>()));
         if (toBundle != null)
             variableCodes.addAll(toBundle.feeReferencedVariables.getOrDefault(feeCode, new TreeSet<>()));
-        int count = 0;
+        List<Map<String, Object>> result = new ArrayList<>();
         for (String variableCode : variableCodes) {
-            String fromJson = PublishJsonSupport.canonicalJson(fromBundle == null ? null : fromBundle.variablesByCode.get(variableCode));
-            String toJson = PublishJsonSupport.canonicalJson(toBundle == null ? null : toBundle.variablesByCode.get(variableCode));
-            if (!Objects.equals(fromJson, toJson)) {
-                count++;
+            Map<String, Object> fromVariable = fromBundle == null ? null : fromBundle.variablesByCode.get(variableCode);
+            Map<String, Object> toVariable = toBundle == null ? null : toBundle.variablesByCode.get(variableCode);
+            if (!isEquivalentValue(fromVariable, toVariable)) {
+                LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+                item.put("variableCode", variableCode);
+                item.put("variableName", firstNonBlank(
+                        stringValue(firstNonNull(fromVariable == null ? null : fromVariable.get("variableName"), toVariable == null ? null : toVariable.get("variableName"))),
+                        variableCode));
+                item.put("changeType", determineChangeType(fromVariable, toVariable));
+                item.put("changedFields", compareChangedFields(fromVariable, toVariable));
+                result.add(item);
             }
         }
-        return count;
+        return result;
     }
 
     public int countCollectionDiff(List<Map<String, Object>> fromList, List<Map<String, Object>> toList) {
-        Set<String> fromSet = normalizeCollection(fromList).stream()
-                .map(PublishJsonSupport::canonicalJson).collect(Collectors.toSet());
-        Set<String> toSet = normalizeCollection(toList).stream()
-                .map(PublishJsonSupport::canonicalJson).collect(Collectors.toSet());
-        Set<String> merged = new LinkedHashSet<>(fromSet);
-        merged.addAll(toSet);
-        int sameCount = 0;
-        for (String item : merged) {
-            if (fromSet.contains(item) && toSet.contains(item)) {
-                sameCount++;
+        List<Map<String, Object>> normalizedFrom = normalizeCollection(fromList);
+        List<Map<String, Object>> normalizedTo = normalizeCollection(toList);
+        int diffCount = 0;
+        int maxSize = Math.max(normalizedFrom.size(), normalizedTo.size());
+        for (int index = 0; index < maxSize; index++) {
+            Map<String, Object> fromItem = index < normalizedFrom.size() ? normalizedFrom.get(index) : null;
+            Map<String, Object> toItem = index < normalizedTo.size() ? normalizedTo.get(index) : null;
+            if (!isEquivalentValue(fromItem, toItem)) {
+                diffCount++;
             }
         }
-        return merged.size() - sameCount;
+        return diffCount;
     }
 
     public List<Map<String, Object>> buildFeeList(PublishSnapshotBundle bundle, String feeCode) {
@@ -299,19 +343,21 @@ public class PublishSnapshotViewService {
         if (toObject == null) {
             return "REMOVED";
         }
-        return Objects.equals(PublishJsonSupport.canonicalJson(fromObject),
-                PublishJsonSupport.canonicalJson(toObject)) ? "UNCHANGED" : "CHANGED";
+        return isEquivalentValue(fromObject, toObject) ? "UNCHANGED" : "CHANGED";
     }
 
     private List<String> compareChangedFields(Map<String, Object> fromObject, Map<String, Object> toObject) {
+        if (fromObject == null || toObject == null) {
+            return Collections.emptyList();
+        }
         Set<String> fields = new LinkedHashSet<>();
-        if (fromObject != null) fields.addAll(fromObject.keySet());
-        if (toObject != null) fields.addAll(toObject.keySet());
+        fields.addAll(fromObject.keySet());
+        fields.retainAll(toObject.keySet());
         List<String> changed = new ArrayList<>();
         for (String field : fields) {
             Object fromValue = fromObject == null ? null : fromObject.get(field);
             Object toValue = toObject == null ? null : toObject.get(field);
-            if (!Objects.equals(PublishJsonSupport.canonicalJson(fromValue), PublishJsonSupport.canonicalJson(toValue))) {
+            if (!isEquivalentValue(fromValue, toValue)) {
                 changed.add(field);
             }
         }
@@ -350,6 +396,49 @@ public class PublishSnapshotViewService {
             return Collections.emptyList();
         }
         return items.stream().sorted(Comparator.comparing(PublishJsonSupport::canonicalJson)).collect(Collectors.toList());
+    }
+
+    private boolean isEquivalentValue(Object fromValue, Object toValue) {
+        if (fromValue == null && toValue == null) {
+            return true;
+        }
+        if (fromValue == null || toValue == null) {
+            return false;
+        }
+        if (fromValue instanceof Map && toValue instanceof Map) {
+            Map<?, ?> fromMap = (Map<?, ?>) fromValue;
+            Map<?, ?> toMap = (Map<?, ?>) toValue;
+            Set<String> comparableKeys = new TreeSet<>();
+            for (Object key : fromMap.keySet()) {
+                if (key != null && toMap.containsKey(key)) {
+                    comparableKeys.add(String.valueOf(key));
+                }
+            }
+            if (comparableKeys.isEmpty()) {
+                return fromMap.isEmpty() && toMap.isEmpty();
+            }
+            for (String key : comparableKeys) {
+                if (!isEquivalentValue(fromMap.get(key), toMap.get(key))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (fromValue instanceof Collection && toValue instanceof Collection) {
+            List<?> fromList = new ArrayList<>((Collection<?>) fromValue);
+            List<?> toList = new ArrayList<>((Collection<?>) toValue);
+            if (fromList.size() != toList.size()) {
+                return false;
+            }
+            for (int index = 0; index < fromList.size(); index++) {
+                if (!isEquivalentValue(fromList.get(index), toList.get(index))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return Objects.equals(PublishJsonSupport.canonicalJson(fromValue),
+                PublishJsonSupport.canonicalJson(toValue));
     }
 
     private Object firstNonNull(Object first, Object second) {
