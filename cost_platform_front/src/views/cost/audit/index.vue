@@ -1,6 +1,6 @@
 <template>
   <div class="app-container audit-page">
-    <section class="audit-page__hero">
+    <section v-show="!isCompactMode" class="audit-page__hero">
       <div>
         <div class="audit-page__eyebrow">审计追踪</div>
         <h2 class="audit-page__title">审计台账</h2>
@@ -9,7 +9,7 @@
       <el-tag type="info">统一记录发布、运行、账期和缓存治理动作，便于问题追溯与复盘</el-tag>
     </section>
 
-    <section class="audit-page__metrics">
+    <section v-show="!isCompactMode" class="audit-page__metrics">
       <div v-for="item in metricItems" :key="item.label" class="audit-page__metric-card">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
@@ -105,9 +105,12 @@
 import JsonEditor from '@/components/cost/JsonEditor.vue'
 import { listAudit, getAuditStats } from '@/api/cost/governance'
 import { optionselectScene } from '@/api/cost/scene'
+import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)

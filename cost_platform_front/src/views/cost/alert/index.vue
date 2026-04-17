@@ -1,6 +1,6 @@
 <template>
   <div class="app-container alert-page">
-    <section class="alert-page__hero">
+    <section v-show="!isCompactMode" class="alert-page__hero">
       <div>
         <div class="alert-page__eyebrow">运行告警</div>
         <h2 class="alert-page__title">告警中心</h2>
@@ -11,7 +11,7 @@
       <el-tag type="danger">支持按场景、账期、等级与任务维度治理告警</el-tag>
     </section>
 
-    <section class="alert-page__metrics">
+    <section v-show="!isCompactMode" class="alert-page__metrics">
       <div v-for="item in metricItems" :key="item.label" class="alert-page__metric-card">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
@@ -19,7 +19,7 @@
       </div>
     </section>
 
-    <section class="alert-page__panel">
+    <section v-show="!isCompactMode" class="alert-page__panel">
       <div class="alert-page__section-head">
         <div>
           <h3>通知通道</h3>
@@ -53,7 +53,7 @@
       />
     </section>
 
-    <section class="alert-page__overview-grid">
+    <section v-show="!isCompactMode" class="alert-page__overview-grid">
       <div class="alert-page__panel">
         <div class="alert-page__section-head">
           <div>
@@ -339,12 +339,15 @@ import {
 } from '@/api/cost/governance'
 import {getRemoteDictOptionMap} from '@/utils/dictRemote'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import useSettingsStore from '@/store/modules/settings'
 import {resolveWorkingCostSceneId} from '@/utils/costSceneContext'
 import {resolveWorkingBillMonth, syncCostWorkContext} from '@/utils/costWorkContext'
 
 const route = useRoute()
 const router = useRouter()
 const {proxy} = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)

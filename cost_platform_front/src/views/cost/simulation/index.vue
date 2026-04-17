@@ -1,6 +1,6 @@
 <template>
   <div class="app-container run-page">
-    <section class="run-page__hero">
+    <section v-show="!isCompactMode" class="run-page__hero">
       <div>
         <div class="run-page__eyebrow">试算验证</div>
         <h2 class="run-page__title">试算中心</h2>
@@ -9,7 +9,7 @@
       <el-tag type="success">输入示例会按当前场景和指定版本或当前配置自动生成，便于快速开始试算</el-tag>
     </section>
 
-    <section class="run-page__metrics">
+    <section v-show="!isCompactMode" class="run-page__metrics">
       <div v-for="item in metricItems" :key="item.label" class="run-page__metric-card">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
@@ -208,12 +208,15 @@
 import JsonEditor from '@/components/cost/JsonEditor.vue'
 import { executeSimulation, executeSimulationBatch, getRunInputTemplate, getSimulationDetail, getSimulationStats, listSimulation, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
+import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)

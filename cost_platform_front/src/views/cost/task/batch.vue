@@ -1,6 +1,6 @@
 <template>
   <div class="app-container batch-page">
-    <section class="batch-page__hero">
+    <section v-show="!isCompactMode" class="batch-page__hero">
       <div>
         <div class="batch-page__eyebrow">导入批次</div>
         <h2 class="batch-page__title">导入批次台账</h2>
@@ -118,12 +118,15 @@
 <script setup name="CostTaskBatchLedger">
 import { getTaskInputBatchDetail, listTaskInputBatch } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
+import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 
 const router = useRouter()
 const route = useRoute()
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)

@@ -1,6 +1,6 @@
 <template>
   <div class="app-container formula-lab">
-    <section class="formula-lab__hero">
+    <section v-show="!isCompactMode" class="formula-lab__hero">
       <div>
         <div class="formula-lab__eyebrow">公式资产工作台</div>
         <h2 class="formula-lab__title">公式实验室</h2>
@@ -11,7 +11,7 @@
       <el-tag type="success">支持按场景组织公式配置，并自动生成中文说明与标准表达式</el-tag>
     </section>
 
-    <section class="formula-lab__metrics">
+    <section v-show="!isCompactMode" class="formula-lab__metrics">
       <div v-for="item in metricItems" :key="item.label" class="formula-lab__metric-card">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
@@ -380,6 +380,7 @@ import {
   updateFormula
 } from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
+import useSettingsStore from '@/store/modules/settings'
 import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { optionselectVariable } from '@/api/cost/variable'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
@@ -387,6 +388,8 @@ import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)
