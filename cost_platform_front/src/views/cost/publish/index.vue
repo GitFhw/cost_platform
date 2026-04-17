@@ -1,15 +1,19 @@
-﻿
+
 <template>
   <div class="app-container publish-center">
     <section v-show="!isCompactMode" class="publish-center__hero">
       <div>
         <div class="publish-center__eyebrow">发布治理</div>
-        <h2 class="publish-center__title">发布中心</h2>
+        <h2 class="publish-center__title">发布中心 · 跨场景总台</h2>
         <p class="publish-center__subtitle">
-          统一管理场景版本发布、生效切换、差异对比和历史版本台账，确保运行始终基于明确版本执行。
+          正式发布、生效切换、回滚、审计和跨版本差异统一在这里执行；场景中心只保留影响预览和版本观察，避免配置维护页直接误发布。
         </p>
       </div>
-      <el-tag type="success">支持发布检查、版本台账、生效切换、回退和差异对比</el-tag>
+      <div class="publish-center__hero-side">
+        <el-tag type="success">唯一正式发布入口</el-tag>
+        <el-tag type="warning" effect="plain">检查先行</el-tag>
+        <el-tag type="info" effect="plain">全链路留痕</el-tag>
+      </div>
     </section>
 
     <section v-show="!isCompactMode" class="publish-center__metrics">
@@ -20,148 +24,155 @@
       </div>
     </section>
 
-    <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
-      <el-form-item label="所属场景" prop="sceneId">
-        <el-select v-model="queryParams.sceneId" clearable filterable placeholder="请选择场景" style="width: 240px" @change="handleQuerySceneChange">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="业务域" prop="businessDomain">
-        <el-select v-model="queryParams.businessDomain" clearable placeholder="请选择业务域" style="width: 180px">
-          <el-option v-for="item in businessDomainOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="版本状态" prop="versionStatus">
-        <el-select v-model="queryParams.versionStatus" clearable placeholder="请选择版本状态" style="width: 180px">
-          <el-option v-for="item in versionStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="版本号" prop="versionNo">
-        <el-input v-model="queryParams.versionNo" clearable style="width: 180px" @keyup.enter="handleQuery" />
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-        <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-      </el-form-item>
-    </el-form>
+    <section class="publish-center__console">
+      <el-tabs v-model="publishTab" class="publish-center__tabs">
+        <el-tab-pane name="release">
+          <template #label>
+            <span class="publish-center__tab-label">发布执行</span>
+          </template>
 
-    <section class="publish-center__workspace">
-      <div class="publish-center__precheck">
-        <div class="publish-center__section-head">
-          <div>
-            <h3>发布前检查</h3>
-            <p>先做阻断校验，再生成版本。当前场景首发时建议直接设为生效。</p>
-          </div>
-          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
-        </div>
-
-        <el-form :model="publishForm" label-width="92px">
-          <el-form-item label="发布场景" required>
-            <el-select v-model="publishForm.sceneId" filterable placeholder="请选择要发布的场景" style="width: 100%" @change="handlePublishSceneChange">
-              <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="发布说明" required>
-            <el-input v-model="publishForm.publishDesc" type="textarea" :rows="3" maxlength="1000" show-word-limit placeholder="请输入本次发布说明、影响范围与业务口径摘要" />
-          </el-form-item>
-          <el-form-item label="发布动作">
-            <el-checkbox v-model="publishForm.activateNow">生成版本后立即设为生效</el-checkbox>
-          </el-form-item>
-        </el-form>
-
-        <div class="publish-center__action-row">
-          <el-button type="primary" icon="CircleCheck" @click="handlePrecheck">发布前检查</el-button>
-          <el-button type="success" icon="Promotion" @click="handlePublish" v-hasPermi="['cost:publish:add']">生成版本</el-button>
-        </div>
-
-        <div v-if="precheck.sceneId" class="publish-center__precheck-summary">
-          <div class="publish-center__summary-card"><span>阻断项</span><strong>{{ precheck.blockingCount }}</strong></div>
-          <div class="publish-center__summary-card"><span>提示项</span><strong>{{ precheck.warningCount }}</strong></div>
-          <div class="publish-center__summary-card"><span>受影响费用</span><strong>{{ precheck.impactedFeeCount }}</strong></div>
-          <div class="publish-center__summary-card"><span>当前生效版本</span><strong>{{ precheck.activeVersionNo || '暂无' }}</strong></div>
-        </div>
-
-        <el-table v-if="precheck.items?.length" :data="precheck.items" size="small">
-          <el-table-column label="级别" width="100" align="center">
-            <template #default="scope">
-              <el-tag :type="resolveCheckLevelMeta(scope.row.level).type">{{ resolveCheckLevelMeta(scope.row.level).label }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="检查项" prop="title" min-width="160" />
-          <el-table-column label="说明" prop="message" min-width="320" :show-overflow-tooltip="true" />
-        </el-table>
-
-        <div v-if="precheck.impactedFees?.length" class="publish-center__impact">
-          <h4>本次受影响费用</h4>
-          <div class="publish-center__impact-list">
-            <div v-for="item in precheck.impactedFees" :key="item.feeCode" class="publish-center__impact-item">
-              <div class="publish-center__impact-head">
-                <strong>{{ item.feeName || item.feeCode }}</strong>
-                <el-tag size="small" :type="resolveCostChangeTypeMeta(item.changeType).type">
-                  {{ resolveCostChangeTypeMeta(item.changeType).label }}
-                </el-tag>
+          <div class="publish-center__precheck">
+            <div class="publish-center__section-head">
+              <div>
+                <h3>发布执行台</h3>
+                <p>企业级发布入口收敛在这里：先做阻断校验，再生成版本，最后按权限决定是否立即生效。</p>
               </div>
-              <span>{{ item.feeCode }}</span>
-              <div class="publish-center__impact-metrics">
-                <span>规则变化 {{ item.ruleChangeCount || 0 }}</span>
-                <span>变量变化 {{ item.variableChangeCount || 0 }}</span>
-              </div>
-              <div v-if="item.changedVariables?.length" class="publish-center__impact-details">
-                <span class="publish-center__impact-detail-label">涉及变量</span>
-                <small>{{ resolveChangedVariablePreview(item) }}</small>
-              </div>
-              <div v-if="item.changedRules?.length" class="publish-center__impact-details">
-                <span class="publish-center__impact-detail-label">涉及规则</span>
-                <small>{{ resolveChangedRulePreview(item) }}</small>
-              </div>
-              <small>{{ resolveFeeImpactSummary(item) }}</small>
             </div>
+
+            <div v-show="!isCompactMode" class="publish-center__stage-strip">
+              <div class="publish-center__stage-card">
+                <span>STEP 1</span>
+                <strong>选择场景</strong>
+                <small>明确本次发布对应的核算工作场景。</small>
+              </div>
+              <div class="publish-center__stage-card">
+                <span>STEP 2</span>
+                <strong>发布检查</strong>
+                <small>先看阻断、告警、费用和变量影响。</small>
+              </div>
+              <div class="publish-center__stage-card">
+                <span>STEP 3</span>
+                <strong>生成版本</strong>
+                <small>正式写入版本台账，按权限决定是否立即生效。</small>
+              </div>
+            </div>
+
+            <div v-show="!isCompactMode" class="publish-center__boundary">
+              <div>
+                <strong>职责边界</strong>
+                <span>场景中心负责配置维护和发布影响预览；发布中心负责正式版本生成、生效切换、回滚和审计。</span>
+              </div>
+              <el-tag type="primary" effect="plain">职责分离</el-tag>
+            </div>
+
+            <el-form :model="publishForm" label-width="92px" class="publish-center__release-form">
+              <el-form-item label="发布场景" required>
+                <el-select v-model="publishForm.sceneId" filterable placeholder="请选择要发布的场景" style="width: 100%" @change="handlePublishSceneChange">
+                  <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="发布说明" required>
+                <el-input v-model="publishForm.publishDesc" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="请输入本次发布说明、影响范围与业务口径摘要" />
+              </el-form-item>
+              <el-form-item label="发布动作">
+                <el-checkbox v-model="publishForm.activateNow">生成版本后立即设为生效</el-checkbox>
+              </el-form-item>
+            </el-form>
+
+            <div class="publish-center__action-row">
+              <el-button type="primary" icon="CircleCheck" @click="handlePrecheck">发布前检查</el-button>
+              <el-button type="success" icon="Promotion" @click="handlePublish" v-hasPermi="['cost:publish:add']">生成版本</el-button>
+            </div>
+
+            <PublishPrecheckPanel
+              v-if="precheck.sceneId"
+              :data="precheck"
+              :columns="4"
+              :impact-columns="3"
+              show-conclusion
+              show-empty
+              impact-subtitle="发布中心只展示本次发布真正影响到的费用、规则和变量口径。"
+            />
           </div>
-        </div>
-      </div>
+        </el-tab-pane>
 
-      <div class="publish-center__ledger">
-      <div class="publish-center__section-head">
-        <div>
-          <h3>版本台账</h3>
-          <p>查看版本详情、快照对象、差异对比、生效切换与回滚。</p>
-        </div>
-        <el-button plain icon="Histogram" @click="handleOpenAudit" v-hasPermi="['cost:publish:list']">发布审计</el-button>
-      </div>
+        <el-tab-pane name="ledger">
+          <template #label>
+            <span class="publish-center__tab-label">版本台账</span>
+          </template>
 
-        <el-table v-loading="loading" :data="versionList">
-          <el-table-column label="版本号" prop="versionNo" width="150" align="center" />
-          <el-table-column label="场景" min-width="180" align="center">
-            <template #default="scope">{{ scope.row.sceneName }} ({{ scope.row.sceneCode }})</template>
-          </el-table-column>
-          <el-table-column label="状态" width="120" align="center">
-            <template #default="scope">
-              <dict-tag :options="versionStatusOptions" :value="scope.row.versionStatus" />
-            </template>
-          </el-table-column>
-          <el-table-column label="检查结果" width="170" align="center">
-            <template #default="scope">
-              <el-tag :type="resolveValidationMeta(scope.row).tag">{{ resolveValidationMeta(scope.row).label }}</el-tag>
-              <div class="publish-center__validation-note">{{ buildValidationNote(scope.row) }}</div>
-            </template>
-          </el-table-column>
-          <el-table-column label="发布说明" prop="publishDesc" min-width="220" :show-overflow-tooltip="true" />
-          <el-table-column label="发布人" prop="publishedBy" width="120" align="center" />
-          <el-table-column label="发布时间" width="180" align="center">
-            <template #default="scope">{{ parseTime(scope.row.publishedTime) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="320" fixed="right" align="center">
-            <template #default="scope">
-              <el-button link type="primary" icon="View" @click="handleDetail(scope.row)">详情</el-button>
-              <el-button link type="primary" icon="Tickets" @click="handleDiff(scope.row)">差异</el-button>
-              <el-button link type="primary" icon="Select" @click="handleActivate(scope.row)" v-hasPermi="['cost:publish:activate']">设为生效</el-button>
-              <el-button link type="warning" icon="RefreshLeft" @click="handleRollback(scope.row)" v-hasPermi="['cost:publish:rollback']">回滚</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+          <div class="publish-center__ledger">
+            <div class="publish-center__section-head">
+              <div>
+                <h3>跨场景版本台账</h3>
+                <p>统一查看各场景版本详情、快照对象、差异对比、生效切换与回滚。</p>
+              </div>
+              <div class="publish-center__ledger-actions">
+                <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+                <el-button plain icon="Histogram" @click="handleOpenAudit" v-hasPermi="['cost:publish:list']">发布审计</el-button>
+              </div>
+            </div>
 
-        <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
-      </div>
+            <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch" class="publish-center__query">
+              <el-form-item label="所属场景" prop="sceneId">
+                <el-select v-model="queryParams.sceneId" clearable filterable placeholder="请选择场景" style="width: 240px" @change="handleQuerySceneChange">
+                  <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="业务域" prop="businessDomain">
+                <el-select v-model="queryParams.businessDomain" clearable placeholder="请选择业务域" style="width: 180px">
+                  <el-option v-for="item in businessDomainOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="版本状态" prop="versionStatus">
+                <el-select v-model="queryParams.versionStatus" clearable placeholder="请选择版本状态" style="width: 180px">
+                  <el-option v-for="item in versionStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="版本号" prop="versionNo">
+                <el-input v-model="queryParams.versionNo" clearable style="width: 180px" @keyup.enter="handleQuery" />
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+                <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+              </el-form-item>
+            </el-form>
+
+            <el-table v-loading="loading" :data="versionList">
+              <el-table-column label="版本号" prop="versionNo" width="150" align="center" />
+              <el-table-column label="场景" min-width="180" align="center">
+                <template #default="scope">{{ scope.row.sceneName }} ({{ scope.row.sceneCode }})</template>
+              </el-table-column>
+              <el-table-column label="状态" width="120" align="center">
+                <template #default="scope">
+                  <dict-tag :options="versionStatusOptions" :value="scope.row.versionStatus" />
+                </template>
+              </el-table-column>
+              <el-table-column label="检查结果" width="170" align="center">
+                <template #default="scope">
+                  <el-tag :type="resolveValidationMeta(scope.row).tag">{{ resolveValidationMeta(scope.row).label }}</el-tag>
+                  <div class="publish-center__validation-note">{{ buildValidationNote(scope.row) }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="发布说明" prop="publishDesc" min-width="220" :show-overflow-tooltip="true" />
+              <el-table-column label="发布人" prop="publishedBy" width="120" align="center" />
+              <el-table-column label="发布时间" width="180" align="center">
+                <template #default="scope">{{ parseTime(scope.row.publishedTime) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="320" fixed="right" align="center">
+                <template #default="scope">
+                  <el-button link type="primary" icon="View" @click="handleDetail(scope.row)">详情</el-button>
+                  <el-button link type="primary" icon="Tickets" @click="handleDiff(scope.row)">差异</el-button>
+                  <el-button link type="primary" icon="Select" @click="handleActivate(scope.row)" v-hasPermi="['cost:publish:activate']">设为生效</el-button>
+                  <el-button link type="warning" icon="RefreshLeft" @click="handleRollback(scope.row)" v-hasPermi="['cost:publish:rollback']">回滚</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+
+            <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
     </section>
 
     <el-drawer v-model="detailOpen" title="版本详情" size="980px" append-to-body>
@@ -187,36 +198,21 @@
 
         <el-tabs>
           <el-tab-pane label="发布检查">
-            <div class="publish-center__precheck-summary">
-              <div class="publish-center__summary-card"><span>阻断项</span><strong>{{ detailValidationMeta.blockingCount }}</strong></div>
-              <div class="publish-center__summary-card"><span>告警项</span><strong>{{ detailValidationMeta.warningCount }}</strong></div>
-              <div class="publish-center__summary-card"><span>受影响费用</span><strong>{{ detailValidation.impactedFeeCount || (detailValidation.impactedFees || []).length || 0 }}</strong></div>
-              <div class="publish-center__summary-card"><span>发布资格</span><strong>{{ detailValidation.publishable === false ? '阻断' : '可发布' }}</strong></div>
-            </div>
-            <el-table v-if="detailValidation.items?.length" :data="detailValidation.items" size="small">
-              <el-table-column label="级别" width="100" align="center">
-                <template #default="scope">
-                  <el-tag :type="resolveCheckLevelMeta(scope.row.level).type">{{ resolveCheckLevelMeta(scope.row.level).label }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="检查项" prop="title" min-width="180" />
-              <el-table-column label="说明" prop="message" min-width="360" :show-overflow-tooltip="true" />
-            </el-table>
-            <el-empty v-else description="该版本未记录检查明细或检查项为空" />
+            <PublishPrecheckPanel
+              :data="detailValidation"
+              :impact-fees="detailData.impactedFees || detailValidation.impactedFees || []"
+              version-label="发布资格"
+              :empty-version-text="detailValidation.publishable === false ? '阻断' : '可发布'"
+              version-description="该版本发布检查留痕中的最终结论"
+              show-empty
+              impact-subtitle="版本详情中记录的费用影响明细，可用于回看发布当时的业务影响范围。"
+            />
           </el-tab-pane>
           <el-tab-pane label="受影响费用">
-            <el-table :data="detailData.impactedFees || []" size="small">
-              <el-table-column label="费用编码" prop="feeCode" width="160" />
-              <el-table-column label="费用名称" prop="feeName" min-width="180" />
-              <el-table-column label="变化类型" width="120" align="center">
-                <template #default="scope">
-                  <el-tag :type="resolveCostChangeTypeMeta(scope.row.changeType).type">{{ resolveCostChangeTypeMeta(scope.row.changeType).label }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="摘要" min-width="260">
-                <template #default="scope">{{ resolveFeeImpactSummary(scope.row) }}</template>
-              </el-table-column>
-            </el-table>
+            <PublishImpactFeeList
+              :fees="detailData.impactedFees || []"
+              subtitle="按费用主线展示发布快照中记录的规则和变量变化。"
+            />
           </el-tab-pane>
           <el-tab-pane label="快照对象">
             <el-descriptions :column="3" border>
@@ -413,12 +409,14 @@
 import { ElMessageBox } from 'element-plus'
 import JsonEditor from '@/components/cost/JsonEditor.vue'
 import JsonDiffViewer from '@/components/cost/JsonDiffViewer.vue'
+import PublishImpactFeeList from '@/components/cost/publish/PublishImpactFeeList.vue'
+import PublishPrecheckPanel from '@/components/cost/publish/PublishPrecheckPanel.vue'
 import { activatePublishVersion, addPublishVersion, getPublishDiff, getPublishPrecheck, getPublishStats, getPublishVersion, listPublish, rollbackPublishVersion } from '@/api/cost/publish'
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
-import { resolveCheckLevelMeta, resolveCostChangeTypeLabel, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
+import { resolveCostChangeTypeLabel, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
@@ -429,6 +427,7 @@ const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)
+const publishTab = ref('release')
 const total = ref(0)
 const versionList = ref([])
 const sceneOptions = ref([])
@@ -595,6 +594,7 @@ async function handlePublish() {
   }
   await addPublishVersion({ ...publishForm })
   proxy.$modal.msgSuccess('发布版本生成成功')
+  publishTab.value = 'ledger'
   getList()
   handlePrecheck()
 }
@@ -1051,6 +1051,7 @@ getList()
 
 .publish-center__hero,
 .publish-center__metric-card,
+.publish-center__console,
 .publish-center__precheck,
 .publish-center__ledger {
   border: 1px solid var(--el-border-color);
@@ -1061,9 +1062,18 @@ getList()
 .publish-center__hero {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 16px;
   padding: 22px 24px;
   background: color-mix(in srgb, var(--el-color-primary-light-9) 18%, var(--el-bg-color-overlay));
+}
+
+.publish-center__hero-side {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 360px;
 }
 
 .publish-center__eyebrow {
@@ -1107,15 +1117,38 @@ getList()
   color: var(--el-text-color-secondary);
 }
 
-.publish-center__workspace {
-  display: grid;
-  grid-template-columns: 420px minmax(0, 1fr);
-  gap: 16px;
+.publish-center__query {
+  padding: 14px 16px 0;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 16px;
+  background: var(--el-bg-color-overlay);
+  margin-bottom: 16px;
+}
+
+.publish-center__console {
+  padding: 6px 16px 16px;
+}
+
+.publish-center__tabs :deep(.el-tabs__header) {
+  margin: 0 0 16px;
+}
+
+.publish-center__tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+  background-color: var(--el-border-color-lighter);
+}
+
+.publish-center__tab-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  font-weight: 700;
 }
 
 .publish-center__precheck,
 .publish-center__ledger {
-  padding: 16px;
+  padding: 18px;
+  border-color: var(--el-border-color-light);
 }
 
 .publish-center__section-head {
@@ -1137,11 +1170,88 @@ getList()
   font-size: 13px;
 }
 
+.publish-center__ledger-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.publish-center__stage-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.publish-center__stage-card {
+  display: grid;
+  gap: 7px;
+  padding: 14px 16px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--el-color-primary-light-9) 32%, transparent), transparent 58%),
+    var(--el-bg-color-overlay);
+}
+
+.publish-center__stage-card span {
+  color: var(--el-color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.publish-center__stage-card strong {
+  color: var(--el-text-color-primary);
+  font-size: 18px;
+}
+
+.publish-center__stage-card small {
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+
+.publish-center__boundary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--el-color-warning-light-9) 28%, var(--el-bg-color-overlay));
+}
+
+.publish-center__boundary div {
+  display: grid;
+  gap: 4px;
+}
+
+.publish-center__boundary strong {
+  color: var(--el-text-color-primary);
+}
+
+.publish-center__boundary span {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .publish-center__action-row,
 .publish-center__filter-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  margin-bottom: 16px;
+}
+
+.publish-center__release-form {
+  padding: 16px 18px 2px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 14px;
+  background: var(--el-fill-color-blank);
   margin-bottom: 16px;
 }
 
@@ -1316,7 +1426,7 @@ getList()
 
 @media (max-width: 1200px) {
   .publish-center__metrics,
-  .publish-center__workspace,
+  .publish-center__stage-strip,
   .publish-center__compare-head {
     grid-template-columns: 1fr;
   }

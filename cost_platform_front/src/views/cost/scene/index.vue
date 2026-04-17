@@ -76,13 +76,13 @@
       </div>
 
       <el-tabs v-model="publishWorkbenchTab" class="scene-center__publish-tabs">
-        <el-tab-pane label="发布执行" name="publish">
+        <el-tab-pane label="发布预览" name="publish">
           <div class="scene-center__publish-exec">
             <div class="scene-center__publish-exec-grid">
               <div class="scene-center__publish-exec-card">
-                <span>发布资格</span>
-                <strong>{{ scenePrecheck.checked ? (scenePrecheck.publishable === false ? '暂不允许发布' : '允许发布') : '待检查' }}</strong>
-                <small>{{ scenePrecheck.checked ? '当前工作场景发布前检查结论' : '建议先执行发布前检查' }}</small>
+                <span>发布责任</span>
+                <strong>预览不发布</strong>
+                <small>场景中心只看当前场景发布影响，正式生成版本统一进入发布中心。</small>
               </div>
               <div class="scene-center__publish-exec-card">
                 <span>最近校验</span>
@@ -98,21 +98,13 @@
               </div>
             </div>
 
-            <el-form label-width="96px" class="scene-center__publish-form">
-              <el-form-item label="发布说明" required>
-                <el-input
-                  v-model="scenePublishForm.publishDesc"
-                  type="textarea"
-                  :rows="4"
-                  maxlength="1000"
-                  show-word-limit
-                  placeholder="请输入本次发布说明、影响范围与业务口径摘要"
-                />
-              </el-form-item>
-              <el-form-item label="发布动作">
-                <el-checkbox v-model="scenePublishForm.activateNow">生成版本后立即设为生效</el-checkbox>
-              </el-form-item>
-            </el-form>
+            <div class="scene-center__publish-boundary">
+              <div>
+                <strong>企业级发布边界</strong>
+                <span>配置维护和正式发布分离：这里负责发现影响，发布中心负责生成版本、生效切换、回滚和审计留痕。</span>
+              </div>
+              <el-tag type="primary" effect="plain">只读预览</el-tag>
+            </div>
 
             <div class="scene-center__publish-action-row">
               <el-button
@@ -121,111 +113,51 @@
                 :loading="scenePublishLoading"
                 @click="handleScenePrecheck"
               >
-                发布前检查
+                查看发布影响
               </el-button>
               <el-button
                 type="success"
                 icon="Promotion"
-                :loading="scenePublishLoading"
-                @click="handleScenePublish"
+                @click="handleOpenPublishCenter(currentSceneInfo)"
                 v-hasPermi="['cost:publish:add']"
               >
-                发布当前版本
+                去发布中心发布
               </el-button>
             </div>
 
             <el-alert
-              v-if="scenePrecheck.checked && scenePrecheck.publishable === false"
-              title="当前仍有阻断项，处理完成后才能发布当前工作场景。"
+              v-if="!scenePrecheck.checked"
+              title="建议先执行发布影响预览，再进入发布中心正式发布。"
+              type="info"
+              :closable="false"
+              show-icon
+              class="scene-center__publish-exec-alert"
+            />
+            <el-alert
+              v-else-if="scenePrecheck.publishable === false"
+              title="当前仍有阻断项，请先处理配置问题，再进入发布中心发布。"
               type="warning"
               :closable="false"
               show-icon
               class="scene-center__publish-exec-alert"
             />
             <el-alert
-              v-else-if="scenePrecheck.checked"
-              title="当前检查未发现阻断项，可以直接发布当前工作场景版本。"
+              v-else
+              title="当前检查未发现阻断项，可以进入发布中心发起正式发布。"
               type="success"
               :closable="false"
               show-icon
               class="scene-center__publish-exec-alert"
             />
 
-            <div v-if="scenePrecheck.checked" class="scene-center__publish-check-summary">
-              <div class="scene-center__publish-check-card">
-                <span>阻断项</span>
-                <strong>{{ scenePrecheck.blockingCount || 0 }}</strong>
-                <small>必须处理完的发布前置问题</small>
-              </div>
-              <div class="scene-center__publish-check-card">
-                <span>告警项</span>
-                <strong>{{ scenePrecheck.warningCount || 0 }}</strong>
-                <small>不会阻断发布，但建议先确认</small>
-              </div>
-              <div class="scene-center__publish-check-card">
-                <span>受影响费用</span>
-                <strong>{{ scenePrecheck.impactedFeeCount || scenePrecheck.impactedFees?.length || 0 }}</strong>
-                <small>本次发布会影响的费用主线数量</small>
-              </div>
-              <div class="scene-center__publish-check-card">
-                <span>当前生效版本</span>
-                <strong>{{ scenePrecheck.activeVersionNo || publishSummary.activeVersionNo || '未生效' }}</strong>
-                <small>当前工作场景正在使用的正式版本</small>
-              </div>
-            </div>
-
-            <el-table
-              v-if="scenePrecheck.checked && scenePrecheck.items?.length"
-              :data="scenePrecheck.items"
-              size="small"
-              class="scene-center__publish-check-table"
-            >
-              <el-table-column label="级别" width="100" align="center">
-                <template #default="scope">
-                  <el-tag :type="resolveCheckLevelMeta(scope.row.level).type">
-                    {{ resolveCheckLevelMeta(scope.row.level).label }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="检查项" prop="title" min-width="180" />
-              <el-table-column label="说明" prop="message" min-width="360" :show-overflow-tooltip="true" />
-            </el-table>
-            <el-empty
-              v-else-if="scenePrecheck.checked"
-              description="本次发布检查未发现阻断项或告警项。"
+            <PublishPrecheckPanel
+              v-if="scenePrecheck.checked"
+              :data="scenePrecheck"
+              :columns="4"
+              :impact-columns="3"
+              show-empty
+              impact-subtitle="当前场景发布前的费用、规则和变量影响预览；正式发布仍需进入发布中心执行。"
             />
-
-            <div v-if="scenePrecheck.checked && scenePrecheck.impactedFees?.length" class="scene-center__publish-impact">
-              <div class="scene-center__publish-impact-title">受影响费用清单</div>
-              <div class="scene-center__publish-impact-list">
-                <div
-                  v-for="item in scenePrecheck.impactedFees"
-                  :key="item.feeCode"
-                  class="scene-center__publish-impact-card"
-                >
-                  <div class="scene-center__publish-impact-head">
-                    <strong>{{ item.feeName || item.feeCode }}</strong>
-                    <el-tag size="small" :type="resolveCostChangeTypeMeta(item.changeType).type">
-                      {{ resolveCostChangeTypeMeta(item.changeType).label }}
-                    </el-tag>
-                  </div>
-                  <span>{{ item.feeCode }}</span>
-                  <div class="scene-center__publish-impact-metrics">
-                    <span>规则变化 {{ item.ruleChangeCount || 0 }}</span>
-                    <span>变量变化 {{ item.variableChangeCount || 0 }}</span>
-                  </div>
-                  <div v-if="item.changedVariables?.length" class="scene-center__publish-impact-details">
-                    <span class="scene-center__publish-impact-detail-label">涉及变量</span>
-                    <small>{{ resolveChangedVariablePreview(item) }}</small>
-                  </div>
-                  <div v-if="item.changedRules?.length" class="scene-center__publish-impact-details">
-                    <span class="scene-center__publish-impact-detail-label">涉及规则</span>
-                    <small>{{ resolveChangedRulePreview(item) }}</small>
-                  </div>
-                  <small>{{ resolveFeeImpactSummary(item) }}</small>
-                </div>
-              </div>
-            </div>
           </div>
         </el-tab-pane>
 
@@ -762,12 +694,13 @@
 import { ElMessageBox } from 'element-plus'
 import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import JsonDiffViewer from '@/components/cost/JsonDiffViewer.vue'
-import { addPublishVersion, getPublishDiff, getPublishPrecheck, listPublish } from '@/api/cost/publish'
+import PublishPrecheckPanel from '@/components/cost/publish/PublishPrecheckPanel.vue'
+import { getPublishDiff, getPublishPrecheck, listPublish } from '@/api/cost/publish'
 import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listScene, updateScene } from '@/api/cost/scene'
 import { deptTreeSelect } from '@/api/system/user'
 import useSettingsStore from '@/store/modules/settings'
 import { getCostSceneContextId, setCostSceneContextId } from '@/utils/costSceneContext'
-import { resolveCheckLevelMeta, resolveCostChangeTypeLabel, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
+import { resolveCostChangeTypeLabel } from '@/utils/costDisplayLabels'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { formatLegacyOrgLabel } from '@/utils/costOptionLabel'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
@@ -809,10 +742,6 @@ const scenePrecheck = ref(createEmptyScenePrecheck())
 const sceneCompareForm = reactive({
   fromVersionId: undefined,
   toVersionId: undefined
-})
-const scenePublishForm = reactive({
-  publishDesc: '',
-  activateNow: false
 })
 const statistics = reactive({
   sceneCount: 0,
@@ -1225,8 +1154,6 @@ async function loadCurrentScenePublishSummary(scene) {
     resetSceneWorkbench()
     return
   }
-  scenePublishForm.publishDesc = ''
-  scenePublishForm.activateNow = false
   sceneVersionLoading.value = true
   try {
     const [governance, publishResponse, precheckResponse] = await Promise.all([
@@ -1331,8 +1258,6 @@ function resetSceneWorkbench() {
   sceneCompareForm.toVersionId = undefined
   sceneCompareData.value = createEmptySceneCompareData()
   scenePrecheck.value = createEmptyScenePrecheck()
-  scenePublishForm.publishDesc = ''
-  scenePublishForm.activateNow = false
 }
 
 function initializeSceneCompare(rows = []) {
@@ -1389,40 +1314,6 @@ async function handleScenePrecheck() {
   try {
     const response = await getPublishPrecheck(currentSceneInfo.value.sceneId)
     scenePrecheck.value = normalizeScenePrecheck(response?.data)
-    if (scenePrecheck.value.suggestActivateNow) {
-      scenePublishForm.activateNow = true
-    }
-  } finally {
-    scenePublishLoading.value = false
-  }
-}
-
-async function handleScenePublish() {
-  if (!currentSceneInfo.value.sceneId) {
-    proxy.$modal.msgWarning('请先设置当前工作场景')
-    return
-  }
-  if (!scenePublishForm.publishDesc) {
-    proxy.$modal.msgWarning('请先填写发布说明')
-    return
-  }
-  await handleScenePrecheck()
-  if (scenePrecheck.value.publishable === false) {
-    proxy.$modal.msgWarning('当前仍存在阻断项，请先处理后再发布')
-    return
-  }
-
-  scenePublishLoading.value = true
-  try {
-    await addPublishVersion({
-      sceneId: currentSceneInfo.value.sceneId,
-      publishDesc: scenePublishForm.publishDesc,
-      activateNow: scenePublishForm.activateNow
-    })
-    proxy.$modal.msgSuccess('当前场景版本发布成功')
-    scenePublishForm.publishDesc = ''
-    publishWorkbenchTab.value = 'ledger'
-    await getList()
   } finally {
     scenePublishLoading.value = false
   }
@@ -1808,6 +1699,32 @@ getList()
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.scene-center__publish-boundary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--el-color-warning-light-9) 28%, var(--el-bg-color-overlay));
+}
+
+.scene-center__publish-boundary div {
+  display: grid;
+  gap: 5px;
+}
+
+.scene-center__publish-boundary strong {
+  color: var(--el-text-color-primary);
+}
+
+.scene-center__publish-boundary span {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .scene-center__publish-exec-alert,
