@@ -1,6 +1,6 @@
 <template>
   <div class="app-container governance-page">
-    <section class="governance-page__hero">
+    <section v-show="!isCompactMode" class="governance-page__hero">
       <div>
         <div class="governance-page__eyebrow">账期治理</div>
         <h2 class="governance-page__title">账期治理</h2>
@@ -11,7 +11,7 @@
       <el-tag type="warning">支持账期封存、重算申请、审批和执行跟踪</el-tag>
     </section>
 
-    <section class="governance-page__metrics">
+    <section v-show="!isCompactMode" class="governance-page__metrics">
       <div v-for="item in metricItems" :key="item.label" class="governance-page__metric-card">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
@@ -278,11 +278,14 @@ import {
   listRecalc,
   sealPeriod
 } from '@/api/cost/governance'
+import useSettingsStore from '@/store/modules/settings'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)

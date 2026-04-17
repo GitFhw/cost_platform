@@ -1,6 +1,6 @@
 <template>
   <div class="app-container run-page">
-    <section class="run-page__hero">
+    <section v-show="!isCompactMode" class="run-page__hero">
       <div>
         <div class="run-page__eyebrow">正式核算</div>
         <h2 class="run-page__title">正式核算与批量任务</h2>
@@ -14,7 +14,7 @@
       </div>
     </section>
 
-    <section class="run-page__metrics">
+    <section v-show="!isCompactMode" class="run-page__metrics">
       <div v-for="item in metricItems" :key="item.label" class="run-page__metric-card">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
@@ -22,7 +22,7 @@
       </div>
     </section>
 
-    <section class="run-page__overview-grid">
+    <section v-show="!isCompactMode" class="run-page__overview-grid">
       <div class="run-page__panel">
         <div class="run-page__section-head">
           <div>
@@ -731,6 +731,7 @@ import {
   submitTask
 } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
+import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
@@ -739,6 +740,8 @@ import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 const route = useRoute()
 const router = useRouter()
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)

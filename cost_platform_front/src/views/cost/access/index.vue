@@ -1,6 +1,6 @@
 <template>
   <div class="app-container access-page">
-    <section class="access-page__hero">
+    <section v-show="!isCompactMode" class="access-page__hero">
       <div>
         <div class="access-page__eyebrow">数据接入</div>
         <h2>数据接入与导入工作台</h2>
@@ -12,7 +12,7 @@
       </div>
     </section>
 
-    <section class="access-page__metrics">
+    <section v-show="!isCompactMode" class="access-page__metrics">
       <div v-for="item in metricItems" :key="item.label" class="access-page__metric">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
@@ -293,6 +293,7 @@ import { addAccessProfile, createInputBatchByAccessProfile, getAccessProfile, op
 import { optionselectFee } from '@/api/cost/fee'
 import { calculateFee, createTaskInputBatch, getFeeRunInputTemplate, listVersionOptions, previewBuiltInput } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
+import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
@@ -301,6 +302,8 @@ import { safeFormatJson } from '@/utils/jsonTools'
 const route = useRoute()
 const router = useRouter()
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const sceneOptions = ref([])
 const versionOptions = ref([])

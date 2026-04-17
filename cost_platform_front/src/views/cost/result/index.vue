@@ -1,6 +1,6 @@
 <template>
   <div class="app-container result-page">
-    <section class="result-page__hero">
+    <section v-show="!isCompactMode" class="result-page__hero">
       <div>
         <div class="result-page__eyebrow">结果追溯</div>
         <h2 class="result-page__title">结果台账与追溯解释</h2>
@@ -11,7 +11,7 @@
       <el-tag type="success">支持结果查询、差异定位和过程解释联动查看</el-tag>
     </section>
 
-    <section class="result-page__metrics">
+    <section v-show="!isCompactMode" class="result-page__metrics">
       <div v-for="item in metricItems" :key="item.label" class="result-page__metric-card">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
@@ -198,6 +198,7 @@
 import JsonEditor from '@/components/cost/JsonEditor.vue'
 import { getResultDetail, getResultStats, getTraceDetail, listResult, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
+import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
@@ -205,6 +206,8 @@ import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
 const { proxy } = getCurrentInstance()
+const settingsStore = useSettingsStore()
+const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
 const loading = ref(false)
 const showSearch = ref(true)
