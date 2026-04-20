@@ -215,6 +215,18 @@
         </div>
         <div class="simulation-page__action-row">
           <span class="simulation-page__panel-badge">{{ activeResultBadge }}</span>
+          <el-dropdown trigger="click" @command="handleResultExportCommand">
+            <el-button type="primary" plain icon="Download">导出结果</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="evidence-json">试算证据包 JSON</el-dropdown-item>
+                <el-dropdown-item command="charge-excel" :disabled="!resultChargeRows.length">计费明细 Excel</el-dropdown-item>
+                <el-dropdown-item command="copy-summary">复制试算摘要</el-dropdown-item>
+                <el-dropdown-item command="summary-txt">导出试算摘要 TXT</el-dropdown-item>
+                <el-dropdown-item command="report-html">试算报告 HTML</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button @click="openActiveDetailDrawer">查看原始 JSON</el-button>
         </div>
       </div>
@@ -328,9 +340,20 @@
           <h3>批量回归摘要</h3>
           <p>批量试算只服务当前回归确认。需要长期跟踪或补偿执行时，再进入任务中心做正式治理。</p>
         </div>
-        <span class="simulation-page__panel-badge simulation-page__panel-badge--warning">
-          成功率 {{ batchSuccessRate }}
-        </span>
+        <div class="simulation-page__action-row">
+          <span class="simulation-page__panel-badge simulation-page__panel-badge--warning">
+            成功率 {{ batchSuccessRate }}
+          </span>
+          <el-dropdown trigger="click" @command="handleResultExportCommand">
+            <el-button plain icon="Download">导出批量</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="batch-summary-excel">批量回归摘要 Excel</el-dropdown-item>
+                <el-dropdown-item command="batch-failures-excel" :disabled="!batchFailedRecords.length">批量失败清单 Excel</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </div>
 
       <div class="simulation-page__summary-grid simulation-page__summary-grid--batch">
@@ -737,6 +760,7 @@ const resultSummaryItems = computed(() => [
   }
 ])
 const batchResultRecords = computed(() => normalizeArray(batchResult.value.records))
+const batchFailedRecords = computed(() => batchResultRecords.value.filter(isFailedSimulationRecord))
 const showBatchSummary = computed(() => Number(batchResult.value.totalCount || 0) > 0)
 const batchSuccessRate = computed(() => {
   const totalCount = Number(batchResult.value.totalCount || 0)
@@ -1003,6 +1027,307 @@ function openActiveDetailDrawer() {
     return
   }
   detailDrawerOpen.value = true
+}
+
+async function handleResultExportCommand(command) {
+  switch (command) {
+    case 'evidence-json':
+      exportSimulationEvidenceJson()
+      break
+    case 'charge-excel':
+      exportSimulationChargeExcel()
+      break
+    case 'copy-summary':
+      await copySimulationSummary()
+      break
+    case 'summary-txt':
+      exportSimulationSummaryTxt()
+      break
+    case 'report-html':
+      exportSimulationReportHtml()
+      break
+    case 'batch-summary-excel':
+      exportBatchSummaryExcel()
+      break
+    case 'batch-failures-excel':
+      exportBatchFailuresExcel()
+      break
+    default:
+      break
+  }
+}
+
+function exportSimulationEvidenceJson() {
+  if (!ensureActiveSimulationResult()) {
+    return
+  }
+  downloadTextFile(
+    createExportFileName('试算证据包', 'json'),
+    JSON.stringify(buildSimulationEvidencePayload(), null, 2),
+    'application/json;charset=utf-8'
+  )
+  proxy.$modal.msgSuccess('已导出试算证据包 JSON')
+}
+
+function exportSimulationChargeExcel() {
+  if (!ensureActiveSimulationResult()) {
+    return
+  }
+  if (!resultChargeRows.value.length) {
+    proxy.$modal.msgWarning('当前试算结果没有可导出的计费明细')
+    return
+  }
+  proxy.download(
+    'cost/run/simulation/charge-export',
+    {
+      simulationId: activeDetailRecord.value.simulationId
+    },
+    createExportFileName('试算计费明细', 'xlsx')
+  )
+}
+
+async function copySimulationSummary() {
+  if (!ensureActiveSimulationResult()) {
+    return
+  }
+  try {
+    await copyTextToClipboard(buildSimulationSummaryText())
+    proxy.$modal.msgSuccess('已复制试算摘要')
+  } catch (error) {
+    proxy.$modal.msgError('复制试算摘要失败，请改用“导出试算摘要 TXT”')
+  }
+}
+
+function exportSimulationSummaryTxt() {
+  if (!ensureActiveSimulationResult()) {
+    return
+  }
+  downloadTextFile(
+    createExportFileName('试算摘要', 'txt'),
+    buildSimulationSummaryText(),
+    'text/plain;charset=utf-8'
+  )
+  proxy.$modal.msgSuccess('已导出试算摘要 TXT')
+}
+
+function exportSimulationReportHtml() {
+  if (!ensureActiveSimulationResult()) {
+    return
+  }
+  downloadTextFile(
+    createExportFileName('试算报告', 'html'),
+    buildSimulationReportHtml(),
+    'text/html;charset=utf-8'
+  )
+  proxy.$modal.msgSuccess('已导出试算报告 HTML')
+}
+
+function exportBatchSummaryExcel() {
+  if (!showBatchSummary.value) {
+    proxy.$modal.msgWarning('当前还没有可导出的批量回归摘要')
+    return
+  }
+  const simulationIds = resolveBatchExportIds(false)
+  if (!simulationIds) {
+    proxy.$modal.msgWarning('当前批量回归没有可导出的试算记录')
+    return
+  }
+  proxy.download(
+    'cost/run/simulation/batch-export',
+    {
+      simulationIds,
+      failedOnly: false
+    },
+    createBatchExportFileName('批量回归摘要', 'xlsx')
+  )
+}
+
+function exportBatchFailuresExcel() {
+  if (!batchFailedRecords.value.length) {
+    proxy.$modal.msgWarning('当前批量回归没有失败记录')
+    return
+  }
+  const simulationIds = resolveBatchExportIds(true)
+  if (!simulationIds) {
+    proxy.$modal.msgWarning('当前失败记录没有可导出的试算ID')
+    return
+  }
+  proxy.download(
+    'cost/run/simulation/batch-export',
+    {
+      simulationIds,
+      failedOnly: true
+    },
+    createBatchExportFileName('批量失败清单', 'xlsx')
+  )
+}
+
+function ensureActiveSimulationResult() {
+  if (!activeDetailRecord.value.simulationId) {
+    proxy.$modal.msgWarning('当前还没有可导出的试算结果')
+    return false
+  }
+  return true
+}
+
+function buildSimulationEvidencePayload() {
+  return {
+    exportMeta: {
+      exportType: 'SIMULATION_EVIDENCE',
+      exportName: '试算证据包',
+      exportTime: formatExportDateTime(new Date()),
+      resultSource: activeResultSourceLabel.value
+    },
+    context: buildSimulationContext(),
+    record: activeDetailRecord.value,
+    summary: buildSimulationSummaryObject(),
+    tables: {
+      charges: resultChargeRows.value,
+      variables: resultVariableRows.value,
+      policies: resultPolicyRows.value,
+      timeline: timelineItems.value
+    },
+    raw: {
+      input: activeDetail.value.input,
+      variables: activeDetail.value.variables,
+      result: activeDetail.value.result,
+      explain: activeDetail.value.explain
+    }
+  }
+}
+
+function buildSimulationContext() {
+  const record = activeDetailRecord.value
+  return {
+    sceneId: record.sceneId || queryParams.sceneId || null,
+    sceneCode: record.sceneCode || activeSceneOption.value?.sceneCode || '',
+    sceneName: record.sceneName || activeSceneOption.value?.sceneName || '',
+    versionId: record.versionId || queryParams.versionId || null,
+    versionNo: record.versionNo || activeVersionOption.value?.versionNo || '按当前配置',
+    billMonth: record.billMonth || queryParams.billMonth || ''
+  }
+}
+
+function buildSimulationSummaryObject() {
+  return {
+    totalAmount: resolveAmountTotal(activeDetail.value.result),
+    totalAmountText: formatAmount(resolveAmountTotal(activeDetail.value.result)),
+    chargeLineCount: resultChargeRows.value.length,
+    variableCount: resultVariableRows.value.length,
+    matchedFeeCount: matchedFeeRows.value.length || resultChargeRows.value.length,
+    policyCount: resultPolicyRows.value.length,
+    timelineStepCount: timelineItems.value.length
+  }
+}
+
+function buildSimulationSummaryText() {
+  const record = activeDetailRecord.value
+  const context = buildSimulationContext()
+  const lines = [
+    '试算摘要',
+    `生成时间：${formatExportDateTime(new Date())}`,
+    `结果来源：${activeResultSourceLabel.value}`,
+    `试算编号：${record.simulationNo || '-'}`,
+    `场景：${context.sceneName || '-'} (${context.sceneCode || '-'})`,
+    `版本：${context.versionNo || '-'}`,
+    `账期：${context.billMonth || '-'}`,
+    '',
+    '结果概览：'
+  ]
+  resultSummaryItems.value.forEach(item => {
+    lines.push(`${item.label}：${item.value}；${item.desc}`)
+  })
+  if (resultChargeRows.value.length) {
+    lines.push('', '计费明细：')
+    resultChargeRows.value.forEach(item => {
+      lines.push(`${item.feeName} (${item.feeCode})，规则 ${item.ruleCode}，数量 ${item.quantitySource}，单价 ${item.unitPriceSource}，金额 ${item.amountText}`)
+    })
+  }
+  if (timelineItems.value.length) {
+    lines.push('', '执行步骤：')
+    timelineItems.value.forEach(item => {
+      lines.push(`STEP ${item.orderNo} ${item.title}：${item.statusText}，${item.summary}`)
+    })
+  }
+  return lines.join('\n')
+}
+
+function buildSimulationReportHtml() {
+  const context = buildSimulationContext()
+  const summaryRows = resultSummaryItems.value.map(item => [item.label, item.value, item.desc])
+  const chargeRows = resultChargeRows.value.map(item => [
+    item.feeCode,
+    item.feeName,
+    item.ruleCode,
+    item.quantitySource,
+    item.unitPriceSource,
+    item.amountText
+  ])
+  const variableRows = resultVariableRows.value.map(item => [item.code, item.name, resolveVariableSourceLabel(item.sourceType), item.displayValue])
+  const policyRows = resultPolicyRows.value.map(item => [item.feeCode, item.feeName, item.ruleCode, item.ruleName, item.pricingSourceLabel, item.summary])
+  const timelineRows = timelineItems.value.map(item => [`STEP ${item.orderNo}`, item.title, item.statusText, item.summary])
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>试算报告 - ${escapeHtml(activeDetailRecord.value.simulationNo || '当前结果')}</title>
+  <style>
+    :root { color-scheme: light; font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; color: #2c2c2c; background: #f7f0e4; }
+    body { margin: 0; padding: 32px; background: linear-gradient(180deg, #f6eddf 0%, #fffaf2 260px, #fff 100%); }
+    main { max-width: 1280px; margin: 0 auto; }
+    header, section { border: 1px solid #e4cfaa; border-radius: 24px; background: rgba(255, 252, 246, 0.94); box-shadow: 0 16px 36px rgba(105, 76, 31, 0.08); padding: 24px 28px; margin-bottom: 18px; }
+    h1 { margin: 0; font-size: 30px; }
+    h2 { margin: 0 0 16px; font-size: 22px; }
+    p { line-height: 1.8; color: #67625b; }
+    .meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+    .meta div { border: 1px solid #ead8ba; border-radius: 16px; padding: 14px 16px; background: #fff8ed; }
+    .meta span { display: block; color: #80786f; font-size: 12px; margin-bottom: 6px; }
+    .meta strong { font-size: 18px; }
+    table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 16px; }
+    th, td { border-bottom: 1px solid #eadfd1; padding: 12px 14px; text-align: left; vertical-align: top; }
+    th { background: #f4ead9; color: #5a5248; }
+    td { background: rgba(255, 255, 255, 0.58); }
+    .empty { color: #8d867d; background: #fff8ed; border-radius: 14px; padding: 18px; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>试算报告</h1>
+      <p>用于试算过程留痕、业务复核和规则联调说明。正式结果归档仍以结果台账导出为准。</p>
+      <div class="meta">
+        <div><span>试算编号</span><strong>${escapeHtml(activeDetailRecord.value.simulationNo || '-')}</strong></div>
+        <div><span>场景</span><strong>${escapeHtml(context.sceneName || '-')}</strong></div>
+        <div><span>版本</span><strong>${escapeHtml(context.versionNo || '-')}</strong></div>
+        <div><span>账期</span><strong>${escapeHtml(context.billMonth || '-')}</strong></div>
+        <div><span>总金额</span><strong>${escapeHtml(formatAmount(resolveAmountTotal(activeDetail.value.result)))}</strong></div>
+        <div><span>导出时间</span><strong>${escapeHtml(formatExportDateTime(new Date()))}</strong></div>
+      </div>
+    </header>
+    <section>
+      <h2>结果概览</h2>
+      ${renderHtmlTable(['指标', '值', '说明'], summaryRows)}
+    </section>
+    <section>
+      <h2>计费明细</h2>
+      ${renderHtmlTable(['费目编码', '费目名称', '命中规则', '数量来源', '单价来源', '金额'], chargeRows)}
+    </section>
+    <section>
+      <h2>变量求值</h2>
+      ${renderHtmlTable(['变量编码', '变量名称', '来源', '值'], variableRows)}
+    </section>
+    <section>
+      <h2>规则命中链路</h2>
+      ${renderHtmlTable(['费目编码', '费目名称', '命中规则', '规则名称', '定价来源', '摘要'], policyRows)}
+    </section>
+    <section>
+      <h2>执行步骤</h2>
+      ${renderHtmlTable(['步骤', '名称', '状态', '摘要'], timelineRows)}
+    </section>
+  </main>
+</body>
+</html>`
 }
 
 function setActiveDetail(detail, sourceLabel) {
@@ -1312,6 +1637,122 @@ function parseJsonTextSafely(text) {
       value: null
     }
   }
+}
+
+function isFailedSimulationRecord(record) {
+  const status = String(record?.status || '').toUpperCase()
+  return Boolean(record?.errorMessage) || ['FAILED', 'FAIL', 'ERROR'].includes(status)
+}
+
+function resolveBatchExportIds(failedOnly) {
+  const records = failedOnly ? batchFailedRecords.value : batchResultRecords.value
+  return records
+    .map(item => item?.simulationId)
+    .filter(Boolean)
+    .join(',')
+}
+
+function downloadTextFile(fileName, content, mimeType) {
+  if (typeof document === 'undefined') {
+    return
+  }
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+async function copyTextToClipboard(text) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  if (typeof document === 'undefined') {
+    return
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'readonly')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  document.body.removeChild(textarea)
+}
+
+function renderHtmlTable(headers, rows) {
+  if (!rows.length) {
+    return '<div class="empty">暂无数据</div>'
+  }
+  return `<table>
+    <thead><tr>${headers.map(item => `<th>${escapeHtml(item)}</th>`).join('')}</tr></thead>
+    <tbody>
+      ${rows.map(row => `<tr>${row.map(item => `<td>${escapeHtml(item)}</td>`).join('')}</tr>`).join('')}
+    </tbody>
+  </table>`
+}
+
+function escapeHtml(value) {
+  const text = value === null || value === undefined ? '' : String(value)
+  const replacements = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }
+  return text.replace(/[&<>"']/g, char => replacements[char])
+}
+
+function createExportFileName(prefix, extension) {
+  const record = activeDetailRecord.value
+  const parts = [
+    prefix,
+    record.simulationNo,
+    record.billMonth || queryParams.billMonth,
+    formatFileTimestamp(new Date())
+  ].filter(Boolean)
+  return `${parts.map(sanitizeFileName).join('_')}.${extension}`
+}
+
+function createBatchExportFileName(prefix, extension) {
+  const parts = [
+    prefix,
+    activeSceneOption.value?.sceneCode,
+    queryParams.billMonth,
+    formatFileTimestamp(new Date())
+  ].filter(Boolean)
+  return `${parts.map(sanitizeFileName).join('_')}.${extension}`
+}
+
+function sanitizeFileName(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[\\/:*?"<>|\s]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function formatExportDateTime(value) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '-'
+  }
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function formatFileTimestamp(value) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'unknown_time'
+  }
+  const pad = number => String(number).padStart(2, '0')
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
 }
 </script>
 
@@ -1684,6 +2125,45 @@ function parseJsonTextSafely(text) {
 
 .simulation-page :deep(.el-table .is-active-row td.el-table__cell) {
   background: var(--sim-table-row-hover-bg);
+}
+
+.simulation-page.is-compact-mode {
+  gap: 12px;
+  background: var(--el-bg-color-page);
+}
+
+.simulation-page.is-compact-mode .simulation-page__query-shell,
+.simulation-page.is-compact-mode .simulation-page__panel,
+.simulation-page.is-compact-mode .simulation-page__workbench {
+  border-radius: 18px;
+  padding: 16px 18px;
+  box-shadow: none;
+}
+
+.simulation-page.is-compact-mode .simulation-page__query-shell .simulation-page__panel-head > div,
+.simulation-page.is-compact-mode .simulation-page__panel-head p,
+.simulation-page.is-compact-mode .simulation-page__context-strip,
+.simulation-page.is-compact-mode .simulation-page__summary-grid--prep {
+  display: none;
+}
+
+.simulation-page.is-compact-mode .simulation-page__query-form,
+.simulation-page.is-compact-mode .simulation-page__table,
+.simulation-page.is-compact-mode .simulation-page__summary-grid--result,
+.simulation-page.is-compact-mode .simulation-page__summary-grid--batch {
+  margin-top: 12px;
+}
+
+.simulation-page.is-compact-mode .simulation-page__panel-head h3 {
+  font-size: 18px;
+}
+
+.simulation-page.is-compact-mode .simulation-page__summary-card {
+  padding: 14px 16px;
+}
+
+.simulation-page.is-compact-mode .simulation-page__summary-card strong {
+  font-size: 24px;
 }
 
 @media (max-width: 1600px) {

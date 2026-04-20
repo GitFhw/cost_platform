@@ -91,6 +91,30 @@ public class CostRunController extends BaseController {
     }
 
     /**
+     * 导出试算计费明细
+     */
+    @PreAuthorize("@ss.hasPermi('cost:simulation:query')")
+    @Log(title = "试算中心", businessType = BusinessType.EXPORT)
+    @PostMapping("/simulation/charge-export")
+    public void exportSimulationCharge(HttpServletResponse response, Long simulationId) {
+        List<CostSimulationChargeExportRow> list = runService.selectSimulationChargeExportRows(simulationId);
+        ExcelUtil<CostSimulationChargeExportRow> util = new ExcelUtil<>(CostSimulationChargeExportRow.class);
+        util.exportExcel(response, list, "试算计费明细");
+    }
+
+    /**
+     * 导出批量试算回归摘要
+     */
+    @PreAuthorize("@ss.hasPermi('cost:simulation:list')")
+    @Log(title = "试算中心", businessType = BusinessType.EXPORT)
+    @PostMapping("/simulation/batch-export")
+    public void exportSimulationBatch(HttpServletResponse response, String simulationIds, Boolean failedOnly) {
+        List<CostSimulationBatchExportRow> list = runService.selectSimulationBatchExportRows(simulationIds, failedOnly);
+        ExcelUtil<CostSimulationBatchExportRow> util = new ExcelUtil<>(CostSimulationBatchExportRow.class);
+        util.exportExcel(response, list, Boolean.TRUE.equals(failedOnly) ? "批量失败清单" : "批量回归摘要");
+    }
+
+    /**
      * 查询正式核算任务统计
      */
     @PreAuthorize("@ss.hasPermi('cost:task:list')")
