@@ -396,168 +396,180 @@
       </div>
     </section>
 
-    <el-drawer v-model="detailOpen" title="任务详情" size="1180px" append-to-body>
-      <el-descriptions v-if="detailData.task" :column="2" border>
-        <el-descriptions-item label="任务编号">{{ detailData.task.taskNo }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ resolveTaskStatus(detailData.task.taskStatus) }}</el-descriptions-item>
-        <el-descriptions-item label="场景">{{ detailData.task.sceneName }}</el-descriptions-item>
-        <el-descriptions-item label="版本">{{ detailData.task.versionNo }}</el-descriptions-item>
-        <el-descriptions-item label="账期">{{ detailData.task.billMonth }}</el-descriptions-item>
-        <el-descriptions-item label="执行节点">{{ detailData.task.executeNode || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="输入来源">{{ resolveInputSource(detailData.task.inputSourceType) }}</el-descriptions-item>
-        <el-descriptions-item label="来源批次">{{ detailData.task.sourceBatchNo || '-' }}</el-descriptions-item>
-      </el-descriptions>
-
-      <div class="run-page__summary">
-        <div class="run-page__summary-card"><span>输入总量</span><strong>{{ detailData.summary?.sourceCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>成功数量</span><strong>{{ detailData.summary?.successCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>失败数量</span><strong>{{ detailData.summary?.failCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>分片数量</span><strong>{{ detailData.summary?.partitionCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>已认领分片</span><strong>{{ detailData.summary?.claimedPartitionCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>僵尸风险分片</span><strong>{{ detailData.summary?.staleRunningOwnerCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>无 owner 运行中</span><strong>{{ detailData.summary?.runningWithoutOwnerCount || 0 }}</strong></div>
-      </div>
-
-      <div class="run-page__action-row">
-        <el-button icon="Warning" @click="openAlertCenter(detailData.task)">查看当前任务告警</el-button>
-        <el-button icon="List" @click="openResultCenter(detailData.task)">查看当前任务结果</el-button>
-      </div>
-
-      <div v-if="detailData.summary?.topErrors?.length" class="run-page__detail-section">
-        <div class="run-page__section-head">
+    <el-drawer v-model="detailOpen" title="任务详情工作台" size="1180px" append-to-body>
+      <div class="run-page__detail-workbench">
+        <section v-if="detailData.task" class="run-page__detail-hero">
           <div>
-            <h3>失败聚合</h3>
-            <p>聚合展示当前任务最常见的失败原因，便于先处理高频问题。</p>
+            <div class="run-page__eyebrow">任务身份</div>
+            <h3>{{ detailData.task.taskNo }}</h3>
+            <div class="run-page__detail-meta">
+              <span>状态：{{ resolveTaskStatus(detailData.task.taskStatus) }}</span>
+              <span>场景：{{ detailData.task.sceneName }}</span>
+              <span>版本：{{ detailData.task.versionNo || '-' }}</span>
+              <span>账期：{{ detailData.task.billMonth || '-' }}</span>
+              <span>来源：{{ resolveInputSource(detailData.task.inputSourceType) }}</span>
+              <span>批次：{{ detailData.task.sourceBatchNo || '-' }}</span>
+              <span>执行节点：{{ detailData.task.executeNode || '-' }}</span>
+            </div>
           </div>
-        </div>
-        <el-table :data="detailData.summary.topErrors" size="small" border>
-          <el-table-column label="失败原因" prop="message" min-width="640" />
-          <el-table-column label="出现次数" prop="count" width="120" align="center" />
-        </el-table>
-      </div>
+          <div class="run-page__action-row run-page__detail-actions">
+            <el-button icon="Warning" @click="openAlertCenter(detailData.task)">查看告警</el-button>
+            <el-button icon="List" @click="openResultCenter(detailData.task)">查看结果</el-button>
+          </div>
+        </section>
 
-      <div v-if="detailData.inputBatch?.batch" class="run-page__detail-section">
-        <div class="run-page__section-head">
-          <div>
-            <h3>关联批次</h3>
-            <p>查看任务关联的导入批次摘要与样例明细。</p>
-          </div>
+        <div class="run-page__summary run-page__summary--detail">
+          <div class="run-page__summary-card"><span>输入总量</span><strong>{{ detailData.summary?.sourceCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>成功数量</span><strong>{{ detailData.summary?.successCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>失败数量</span><strong>{{ detailData.summary?.failCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>分片数量</span><strong>{{ detailData.summary?.partitionCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>已认领分片</span><strong>{{ detailData.summary?.claimedPartitionCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>僵尸风险分片</span><strong>{{ detailData.summary?.staleRunningOwnerCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>无 owner 运行中</span><strong>{{ detailData.summary?.runningWithoutOwnerCount || 0 }}</strong></div>
         </div>
-        <div class="run-page__batch-card">
-          <span>批次号：{{ detailData.inputBatch.batch.batchNo }}</span>
-          <span>场景：{{ detailData.inputBatch.batch.sceneName || '-' }}</span>
-          <span>版本：{{ detailData.inputBatch.batch.versionNo || '-' }}</span>
-          <span>总量：{{ detailData.inputBatch.batch.totalCount || 0 }}</span>
-        </div>
-        <el-alert
-          v-if="detailData.inputBatch.loadingGuide?.title"
-          class="run-page__template-alert"
-          :title="detailData.inputBatch.loadingGuide.title"
-          :description="detailData.inputBatch.loadingGuide.description"
-          :type="detailData.inputBatch.loadingGuide.type || 'info'"
-          :closable="false"
-        />
-        <p class="run-page__batch-range-tip">
-          {{ buildSampleRangeText(detailBatchQuery.pageNum, detailBatchQuery.pageSize, detailData.inputBatch.itemTotal || 0, detailData.inputBatch.items?.length || 0) }}
-        </p>
-        <el-table :data="detailData.inputBatch.items || []" size="small" border>
-          <el-table-column label="序号" prop="itemNo" width="80" align="center" />
-          <el-table-column label="业务单号" prop="bizNo" min-width="180" />
-          <el-table-column label="状态" prop="itemStatus" width="120" align="center" />
-          <el-table-column label="输入摘要" min-width="320">
-            <template #default="scope">{{ summarizeJson(scope.row.inputJson) }}</template>
-          </el-table-column>
-        </el-table>
-        <pagination
-          v-show="(detailData.inputBatch.itemTotal || 0) > 0"
-          :total="detailData.inputBatch.itemTotal || 0"
-          v-model:page="detailBatchQuery.pageNum"
-          v-model:limit="detailBatchQuery.pageSize"
-          @pagination="handleDetailBatchPageChange"
-        />
-      </div>
 
-      <div class="run-page__detail-section">
-        <div class="run-page__section-head">
-          <div>
-            <h3>分片执行</h3>
-            <p>面向大批量任务的分片进度、失败摘要与分片级重试。</p>
-          </div>
-        </div>
-        <el-table :data="detailData.partitions || []" size="small" border>
-          <el-table-column label="分片号" prop="partitionNo" width="90" align="center" />
-          <el-table-column label="范围" min-width="150">
-            <template #default="scope">{{ scope.row.startItemNo }} - {{ scope.row.endItemNo }}</template>
-          </el-table-column>
-          <el-table-column label="认领节点" width="120" align="center">
-            <template #default="scope">{{ scope.row.executeNode || '-' }}</template>
-          </el-table-column>
-          <el-table-column label="认领时间" min-width="170" align="center">
-            <template #default="scope">{{ scope.row.claimTime || scope.row.startedTime || '-' }}</template>
-          </el-table-column>
-          <el-table-column label="状态" width="120" align="center">
-            <template #default="scope">
-              <el-tag :type="resolvePartitionTag(scope.row.partitionStatus)">{{ resolveTaskStatus(scope.row.partitionStatus) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="落库模式" width="120" align="center">
-            <template #default="scope">
-              <el-tag :type="resolvePartitionPersistModeTag(scope.row.persistMode)">{{ resolvePartitionPersistMode(scope.row.persistMode) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="总量" prop="totalCount" width="90" align="center" />
-          <el-table-column label="成功/失败" width="120" align="center">
-            <template #default="scope">{{ scope.row.successCount || 0 }}/{{ scope.row.failCount || 0 }}</template>
-          </el-table-column>
-          <el-table-column label="耗时(ms)" prop="durationMs" width="110" align="center" />
-          <el-table-column label="恢复提示" prop="recoveryHint" min-width="260" />
-          <el-table-column label="错误摘要" prop="lastError" min-width="220" />
-          <el-table-column label="操作" width="130" fixed="right" align="center">
-            <template #default="scope">
-              <el-button link type="primary" icon="RefreshRight" :disabled="!canRetryPartition(scope.row)" @click="handleRetryPartition(scope.row)" v-hasPermi="['cost:task:retry']">
-                重试分片
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
+        <el-tabs class="run-page__detail-tabs">
+          <el-tab-pane label="任务概览">
+            <div v-if="detailData.summary?.topErrors?.length" class="run-page__detail-section">
+              <div class="run-page__section-head">
+                <div>
+                  <h3>失败聚合</h3>
+                  <p>聚合展示当前任务最常见的失败原因，便于先处理高频问题。</p>
+                </div>
+              </div>
+              <el-table :data="detailData.summary.topErrors" size="small" border>
+                <el-table-column label="失败原因" prop="message" min-width="640" />
+                <el-table-column label="出现次数" prop="count" width="120" align="center" />
+              </el-table>
+            </div>
+            <el-empty v-else description="当前任务没有失败聚合信息，可继续查看分片或任务明细。" :image-size="72" />
+          </el-tab-pane>
 
-      <div class="run-page__detail-section">
-        <div class="run-page__section-head">
-          <div>
-            <h3>任务明细</h3>
-            <p>明细改为分页加载，兼容大批量任务下的失败定位与明细级重试。</p>
-          </div>
-        </div>
-        <p class="run-page__batch-range-tip">
-          {{ buildSampleRangeText(detailQuery.pageNum, detailQuery.pageSize, detailData.detailPage?.total || 0, detailData.details?.length || 0) }}
-        </p>
-        <el-table :data="detailData.details || []" size="small">
-          <el-table-column label="分片号" prop="partitionNo" width="90" align="center" />
-          <el-table-column label="业务单号" prop="bizNo" min-width="180" />
-          <el-table-column label="状态" width="120" align="center">
-            <template #default="scope">
-              <el-tag :type="resolveDetailTag(scope.row.detailStatus)">{{ scope.row.detailStatus }}</el-tag>
+          <el-tab-pane label="关联批次">
+            <template v-if="detailData.inputBatch?.batch">
+              <div class="run-page__batch-card">
+                <span>批次号：{{ detailData.inputBatch.batch.batchNo }}</span>
+                <span>场景：{{ detailData.inputBatch.batch.sceneName || '-' }}</span>
+                <span>版本：{{ detailData.inputBatch.batch.versionNo || '-' }}</span>
+                <span>总量：{{ detailData.inputBatch.batch.totalCount || 0 }}</span>
+              </div>
+              <el-alert
+                v-if="detailData.inputBatch.loadingGuide?.title"
+                class="run-page__template-alert"
+                :title="detailData.inputBatch.loadingGuide.title"
+                :description="detailData.inputBatch.loadingGuide.description"
+                :type="detailData.inputBatch.loadingGuide.type || 'info'"
+                :closable="false"
+              />
+              <p class="run-page__batch-range-tip">
+                {{ buildSampleRangeText(detailBatchQuery.pageNum, detailBatchQuery.pageSize, detailData.inputBatch.itemTotal || 0, detailData.inputBatch.items?.length || 0) }}
+              </p>
+              <el-table :data="detailData.inputBatch.items || []" size="small" border>
+                <el-table-column label="序号" prop="itemNo" width="80" align="center" />
+                <el-table-column label="业务单号" prop="bizNo" min-width="180" />
+                <el-table-column label="状态" prop="itemStatus" width="120" align="center" />
+                <el-table-column label="输入摘要" min-width="320">
+                  <template #default="scope">{{ summarizeJson(scope.row.inputJson) }}</template>
+                </el-table-column>
+              </el-table>
+              <pagination
+                v-show="(detailData.inputBatch.itemTotal || 0) > 0"
+                :total="detailData.inputBatch.itemTotal || 0"
+                v-model:page="detailBatchQuery.pageNum"
+                v-model:limit="detailBatchQuery.pageSize"
+                @pagination="handleDetailBatchPageChange"
+              />
             </template>
-          </el-table-column>
-          <el-table-column label="重试次数" prop="retryCount" width="100" align="center" />
-          <el-table-column label="结果摘要" prop="resultSummary" min-width="240" />
-          <el-table-column label="异常信息" prop="errorMessage" min-width="200" />
-          <el-table-column label="操作" width="130" fixed="right" align="center">
-            <template #default="scope">
-              <el-button link type="primary" icon="RefreshRight" :disabled="scope.row.detailStatus !== 'FAILED'" @click="handleRetry(scope.row)" v-hasPermi="['cost:task:retry']">
-                重试
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <pagination
-          v-show="(detailData.detailPage?.total || 0) > 0"
-          :total="detailData.detailPage?.total || 0"
-          v-model:page="detailQuery.pageNum"
-          v-model:limit="detailQuery.pageSize"
-          @pagination="handleDetailPageChange"
-        />
+            <el-empty v-else description="当前任务未关联导入批次，可能是 JSON 直传任务。" :image-size="72" />
+          </el-tab-pane>
+
+          <el-tab-pane label="分片执行">
+            <div class="run-page__detail-section">
+              <div class="run-page__section-head">
+                <div>
+                  <h3>分片执行</h3>
+                  <p>面向大批量任务的分片进度、失败摘要与分片级重试。</p>
+                </div>
+              </div>
+              <el-table :data="detailData.partitions || []" size="small" border>
+                <el-table-column label="分片号" prop="partitionNo" width="90" align="center" />
+                <el-table-column label="范围" min-width="150">
+                  <template #default="scope">{{ scope.row.startItemNo }} - {{ scope.row.endItemNo }}</template>
+                </el-table-column>
+                <el-table-column label="认领节点" width="120" align="center">
+                  <template #default="scope">{{ scope.row.executeNode || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="认领时间" min-width="170" align="center">
+                  <template #default="scope">{{ scope.row.claimTime || scope.row.startedTime || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="120" align="center">
+                  <template #default="scope">
+                    <el-tag :type="resolvePartitionTag(scope.row.partitionStatus)">{{ resolveTaskStatus(scope.row.partitionStatus) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="落库模式" width="120" align="center">
+                  <template #default="scope">
+                    <el-tag :type="resolvePartitionPersistModeTag(scope.row.persistMode)">{{ resolvePartitionPersistMode(scope.row.persistMode) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="总量" prop="totalCount" width="90" align="center" />
+                <el-table-column label="成功/失败" width="120" align="center">
+                  <template #default="scope">{{ scope.row.successCount || 0 }}/{{ scope.row.failCount || 0 }}</template>
+                </el-table-column>
+                <el-table-column label="耗时(ms)" prop="durationMs" width="110" align="center" />
+                <el-table-column label="恢复提示" prop="recoveryHint" min-width="260" />
+                <el-table-column label="错误摘要" prop="lastError" min-width="220" />
+                <el-table-column label="操作" width="130" fixed="right" align="center">
+                  <template #default="scope">
+                    <el-button link type="primary" icon="RefreshRight" :disabled="!canRetryPartition(scope.row)" @click="handleRetryPartition(scope.row)" v-hasPermi="['cost:task:retry']">
+                      重试分片
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="任务明细">
+            <div class="run-page__detail-section">
+              <div class="run-page__section-head">
+                <div>
+                  <h3>任务明细</h3>
+                  <p>明细改为分页加载，兼容大批量任务下的失败定位与明细级重试。</p>
+                </div>
+              </div>
+              <p class="run-page__batch-range-tip">
+                {{ buildSampleRangeText(detailQuery.pageNum, detailQuery.pageSize, detailData.detailPage?.total || 0, detailData.details?.length || 0) }}
+              </p>
+              <el-table :data="detailData.details || []" size="small" border>
+                <el-table-column label="分片号" prop="partitionNo" width="90" align="center" />
+                <el-table-column label="业务单号" prop="bizNo" min-width="180" />
+                <el-table-column label="状态" width="120" align="center">
+                  <template #default="scope">
+                    <el-tag :type="resolveDetailTag(scope.row.detailStatus)">{{ scope.row.detailStatus }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="重试次数" prop="retryCount" width="100" align="center" />
+                <el-table-column label="结果摘要" prop="resultSummary" min-width="240" />
+                <el-table-column label="异常信息" prop="errorMessage" min-width="200" />
+                <el-table-column label="操作" width="130" fixed="right" align="center">
+                  <template #default="scope">
+                    <el-button link type="primary" icon="RefreshRight" :disabled="scope.row.detailStatus !== 'FAILED'" @click="handleRetry(scope.row)" v-hasPermi="['cost:task:retry']">
+                      重试
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <pagination
+                v-show="(detailData.detailPage?.total || 0) > 0"
+                :total="detailData.detailPage?.total || 0"
+                v-model:page="detailQuery.pageNum"
+                v-model:limit="detailQuery.pageSize"
+                @pagination="handleDetailPageChange"
+              />
+            </div>
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </el-drawer>
 
@@ -675,16 +687,36 @@
     </el-dialog>
 
     <el-dialog v-model="partitionMonitorOpen" title="分片监控" width="1100px" append-to-body>
-      <div class="run-page__summary">
-        <div class="run-page__summary-card"><span>分片总数</span><strong>{{ partitionMonitorData.summary?.partitionCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>输入总量</span><strong>{{ partitionMonitorData.summary?.sourceCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>成功数量</span><strong>{{ partitionMonitorData.summary?.successCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>失败数量</span><strong>{{ partitionMonitorData.summary?.failCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>已认领分片</span><strong>{{ partitionMonitorData.summary?.claimedPartitionCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>僵尸风险分片</span><strong>{{ partitionMonitorData.summary?.staleRunningOwnerCount || 0 }}</strong></div>
-        <div class="run-page__summary-card"><span>无 owner 运行中</span><strong>{{ partitionMonitorData.summary?.runningWithoutOwnerCount || 0 }}</strong></div>
+      <div class="run-page__monitor-workbench">
+        <section v-if="partitionMonitorData.task" class="run-page__detail-hero">
+          <div>
+            <div class="run-page__eyebrow">运行监控</div>
+            <h3>{{ partitionMonitorData.task.taskNo }}</h3>
+            <div class="run-page__detail-meta">
+              <span>状态：{{ resolveTaskStatus(partitionMonitorData.task.taskStatus) }}</span>
+              <span>场景：{{ partitionMonitorData.task.sceneName }}</span>
+              <span>账期：{{ partitionMonitorData.task.billMonth || '-' }}</span>
+              <span>执行节点：{{ partitionMonitorData.task.executeNode || '-' }}</span>
+            </div>
+          </div>
+          <div class="run-page__action-row run-page__detail-actions">
+            <el-button icon="Warning" @click="openAlertCenter(partitionMonitorData.task)">查看告警</el-button>
+            <el-button icon="List" @click="openResultCenter(partitionMonitorData.task)">查看结果</el-button>
+          </div>
+        </section>
+
+        <div class="run-page__summary run-page__summary--detail">
+          <div class="run-page__summary-card"><span>分片总数</span><strong>{{ partitionMonitorData.summary?.partitionCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>输入总量</span><strong>{{ partitionMonitorData.summary?.sourceCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>成功数量</span><strong>{{ partitionMonitorData.summary?.successCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>失败数量</span><strong>{{ partitionMonitorData.summary?.failCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>已认领分片</span><strong>{{ partitionMonitorData.summary?.claimedPartitionCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>僵尸风险分片</span><strong>{{ partitionMonitorData.summary?.staleRunningOwnerCount || 0 }}</strong></div>
+          <div class="run-page__summary-card"><span>无 owner 运行中</span><strong>{{ partitionMonitorData.summary?.runningWithoutOwnerCount || 0 }}</strong></div>
+        </div>
       </div>
-      <el-table :data="partitionMonitorData.partitions || []" size="small" border>
+
+      <el-table :data="partitionMonitorData.partitions || []" size="small" border class="run-page__table">
         <el-table-column label="分片号" prop="partitionNo" width="90" align="center" />
         <el-table-column label="范围" min-width="150">
           <template #default="scope">{{ scope.row.startItemNo }} - {{ scope.row.endItemNo }}</template>
@@ -1559,6 +1591,56 @@ onActivated(async () => {
 .run-page__batch-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin-top: 12px; padding: 12px 14px; color: var(--el-text-color-regular); }
 .run-page__batch-preview { display: grid; gap: 12px; margin-top: 16px; }
 .run-page__batch-range-tip { margin: 10px 0 12px; color: var(--el-text-color-secondary); font-size: 13px; }
+.run-page__detail-workbench,
+.run-page__monitor-workbench {
+  display: grid;
+  gap: 16px;
+}
+.run-page__monitor-workbench { margin-bottom: 14px; }
+.run-page__detail-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--el-bg-color-overlay) 92%, var(--el-color-warning-light-9) 8%);
+}
+.run-page__detail-hero h3 {
+  margin: 6px 0 0;
+  font-size: 22px;
+}
+.run-page__detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.run-page__detail-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 999px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-bg-color-overlay);
+  font-size: 12px;
+}
+.run-page__detail-actions {
+  align-content: flex-start;
+  justify-content: flex-end;
+  margin-top: 0;
+}
+.run-page__detail-tabs {
+  padding: 14px 16px 16px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 18px;
+  background: var(--el-bg-color-overlay);
+}
+.run-page__summary--detail {
+  margin: 0;
+}
 .run-page__detail-section { margin-top: 18px; }
 .run-page__table { margin-top: 6px; }
 .run-page.is-compact-mode {
@@ -1581,5 +1663,7 @@ onActivated(async () => {
   .run-page__metrics, .run-page__overview-grid, .run-page__workspace, .run-page__summary, .run-page__batch-card, .run-page__distribution-grid { grid-template-columns: 1fr; }
   .run-page__batch-select { grid-template-columns: 1fr; }
   .run-page__hero-side { justify-items: stretch; }
+  .run-page__detail-hero { flex-direction: column; }
+  .run-page__detail-actions { justify-content: flex-start; }
 }
 </style>
