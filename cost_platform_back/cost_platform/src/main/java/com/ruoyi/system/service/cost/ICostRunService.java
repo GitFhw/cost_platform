@@ -25,6 +25,10 @@ public interface ICostRunService {
 
     Map<String, Object> selectSimulationDetail(Long simulationId);
 
+    List<CostSimulationChargeExportRow> selectSimulationChargeExportRows(Long simulationId);
+
+    List<CostSimulationBatchExportRow> selectSimulationBatchExportRows(String simulationIds, Boolean failedOnly);
+
     Map<String, Object> selectTaskStats(CostCalcTask query);
 
     Map<String, Object> selectTaskOverview(CostCalcTask query);

@@ -446,6 +446,191 @@ public class CostRunServiceImpl implements ICostRunService {
         return item;
     }
 
+    private List<CostSimulationChargeExportRow> buildSimulationChargeExportRows(CostSimulationRecord record) {
+        Map<String, Object> input = parseJsonObjectForExport(record.getInputJson());
+        Map<String, Object> result = parseJsonObjectForExport(record.getResultJson());
+        Map<String, Object> explain = parseJsonObjectForExport(record.getExplainJson());
+        List<Map<String, Object>> feeResults = castMapList(result.get("feeResults"));
+        Map<String, Map<String, Object>> matchedFeeMap = buildMatchedFeeExplainMap(castMapList(explain.get("matchedFees")));
+        String bizNo = resolveBizNo(input, 1);
+        String objectCode = firstNonBlank(resolveString(input, "objectCode", "object_code"), bizNo);
+        String objectName = resolveString(input, "objectName", "object_name", "name");
+
+        List<CostSimulationChargeExportRow> rows = new ArrayList<>();
+        for (Map<String, Object> fee : feeResults) {
+            Map<String, Object> feeExplain = matchedFeeMap.get(buildFeeExplainKey(fee));
+            Map<String, Object> pricing = feeExplain == null ? Collections.emptyMap() : safeCastMap(feeExplain.get("pricing"));
+            CostSimulationChargeExportRow row = new CostSimulationChargeExportRow();
+            row.setSimulationNo(record.getSimulationNo());
+            row.setSceneCode(record.getSceneCode());
+            row.setSceneName(record.getSceneName());
+            row.setVersionNo(record.getVersionNo());
+            row.setBillMonth(record.getBillMonth());
+            row.setBizNo(bizNo);
+            row.setObjectCode(objectCode);
+            row.setObjectName(objectName);
+            row.setFeeCode(stringValue(fee.get("feeCode")));
+            row.setFeeName(stringValue(fee.get("feeName")));
+            row.setUnitCode(firstNonBlank(stringValue(fee.get("unitCode")), stringValue(pricing.get("unitCode"))));
+            row.setRuleCode(stringValue(fee.get("ruleCode")));
+            row.setRuleName(stringValue(fee.get("ruleName")));
+            row.setQuantityValue(toBigDecimal(firstNotNull(fee.get("quantityValue"), pricing.get("quantityValue"))));
+            row.setUnitPrice(toBigDecimal(firstNotNull(fee.get("unitPrice"), pricing.get("unitPrice"))));
+            row.setAmountValue(toBigDecimal(firstNotNull(fee.get("amountValue"), pricing.get("amountValue"))));
+            row.setPricingSource(resolvePricingSourceForExport(stringValue(pricing.get("pricingSource"))));
+            row.setQuantitySource(resolveQuantitySourceForExport(pricing, row.getQuantityValue()));
+            row.setUnitPriceSource(resolveUnitPriceSourceForExport(pricing, row.getUnitPrice()));
+            row.setPricingSummary(resolvePricingSummaryForExport(pricing, row));
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private CostSimulationBatchExportRow buildSimulationBatchExportRow(CostSimulationRecord record) {
+        Map<String, Object> input = parseJsonObjectForExport(record.getInputJson());
+        Map<String, Object> result = parseJsonObjectForExport(record.getResultJson());
+        List<Map<String, Object>> feeResults = castMapList(result.get("feeResults"));
+        CostSimulationBatchExportRow row = new CostSimulationBatchExportRow();
+        row.setBizNo(resolveBizNo(input, 1));
+        row.setSimulationNo(record.getSimulationNo());
+        row.setSceneCode(record.getSceneCode());
+        row.setSceneName(record.getSceneName());
+        row.setVersionNo(record.getVersionNo());
+        row.setBillMonth(record.getBillMonth());
+        row.setStatus(record.getStatus());
+        row.setAmountTotal(toBigDecimal(result.get("amountTotal")));
+        row.setChargeLineCount(feeResults.size());
+        row.setErrorMessage(record.getErrorMessage());
+        row.setSimulationTime(record.getCreateTime());
+        return row;
+    }
+
+    private List<Long> parseSimulationExportIds(String simulationIds) {
+        if (StringUtils.isEmpty(StringUtils.trim(simulationIds))) {
+            return Collections.emptyList();
+        }
+        List<Long> ids = new ArrayList<>();
+        for (String item : simulationIds.split(",")) {
+            String normalized = StringUtils.trim(item);
+            if (StringUtils.isEmpty(normalized)) {
+                continue;
+            }
+            try {
+                ids.add(Long.parseLong(normalized));
+            } catch (NumberFormatException e) {
+                throw new ServiceException("试算记录ID格式不正确：" + normalized);
+            }
+        }
+        return ids.stream().distinct().collect(Collectors.toList());
+    }
+
+    private Map<String, Map<String, Object>> buildMatchedFeeExplainMap(List<Map<String, Object>> matchedFees) {
+        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+        for (Map<String, Object> fee : matchedFees) {
+            result.put(buildFeeExplainKey(fee), fee);
+        }
+        return result;
+    }
+
+    private String buildFeeExplainKey(Map<String, Object> fee) {
+        return stringValue(fee.get("feeCode")) + "|" + stringValue(fee.get("ruleCode"));
+    }
+
+    private String resolveQuantitySourceForExport(Map<String, Object> pricing, BigDecimal quantityValue) {
+        String quantityVariableCode = stringValue(pricing.get("quantityVariableCode"));
+        if (StringUtils.isNotEmpty(quantityVariableCode)) {
+            return "取变量 " + quantityVariableCode;
+        }
+        if ("FIXED_AMOUNT".equals(stringValue(pricing.get("pricingSource")))) {
+            return "固定金额不取数量";
+        }
+        if (quantityValue != null) {
+            return "数量 " + quantityValue.stripTrailingZeros().toPlainString();
+        }
+        return "未返回";
+    }
+
+    private String resolveUnitPriceSourceForExport(Map<String, Object> pricing, BigDecimal unitPrice) {
+        String pricingSource = stringValue(pricing.get("pricingSource"));
+        if ("FORMULA".equals(pricingSource)) {
+            String formulaCode = stringValue(pricing.get("formulaCode"));
+            return StringUtils.isNotEmpty(formulaCode) ? "公式 " + formulaCode : "公式取价";
+        }
+        if ("TIER_RATE".equals(pricingSource)) {
+            String tierRange = stringValue(pricing.get("tierRange"));
+            return StringUtils.isNotEmpty(tierRange) ? "阶梯 " + tierRange : "阶梯费率";
+        }
+        if (pricing.get("matchedGroupNo") != null) {
+            return "组合组 " + pricing.get("matchedGroupNo");
+        }
+        if (unitPrice != null) {
+            return "单价 " + unitPrice.stripTrailingZeros().toPlainString();
+        }
+        return "未返回";
+    }
+
+    private String resolvePricingSummaryForExport(Map<String, Object> pricing, CostSimulationChargeExportRow row) {
+        List<String> parts = new ArrayList<>();
+        parts.add(firstNonBlank(row.getPricingSource(), "未返回定价来源"));
+        if (StringUtils.isNotEmpty(row.getQuantitySource()) && !"未返回".equals(row.getQuantitySource())) {
+            parts.add(row.getQuantitySource());
+        }
+        if (StringUtils.isNotEmpty(row.getUnitPriceSource()) && !"未返回".equals(row.getUnitPriceSource())) {
+            parts.add(row.getUnitPriceSource());
+        }
+        if (pricing.get("amountValue") != null) {
+            parts.add("金额 " + pricing.get("amountValue"));
+        }
+        return String.join(" / ", parts);
+    }
+
+    private String resolvePricingSourceForExport(String pricingSource) {
+        if ("FIXED_RATE".equals(pricingSource)) {
+            return "固定费率";
+        }
+        if ("FIXED_AMOUNT".equals(pricingSource)) {
+            return "固定金额";
+        }
+        if ("FORMULA".equals(pricingSource)) {
+            return "公式取价";
+        }
+        if ("TIER_RATE".equals(pricingSource)) {
+            return "阶梯费率";
+        }
+        if ("GROUPED".equals(pricingSource)) {
+            return "分组费率";
+        }
+        return StringUtils.isEmpty(pricingSource) ? "未返回" : pricingSource;
+    }
+
+    private Object firstNotNull(Object first, Object second) {
+        return first != null ? first : second;
+    }
+
+    private Map<String, Object> parseJsonObjectForExport(String json) {
+        return safeCastMap(parseJsonToObject(json));
+    }
+
+    private Map<String, Object> safeCastMap(Object value) {
+        if (value instanceof Map) {
+            return castMap(value);
+        }
+        return new LinkedHashMap<>();
+    }
+
+    private List<Map<String, Object>> castMapList(Object value) {
+        if (!(value instanceof List)) {
+            return Collections.emptyList();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : (List<?>) value) {
+            if (item instanceof Map) {
+                result.add(castMap(item));
+            }
+        }
+        return result;
+    }
+
     @Override
     public Map<String, Object> selectSimulationDetail(Long simulationId) {
         CostSimulationRecord record = simulationRecordMapper.selectById(simulationId);
@@ -460,6 +645,46 @@ public class CostRunServiceImpl implements ICostRunService {
         result.put("explain", parseJsonToObject(record.getExplainJson()));
         result.put("result", parseJsonToObject(record.getResultJson()));
         return result;
+    }
+
+    @Override
+    public List<CostSimulationChargeExportRow> selectSimulationChargeExportRows(Long simulationId) {
+        if (simulationId == null) {
+            throw new ServiceException("请选择要导出的试算记录");
+        }
+        CostSimulationRecord record = simulationRecordMapper.selectById(simulationId);
+        if (record == null) {
+            throw new ServiceException("试算记录不存在，请刷新后重试");
+        }
+        enrichSimulationRecords(Collections.singletonList(record));
+        return buildSimulationChargeExportRows(record);
+    }
+
+    @Override
+    public List<CostSimulationBatchExportRow> selectSimulationBatchExportRows(String simulationIds, Boolean failedOnly) {
+        List<Long> ids = parseSimulationExportIds(simulationIds);
+        if (ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<CostSimulationRecord> records = simulationRecordMapper.selectBatchIds(ids);
+        enrichSimulationRecords(records);
+        Map<Long, CostSimulationRecord> recordMap = records.stream()
+                .filter(item -> item.getSimulationId() != null)
+                .collect(Collectors.toMap(CostSimulationRecord::getSimulationId, item -> item, (left, right) -> left));
+        List<CostSimulationBatchExportRow> rows = new ArrayList<>();
+        for (Long id : ids) {
+            CostSimulationRecord record = recordMap.get(id);
+            if (record == null) {
+                continue;
+            }
+            if (Boolean.TRUE.equals(failedOnly)
+                    && !SIMULATION_STATUS_FAILED.equals(record.getStatus())
+                    && StringUtils.isEmpty(record.getErrorMessage())) {
+                continue;
+            }
+            rows.add(buildSimulationBatchExportRow(record));
+        }
+        return rows;
     }
 
     @Override
