@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container run-page">
+  <div class="app-container run-page" :class="{ 'is-compact-mode': isCompactMode }">
     <section v-show="!isCompactMode" class="run-page__hero">
       <div>
         <div class="run-page__eyebrow">正式核算</div>
@@ -152,43 +152,54 @@
       </div>
     </section>
 
-    <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
-      <el-form-item label="所属场景" prop="sceneId">
-        <el-select v-model="queryParams.sceneId" clearable filterable style="width: 220px" @change="handleQuerySceneChange">
-          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="版本号" prop="versionId">
-        <el-select v-model="queryParams.versionId" clearable filterable style="width: 220px">
-          <el-option v-for="item in versionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="任务类型" prop="taskType">
-        <el-select v-model="queryParams.taskType" clearable style="width: 180px">
-          <el-option v-for="item in taskTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="任务状态" prop="taskStatus">
-        <el-select v-model="queryParams.taskStatus" clearable style="width: 180px">
-          <el-option v-for="item in taskStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="账期" prop="billMonth">
-        <el-date-picker
-          v-model="queryParams.billMonth"
-          clearable
-          type="month"
-          format="YYYY-MM"
-          value-format="YYYY-MM"
-          placeholder="选择账期"
-          style="width: 160px"
-        />
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-        <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-      </el-form-item>
-    </el-form>
+    <section class="run-page__query-shell">
+      <div class="run-page__section-head">
+        <div>
+          <div class="run-page__eyebrow">任务上下文</div>
+          <h3>正式核算任务筛选</h3>
+          <p>这里控制下方任务台账、运行概览和治理入口的默认范围，建议先确定场景、版本与账期。</p>
+        </div>
+        <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+      </div>
+
+      <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch" class="run-page__query-form">
+        <el-form-item label="所属场景" prop="sceneId">
+          <el-select v-model="queryParams.sceneId" clearable filterable style="width: 220px" @change="handleQuerySceneChange">
+            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="版本号" prop="versionId">
+          <el-select v-model="queryParams.versionId" clearable filterable style="width: 220px">
+            <el-option v-for="item in versionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="任务类型" prop="taskType">
+          <el-select v-model="queryParams.taskType" clearable style="width: 180px">
+            <el-option v-for="item in taskTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="任务状态" prop="taskStatus">
+          <el-select v-model="queryParams.taskStatus" clearable style="width: 180px">
+            <el-option v-for="item in taskStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="账期" prop="billMonth">
+          <el-date-picker
+            v-model="queryParams.billMonth"
+            clearable
+            type="month"
+            format="YYYY-MM"
+            value-format="YYYY-MM"
+            placeholder="选择账期"
+            style="width: 160px"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+          <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </section>
 
     <section class="run-page__workspace">
       <div class="run-page__panel">
@@ -197,7 +208,7 @@
             <h3>提交任务</h3>
             <p>单笔和批量任务继续支持 JSON 直传，也可以先创建或选择导入批次，再引用批次号发起正式核算。</p>
           </div>
-          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+          <span class="run-page__panel-badge">生产提交</span>
         </div>
 
         <el-form :model="form" label-width="92px">
@@ -341,9 +352,10 @@
             <h3>任务台账</h3>
             <p>跟踪正式核算任务进度、失败明细和分片执行状态。</p>
           </div>
+          <span class="run-page__panel-badge">共 {{ total }} 条</span>
         </div>
 
-        <el-table v-loading="loading" :data="taskList">
+        <el-table v-loading="loading" :data="taskList" border class="run-page__table">
           <el-table-column label="任务编号" prop="taskNo" width="220" />
           <el-table-column label="场景" min-width="180">
             <template #default="scope">{{ scope.row.sceneName }} ({{ scope.row.sceneCode }})</template>
@@ -1462,8 +1474,18 @@ onActivated(async () => {
 </script>
 
 <style scoped lang="scss">
-.run-page { display: grid; gap: 16px; }
-.run-page__hero, .run-page__metric-card, .run-page__panel, .run-page__summary-card, .run-page__batch-card {
+.run-page {
+  display: grid;
+  gap: 16px;
+  min-height: calc(100dvh - 124px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--el-bg-color-page) 84%, #f4dfb9 16%) 0%,
+    var(--el-bg-color-page) 260px,
+    var(--el-bg-color-page) 100%
+  );
+}
+.run-page__hero, .run-page__metric-card, .run-page__panel, .run-page__summary-card, .run-page__batch-card, .run-page__query-shell {
   border: 1px solid var(--el-border-color);
   border-radius: 16px;
   background: var(--el-bg-color-overlay);
@@ -1489,11 +1511,31 @@ onActivated(async () => {
 .run-page__metric-card { display: grid; gap: 6px; padding: 14px 16px; }
 .run-page__metric-card strong { font-size: 26px; color: var(--el-color-warning-dark-2); }
 .run-page__overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.run-page__workspace { display: grid; grid-template-columns: 500px minmax(0, 1fr); gap: 16px; }
+.run-page__query-shell {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  padding: 16px;
+  background: color-mix(in srgb, var(--el-bg-color-overlay) 94%, #fff4df 6%);
+  backdrop-filter: blur(12px);
+}
+.run-page__query-form { margin-top: 14px; }
+.run-page__workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .run-page__panel { padding: 16px; }
 .run-page__section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
 .run-page__section-head h3 { margin: 0; font-size: 18px; }
 .run-page__section-head p { margin: 6px 0 0; color: var(--el-text-color-secondary); font-size: 13px; }
+.run-page__panel-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 999px;
+  color: var(--el-text-color-regular);
+  background: color-mix(in srgb, var(--el-bg-color-overlay) 86%, var(--el-color-warning-light-9) 14%);
+  white-space: nowrap;
+}
 .run-page__distribution-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .run-page__distribution-grid h4 { margin: 0 0 10px; font-size: 15px; color: var(--el-text-color-primary); }
 .run-page__distribution-list { display: grid; gap: 10px; }
@@ -1518,6 +1560,23 @@ onActivated(async () => {
 .run-page__batch-preview { display: grid; gap: 12px; margin-top: 16px; }
 .run-page__batch-range-tip { margin: 10px 0 12px; color: var(--el-text-color-secondary); font-size: 13px; }
 .run-page__detail-section { margin-top: 18px; }
+.run-page__table { margin-top: 6px; }
+.run-page.is-compact-mode {
+  gap: 12px;
+  background: var(--el-bg-color-page);
+}
+.run-page.is-compact-mode .run-page__query-shell,
+.run-page.is-compact-mode .run-page__panel {
+  border-radius: 14px;
+  box-shadow: none;
+}
+.run-page.is-compact-mode .run-page__query-shell .run-page__section-head > div,
+.run-page.is-compact-mode .run-page__section-head p {
+  display: none;
+}
+.run-page.is-compact-mode .run-page__query-form {
+  margin-top: 0;
+}
 @media (max-width: 1200px) {
   .run-page__metrics, .run-page__overview-grid, .run-page__workspace, .run-page__summary, .run-page__batch-card, .run-page__distribution-grid { grid-template-columns: 1fr; }
   .run-page__batch-select { grid-template-columns: 1fr; }
