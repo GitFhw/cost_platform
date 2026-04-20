@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container result-page">
+  <div class="app-container result-page" :class="{ 'is-compact-mode': isCompactMode }">
     <section v-show="!isCompactMode" class="result-page__hero">
       <div>
         <div class="result-page__eyebrow">结果追溯</div>
@@ -19,73 +19,82 @@
       </div>
     </section>
 
-    <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
-      <el-form-item label="所属场景" prop="sceneId">
-        <el-select v-model="queryParams.sceneId" clearable filterable style="width: 220px" @change="handleSceneChange">
-          <el-option
-            v-for="item in sceneOptions"
-            :key="item.sceneId"
-            :label="`${item.sceneName} / ${item.sceneCode}`"
-            :value="item.sceneId"
-          />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="版本号" prop="versionId">
-        <el-select v-model="queryParams.versionId" clearable filterable style="width: 220px">
-          <el-option v-for="item in versionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="账期" prop="billMonth">
-        <el-date-picker
-          v-model="queryParams.billMonth"
-          clearable
-          type="month"
-          format="YYYY-MM"
-          value-format="YYYY-MM"
-          placeholder="选择账期"
-          style="width: 160px"
-        />
-      </el-form-item>
-      <el-form-item label="任务ID" prop="taskId">
-        <el-input v-model="queryParams.taskId" clearable style="width: 140px" />
-      </el-form-item>
-      <el-form-item label="任务号" prop="taskNo">
-        <el-input v-model="queryParams.taskNo" clearable style="width: 200px" />
-      </el-form-item>
-      <el-form-item label="费用编码" prop="feeCode">
-        <el-input v-model="queryParams.feeCode" clearable style="width: 180px" />
-      </el-form-item>
-      <el-form-item label="业务单号" prop="bizNo">
-        <el-input v-model="queryParams.bizNo" clearable style="width: 180px" />
-      </el-form-item>
-      <el-form-item label="结果状态" prop="resultStatus">
-        <el-select v-model="queryParams.resultStatus" clearable style="width: 160px">
-          <el-option v-for="item in resultStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-        <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-      </el-form-item>
-    </el-form>
+    <section class="result-page__query-shell">
+      <div class="result-page__section-head">
+        <div>
+          <h3>查询与导出</h3>
+          <p>正式结果建议按账期、任务或业务单号收敛查询范围，避免一次拉取过大的台账数据。</p>
+        </div>
+        <div class="result-page__section-actions">
+          <el-button type="warning" plain icon="Download" @click="handleExport">导出结果</el-button>
+          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+        </div>
+      </div>
 
-    <el-alert
-      v-if="queryGuardTip"
-      class="result-page__guard"
-      type="warning"
-      :closable="false"
-      :title="queryGuardTip"
-    />
+      <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" class="result-page__query-form" v-show="showSearch">
+        <el-form-item label="所属场景" prop="sceneId">
+          <el-select v-model="queryParams.sceneId" clearable filterable style="width: 220px" @change="handleSceneChange">
+            <el-option
+              v-for="item in sceneOptions"
+              :key="item.sceneId"
+              :label="`${item.sceneName} / ${item.sceneCode}`"
+              :value="item.sceneId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="版本号" prop="versionId">
+          <el-select v-model="queryParams.versionId" clearable filterable style="width: 220px">
+            <el-option v-for="item in versionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="账期" prop="billMonth">
+          <el-date-picker
+            v-model="queryParams.billMonth"
+            clearable
+            type="month"
+            format="YYYY-MM"
+            value-format="YYYY-MM"
+            placeholder="选择账期"
+            style="width: 160px"
+          />
+        </el-form-item>
+        <el-form-item label="任务ID" prop="taskId">
+          <el-input v-model="queryParams.taskId" clearable style="width: 140px" />
+        </el-form-item>
+        <el-form-item label="任务号" prop="taskNo">
+          <el-input v-model="queryParams.taskNo" clearable style="width: 200px" />
+        </el-form-item>
+        <el-form-item label="费用编码" prop="feeCode">
+          <el-input v-model="queryParams.feeCode" clearable style="width: 180px" />
+        </el-form-item>
+        <el-form-item label="业务单号" prop="bizNo">
+          <el-input v-model="queryParams.bizNo" clearable style="width: 180px" />
+        </el-form-item>
+        <el-form-item label="结果状态" prop="resultStatus">
+          <el-select v-model="queryParams.resultStatus" clearable style="width: 160px">
+            <el-option v-for="item in resultStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+          <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+        </el-form-item>
+      </el-form>
+
+      <el-alert
+        v-if="queryGuardTip"
+        class="result-page__guard"
+        type="warning"
+        :closable="false"
+        :title="queryGuardTip"
+      />
+    </section>
 
     <div class="result-page__table">
       <div class="result-page__section-head">
         <div>
           <h3>结果台账</h3>
           <p>列表用于快速定位任务、费用和业务对象，详情用于查看结果和追溯解释。</p>
-        </div>
-        <div class="result-page__section-actions">
-          <el-button type="warning" plain icon="Download" @click="handleExport">导出结果</el-button>
-          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
         </div>
       </div>
 
@@ -97,7 +106,7 @@
         :title="`当前正在查看任务 ${routeContext.taskId} 的结果台账，已自动带入路由中的过滤条件。`"
       />
 
-      <el-table v-loading="loading" :data="resultList">
+      <el-table v-loading="loading" :data="resultList" border :height="resultTableHeight">
         <el-table-column label="任务号" prop="taskNo" width="220" />
         <el-table-column label="场景" min-width="180">
           <template #default="scope">{{ scope.row.sceneName }} ({{ scope.row.sceneCode }})</template>
@@ -152,44 +161,92 @@
       />
     </div>
 
-    <el-drawer v-model="detailOpen" title="结果详情" size="980px" append-to-body>
-      <el-descriptions v-if="detailData.ledger" :column="2" border>
-        <el-descriptions-item label="任务号">{{ detailData.ledger.taskNo }}</el-descriptions-item>
-        <el-descriptions-item label="版本">{{ detailData.ledger.versionNo }}</el-descriptions-item>
-        <el-descriptions-item label="费用">{{ detailData.ledger.feeName }} ({{ detailData.ledger.feeCode }})</el-descriptions-item>
-        <el-descriptions-item label="计价单位">{{ resolveUnitLabel(detailData.ledger.unitCode) }}</el-descriptions-item>
-        <el-descriptions-item label="业务单号">{{ detailData.ledger.bizNo }}</el-descriptions-item>
-        <el-descriptions-item label="计价口径">{{ resolveUnitSemantic(detailData.ledger).summary }}</el-descriptions-item>
-        <el-descriptions-item label="账期">{{ detailData.ledger.billMonth }}</el-descriptions-item>
-        <el-descriptions-item label="金额">{{ detailData.ledger.amountValue }}</el-descriptions-item>
-        <el-descriptions-item label="结果解释" :span="2">{{ resolveUnitSemantic(detailData.ledger).resultHint }}</el-descriptions-item>
-      </el-descriptions>
+    <el-drawer v-model="detailOpen" title="结果详情工作台" size="1080px" append-to-body>
+      <div class="result-page__detail-workbench">
+        <section v-if="detailData.ledger" class="result-page__detail-hero">
+          <div>
+            <div class="result-page__eyebrow">正式结果</div>
+            <h3>{{ detailData.ledger.feeName }} / {{ detailData.ledger.amountValue || 0 }}</h3>
+            <div class="result-page__detail-meta">
+              <span>任务：{{ detailData.ledger.taskNo || '-' }}</span>
+              <span>业务单号：{{ detailData.ledger.bizNo || '-' }}</span>
+              <span>场景：{{ detailData.ledger.sceneName || '-' }}</span>
+              <span>版本：{{ detailData.ledger.versionNo || '-' }}</span>
+              <span>账期：{{ detailData.ledger.billMonth || '-' }}</span>
+              <span>状态：{{ resolveResultStatus(detailData.ledger.resultStatus) }}</span>
+            </div>
+          </div>
+          <div class="result-page__detail-actions">
+            <el-button icon="Connection" :disabled="!detailData.ledger.traceId" @click="handleTrace(detailData.ledger)" v-hasPermi="['cost:result:trace']">打开追溯</el-button>
+          </div>
+        </section>
 
-      <el-tabs class="result-page__tabs">
-        <el-tab-pane label="结果记录">
-          <JsonEditor :model-value="detailData.ledger" title="结果记录" readonly :rows="12" />
-        </el-tab-pane>
-        <el-tab-pane label="追溯解释">
-          <JsonEditor :model-value="detailData.trace" title="追溯解释" readonly :rows="12" />
-        </el-tab-pane>
-      </el-tabs>
+        <div class="result-page__summary result-page__summary--detail">
+          <div class="result-page__summary-card"><span>金额</span><strong>{{ detailData.ledger?.amountValue || 0 }}</strong><small>{{ detailData.ledger?.currencyCode || 'CNY' }}</small></div>
+          <div class="result-page__summary-card"><span>数量</span><strong>{{ detailData.ledger ? formatQuantity(detailData.ledger) : '-' }}</strong><small>{{ resolveUnitSemantic(detailData.ledger).quantityHint }}</small></div>
+          <div class="result-page__summary-card"><span>单价</span><strong>{{ detailData.ledger ? formatUnitPrice(detailData.ledger) : '-' }}</strong><small>{{ resolveUnitSemantic(detailData.ledger).priceHint }}</small></div>
+          <div class="result-page__summary-card"><span>追溯状态</span><strong>{{ detailData.ledger?.traceId ? '已生成' : '未生成' }}</strong><small>{{ detailData.ledger?.traceId ? `Trace #${detailData.ledger.traceId}` : '当前结果没有追溯记录' }}</small></div>
+        </div>
+
+        <el-descriptions v-if="detailData.ledger" :column="2" border>
+          <el-descriptions-item label="费用编码">{{ detailData.ledger.feeCode }}</el-descriptions-item>
+          <el-descriptions-item label="计价单位">{{ resolveUnitLabel(detailData.ledger.unitCode) }}</el-descriptions-item>
+          <el-descriptions-item label="核算对象">{{ detailData.ledger.objectName || '-' }} / {{ detailData.ledger.objectCode || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="对象维度">{{ detailData.ledger.objectDimension || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="计价口径" :span="2">{{ resolveUnitSemantic(detailData.ledger).summary }}</el-descriptions-item>
+          <el-descriptions-item label="结果解释" :span="2">{{ resolveUnitSemantic(detailData.ledger).resultHint }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-tabs class="result-page__tabs">
+          <el-tab-pane label="结果记录">
+            <JsonEditor :model-value="detailData.ledger" title="结果记录" readonly :rows="12" />
+          </el-tab-pane>
+          <el-tab-pane label="追溯解释">
+            <JsonEditor :model-value="detailData.trace" title="追溯解释" readonly :rows="12" />
+          </el-tab-pane>
+        </el-tabs>
+      </div>
     </el-drawer>
 
-    <el-drawer v-model="traceOpen" title="追溯解释" size="980px" append-to-body>
-      <el-tabs class="result-page__tabs">
-        <el-tab-pane label="变量值">
-          <JsonEditor :model-value="traceData.variables" title="变量值" readonly :rows="12" />
-        </el-tab-pane>
-        <el-tab-pane label="条件命中">
-          <JsonEditor :model-value="traceData.conditions" title="条件命中" readonly :rows="12" />
-        </el-tab-pane>
-        <el-tab-pane label="定价过程">
-          <JsonEditor :model-value="traceData.pricing" title="定价过程" readonly :rows="12" />
-        </el-tab-pane>
-        <el-tab-pane label="执行时间线">
-          <JsonEditor :model-value="traceData.timeline" title="执行时间线" readonly :rows="12" />
-        </el-tab-pane>
-      </el-tabs>
+    <el-drawer v-model="traceOpen" title="追溯解释工作台" size="1080px" append-to-body>
+      <div class="result-page__detail-workbench">
+        <section v-if="traceData.traceId" class="result-page__detail-hero">
+          <div>
+            <div class="result-page__eyebrow">解释链路</div>
+            <h3>Trace #{{ traceData.traceId }}</h3>
+            <div class="result-page__detail-meta">
+              <span>场景ID：{{ traceData.sceneId || '-' }}</span>
+              <span>版本ID：{{ traceData.versionId || '-' }}</span>
+              <span>规则ID：{{ traceData.ruleId || '-' }}</span>
+              <span>阶梯ID：{{ traceData.tierId || '-' }}</span>
+              <span>生成时间：{{ traceData.createTime || '-' }}</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="result-page__summary result-page__summary--detail">
+          <div v-for="item in traceMetricItems" :key="item.label" class="result-page__summary-card">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.desc }}</small>
+          </div>
+        </div>
+
+        <el-tabs class="result-page__tabs">
+          <el-tab-pane label="变量值">
+            <JsonEditor :model-value="traceData.variables" title="变量值" readonly :rows="12" />
+          </el-tab-pane>
+          <el-tab-pane label="条件命中">
+            <JsonEditor :model-value="traceData.conditions" title="条件命中" readonly :rows="12" />
+          </el-tab-pane>
+          <el-tab-pane label="定价过程">
+            <JsonEditor :model-value="traceData.pricing" title="定价过程" readonly :rows="12" />
+          </el-tab-pane>
+          <el-tab-pane label="执行时间线">
+            <JsonEditor :model-value="traceData.timeline" title="执行时间线" readonly :rows="12" />
+          </el-tab-pane>
+        </el-tabs>
+      </div>
     </el-drawer>
   </div>
 </template>
@@ -246,6 +303,15 @@ const metricItems = computed(() => [
   { label: '任务数量', value: stats.taskCount, desc: '结果覆盖的任务数' },
   { label: '追溯记录', value: stats.traceCount, desc: '已生成的追溯解释数量' },
   { label: '金额合计', value: stats.amountTotal, desc: '当前筛选结果的金额汇总' }
+])
+
+const resultTableHeight = computed(() => (isCompactMode.value ? 'calc(100dvh - 320px)' : 'calc(100dvh - 540px)'))
+
+const traceMetricItems = computed(() => [
+  { label: '变量值', value: countTraceEntries(traceData.value.variables), desc: '本次计算读取或派生出的变量数量' },
+  { label: '条件命中', value: countTraceEntries(traceData.value.conditions), desc: '规则条件判断过程中的命中记录' },
+  { label: '定价过程', value: countTraceEntries(traceData.value.pricing), desc: '单价、阶梯或固定金额的取价过程' },
+  { label: '执行步骤', value: countTraceEntries(traceData.value.timeline), desc: '从变量求值到结果落账的执行时间线' }
 ])
 
 const queryGuardTip = computed(() => (shouldBlockBroadResultQuery() ? resultQueryGuardMessage : ''))
@@ -379,8 +445,20 @@ function resolveUnitLabel(unitCode) {
   return match ? match.label : (unitCode || '-')
 }
 
+function resolveResultStatus(status) {
+  const match = resultStatusOptions.value.find(item => item.value === status)
+  return match ? match.label : (status || '-')
+}
+
 function resolveUnitSemantic(row) {
   return getCostUnitSemantic(row?.unitCode, resolveUnitLabel(row?.unitCode))
+}
+
+function countTraceEntries(value) {
+  if (!value) return 0
+  if (Array.isArray(value)) return value.length
+  if (typeof value === 'object') return Object.keys(value).length
+  return 1
 }
 
 function formatQuantity(row) {
@@ -433,11 +511,22 @@ onActivated(async () => {
 .result-page {
   display: grid;
   gap: 16px;
+  min-height: calc(100dvh - 124px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--el-bg-color-page) 86%, #dbead7 14%) 0%,
+    var(--el-bg-color-page) 260px,
+    var(--el-bg-color-page) 100%
+  );
 }
 
 .result-page__hero,
 .result-page__metric-card,
-.result-page__table {
+.result-page__table,
+.result-page__query-shell,
+.result-page__summary-card,
+.result-page__detail-hero,
+.result-page__tabs {
   border: 1px solid var(--el-border-color);
   border-radius: 16px;
   background: var(--el-bg-color-overlay);
@@ -491,9 +580,22 @@ onActivated(async () => {
   color: var(--el-color-success-dark-2);
 }
 
+.result-page__query-shell {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  padding: 16px;
+  background: color-mix(in srgb, var(--el-bg-color-overlay) 94%, #eef8e9 6%);
+  backdrop-filter: blur(12px);
+}
+
+.result-page__query-form {
+  margin-top: 14px;
+}
+
 .result-page__guard,
 .result-page__context {
-  margin-top: -4px;
+  margin-top: 12px;
 }
 
 .result-page__table {
@@ -525,15 +627,121 @@ onActivated(async () => {
   font-size: 13px;
 }
 
+.result-page__detail-workbench {
+  display: grid;
+  gap: 16px;
+}
+
+.result-page__detail-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--el-bg-color-overlay) 92%, var(--el-color-success-light-9) 8%);
+}
+
+.result-page__detail-hero h3 {
+  margin: 6px 0 0;
+  font-size: 22px;
+}
+
+.result-page__detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.result-page__detail-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 999px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-bg-color-overlay);
+  font-size: 12px;
+}
+
+.result-page__detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-content: flex-start;
+  justify-content: flex-end;
+}
+
+.result-page__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.result-page__summary-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+}
+
+.result-page__summary-card strong {
+  color: var(--el-color-success-dark-2);
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.result-page__summary-card small {
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
+
+.result-page__summary--detail {
+  margin: 0;
+}
+
+.result-page__tabs {
+  padding: 14px 16px 16px;
+}
+
 .result-page__tabs pre {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
 }
 
+.result-page.is-compact-mode {
+  gap: 12px;
+  background: var(--el-bg-color-page);
+}
+
+.result-page.is-compact-mode .result-page__section-head > div {
+  display: none;
+}
+
+.result-page.is-compact-mode .result-page__table .result-page__section-head {
+  display: none;
+}
+
+.result-page.is-compact-mode .result-page__query-form {
+  margin-top: 0;
+}
+
 @media (max-width: 1200px) {
-  .result-page__metrics {
+  .result-page__metrics,
+  .result-page__summary {
     grid-template-columns: 1fr;
+  }
+
+  .result-page__hero,
+  .result-page__detail-hero,
+  .result-page__section-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .result-page__detail-actions,
+  .result-page__section-actions {
+    justify-content: flex-start;
   }
 }
 </style>
