@@ -2325,9 +2325,9 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private String buildInputTemplateMessage(RuntimeSnapshot snapshot) {
         if (isDraftSnapshot(snapshot)) {
-            return "当前场景尚无生效版本，已按现有配置生成输入模板；公式变量无需手工输入，其余变量优先按变量编码生成取值锚点，上下文路径仅作可选兼容。";
+            return "当前场景尚无生效版本，已按现有配置生成输入模板；公式变量无需手工输入，其余变量配置来源路径时生成多级对象，未配置时按变量编码生成平铺字段。";
         }
-        return "已按发布快照生成输入模板；公式变量无需手工输入，其余变量优先按变量编码生成取值锚点，上下文路径仅作可选兼容。";
+        return "已按发布快照生成输入模板；公式变量无需手工输入，其余变量配置来源路径时生成多级对象，未配置时按变量编码生成平铺字段。";
     }
 
     private String buildFeeTemplateMessage(RuntimeSnapshot snapshot, boolean noRule) {
@@ -2337,8 +2337,8 @@ public class CostRunServiceImpl implements ICostRunService {
                     : "当前费用在该发布版本下未挂载可用规则，已返回空模板。";
         }
         return isDraftSnapshot(snapshot)
-                ? "已按当前配置和费用关联规则生成接入模板，第三方系统只需组装 includedInTemplate=true 的字段。"
-                : "已按发布快照和费用关联规则生成接入模板，第三方系统只需组装 includedInTemplate=true 的字段。";
+                ? "已按当前配置和费用关联规则生成接入模板；path 会优先使用来源路径，未配置来源路径时回落为变量编码平铺字段。"
+                : "已按发布快照和费用关联规则生成接入模板；path 会优先使用来源路径，未配置来源路径时回落为变量编码平铺字段。";
     }
 
     private boolean isSimulationTaskType(String taskType) {
@@ -2387,10 +2387,6 @@ public class CostRunServiceImpl implements ICostRunService {
             Object exampleValue = buildTemplateValue(variable, index);
             populatePathValue(template, path, exampleValue);
             populatedPaths.add(path);
-            if (StringUtils.isNotEmpty(variable.variableCode) && !populatedPaths.contains(variable.variableCode)) {
-                populatePathValue(template, variable.variableCode, exampleValue);
-                populatedPaths.add(variable.variableCode);
-            }
         }
         return template;
     }
@@ -2416,10 +2412,6 @@ public class CostRunServiceImpl implements ICostRunService {
             Object exampleValue = buildTemplateValue(variable, index);
             populatePathValue(template, path, exampleValue);
             populatedPaths.add(path);
-            if (StringUtils.isNotEmpty(variable.variableCode) && !populatedPaths.contains(variable.variableCode)) {
-                populatePathValue(template, variable.variableCode, exampleValue);
-                populatedPaths.add(variable.variableCode);
-            }
         }
         return template;
     }
@@ -3771,7 +3763,7 @@ public class CostRunServiceImpl implements ICostRunService {
         try {
             return expressionService.evaluate(expression, context);
         } catch (Exception e) {
-            throw new ServiceException("琛ㄨ揪寮忔墽琛屽け璐ワ細" + expression);
+            throw new ServiceException("表达式执行失败：" + expression);
         }
     }
 

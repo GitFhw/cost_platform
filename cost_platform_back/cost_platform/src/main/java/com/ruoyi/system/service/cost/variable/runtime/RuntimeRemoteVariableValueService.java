@@ -46,6 +46,13 @@ public class RuntimeRemoteVariableValueService {
     }
 
     public String buildTemplatePath(CostRunServiceImpl.RuntimeVariable variable) {
+        if (variable == null) {
+            return "";
+        }
+        String standardPath = firstNonBlank(variable.dataPath, variable.variableCode);
+        if (StringUtils.isNotEmpty(standardPath)) {
+            return standardPath;
+        }
         Map<String, Object> mapping = parseOptionalJsonMap(variable.mappingConfigJson);
         String configuredContextPath = stringValue(mapping.get("contextPath"));
         if (StringUtils.isNotEmpty(configuredContextPath)) {
@@ -212,11 +219,11 @@ public class RuntimeRemoteVariableValueService {
         if (StringUtils.isNotEmpty(configuredValuePath)) {
             paths.add(configuredValuePath);
         }
-        if (StringUtils.isNotEmpty(variable.variableCode)) {
-            paths.add(variable.variableCode);
-        }
         if (StringUtils.isNotEmpty(variable.dataPath)) {
             paths.add(variable.dataPath);
+        }
+        if (StringUtils.isNotEmpty(variable.variableCode)) {
+            paths.add(variable.variableCode);
         }
         paths.add("mappedValue");
         paths.add("value");

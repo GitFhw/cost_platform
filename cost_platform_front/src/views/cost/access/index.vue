@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container access-page">
+  <div class="app-container access-page" :class="{ 'is-compact-mode': isCompactMode }">
     <section v-show="!isCompactMode" class="access-page__hero">
       <div>
         <div class="access-page__eyebrow">数据接入</div>
@@ -21,7 +21,7 @@
       </div>
     </section>
 
-    <section class="access-page__panel">
+    <section class="access-page__panel access-page__query-shell">
       <div class="access-page__section-head">
         <div>
           <h3>接入方案</h3>
@@ -51,12 +51,54 @@
         </el-form-item>
       </el-form>
       <el-alert v-if="profileSummary" class="access-page__alert" :closable="false" :title="profileSummary" type="info" />
+      <div class="access-page__summary access-page__summary--context">
+        <div v-for="item in contextItems" :key="item.label" class="access-page__card access-page__card--context">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <small>{{ item.desc }}</small>
+        </div>
+      </div>
     </section>
 
-    <section class="access-page__grid">
-      <div class="access-page__panel">
-        <h3>模板生成</h3>
-        <el-form :model="selectionForm" label-width="96px">
+    <section class="access-page__panel access-page__workflow-shell">
+      <div class="access-page__section-head">
+        <div>
+          <h3>接入工作流</h3>
+          <p class="access-page__subtext">先锁定模板，再在同页继续做两类处理：一类是直接验证标准计费对象，一类是把原始报文整理为标准对象并沉淀导入批次。</p>
+        </div>
+      </div>
+      <div class="access-page__stage-strip">
+        <button
+          v-for="stage in workflowStages"
+          :key="stage.key"
+          type="button"
+          class="access-page__stage-chip"
+          :class="[`is-${stage.status}`, { 'is-active': activeStageKey === stage.key }]"
+          @click="scrollToStage(stage.key)"
+        >
+          <span class="access-page__stage-order">{{ stage.order }}</span>
+          <span class="access-page__stage-main">
+            <strong>{{ stage.label }}</strong>
+            <small>{{ stage.desc }}</small>
+          </span>
+        </button>
+      </div>
+
+      <div ref="templateStageRef" class="access-page__stage-panel">
+        <div class="access-page__pane-head">
+          <div>
+            <div class="access-page__pane-kicker">阶段 1</div>
+            <h4>费用模板准备</h4>
+            <p>选择场景、版本、目标费用和任务类型，先把当前费用主线需要的字段模板拉平出来。</p>
+          </div>
+          <div class="access-page__actions">
+            <el-button type="primary" icon="RefreshLeft" @click="handleBuildTemplate" v-hasPermi="['cost:simulation:list', 'cost:task:list']">生成费用模板</el-button>
+            <el-button :disabled="!templateData.fee?.feeCode" @click="scrollToStage('fee')">继续验证取价</el-button>
+            <el-button :disabled="!templateData.fee?.feeCode" @click="scrollToStage('preview')">继续预演对象</el-button>
+            <el-button icon="Edit" @click="router.push({ path: COST_MENU_ROUTES.simulation, query: { sceneId: selectionForm.sceneId, versionId: selectionForm.versionId, billMonth: calcForm.billMonth } })">打开试算中心</el-button>
+          </div>
+        </div>
+        <el-form :model="selectionForm" label-width="96px" class="access-page__form-shell">
           <el-form-item label="所属场景" required>
             <el-select v-model="selectionForm.sceneId" clearable filterable style="width: 100%" placeholder="请选择场景" @change="handleSceneChange">
               <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
@@ -80,11 +122,14 @@
             </el-radio-group>
           </el-form-item>
         </el-form>
-        <div class="access-page__actions">
-          <el-button type="primary" icon="RefreshLeft" @click="handleBuildTemplate" v-hasPermi="['cost:simulation:list', 'cost:task:list']">生成费用模板</el-button>
-          <el-button icon="Edit" @click="router.push({ path: COST_MENU_ROUTES.simulation, query: { sceneId: selectionForm.sceneId, versionId: selectionForm.versionId, billMonth: calcForm.billMonth } })">打开试算中心</el-button>
-        </div>
         <el-alert v-if="templateData.message" class="access-page__alert" :closable="false" :title="templateData.message" type="info" />
+        <el-alert
+          v-if="templateData.fee?.feeCode"
+          class="access-page__alert"
+          :closable="false"
+          title="模板已准备完成，下方可以直接继续做单费用验证，或继续把原始报文整理为标准计费对象。"
+          type="success"
+        />
         <div v-if="templateData.fee?.feeCode" class="access-page__summary">
           <div class="access-page__card"><span>目标费用</span><strong>{{ templateData.fee.feeCode }}</strong><small>{{ templateData.fee.feeName }}</small></div>
           <div class="access-page__card"><span>对象维度</span><strong>{{ templateObjectDimension || '-' }}</strong><small>标准计费对象默认继承该维度</small></div>
@@ -105,9 +150,19 @@
         </el-table>
       </div>
 
-      <div class="access-page__panel">
-        <h3>单费用同步取价</h3>
-        <el-form :model="calcForm" label-width="96px">
+      <div ref="feeStageRef" class="access-page__stage-panel">
+        <div class="access-page__pane-head">
+          <div>
+            <div class="access-page__pane-kicker">阶段 2A</div>
+            <h4>单费用同步取价</h4>
+            <p>如果你手里已经有标准计费对象，可以直接在这里做小样验证，确认规则命中、金额返回和解释信息。</p>
+          </div>
+          <div class="access-page__actions">
+            <el-button type="primary" icon="Promotion" @click="handleCalculateFee" v-hasPermi="['cost:simulation:execute']">执行单费用取价</el-button>
+            <el-button @click="scrollToStage('preview')">去对象预演区</el-button>
+          </div>
+        </div>
+        <el-form :model="calcForm" label-width="96px" class="access-page__form-shell">
           <el-form-item label="账期">
             <el-date-picker
               v-model="calcForm.billMonth"
@@ -122,12 +177,9 @@
             <el-switch v-model="calcForm.includeExplain" />
           </el-form-item>
           <el-form-item label="输入 JSON" required>
-            <JsonEditor v-model="calcForm.inputJson" title="输入 JSON" :rows="11" :max-length="30000" :allow-empty="false" placeholder="请输入标准计费对象数组，建议至少包含 objectDimension、objectCode、objectName。" />
+            <JsonEditor v-model="calcForm.inputJson" title="输入 JSON" :rows="10" :max-length="30000" :allow-empty="false" placeholder="请输入标准计费对象数组，建议至少包含 objectDimension、objectCode、objectName。" />
           </el-form-item>
         </el-form>
-        <div class="access-page__actions">
-          <el-button type="primary" icon="Promotion" @click="handleCalculateFee" v-hasPermi="['cost:simulation:execute']">执行单费用取价</el-button>
-        </div>
         <el-alert v-if="feeResult.recordCount" class="access-page__alert" :closable="false" :title="feeResultSummary" :type="feeResult.failedCount ? 'warning' : 'success'" />
         <el-table v-if="feeRecords.length" :data="feeRecords" size="small" border class="access-page__table">
           <el-table-column label="计费对象" min-width="220">
@@ -149,74 +201,74 @@
           <el-tab-pane label="模板示例"><JsonEditor :model-value="formattedTemplateJson" title="模板示例" readonly :rows="10" /></el-tab-pane>
         </el-tabs>
       </div>
-    </section>
 
-    <section class="access-page__panel">
-      <h3>标准计费对象预演</h3>
-      <el-form :model="builderForm" label-width="112px">
-        <el-form-item v-if="currentProfile?.sourceType === 'HTTP_API'" label="请求载荷 JSON">
-          <JsonEditor v-model="builderForm.requestPayloadJson" title="请求载荷 JSON" :rows="8" :max-length="30000" placeholder="用于调用业务 HTTP 接口的请求载荷；留空则回退为方案内保存的样例请求。" />
-        </el-form-item>
-        <el-form-item label="原始 JSON" required>
-          <JsonEditor v-model="builderForm.rawJson" title="原始 JSON" :rows="10" :max-length="30000" :allow-empty="false" placeholder="支持 JSON 对象或对象数组。" />
-        </el-form-item>
-        <el-form-item label="字段映射 JSON">
-          <JsonEditor v-model="builderForm.mappingJson" title="字段映射 JSON" :rows="8" :max-length="20000" placeholder='可选，例如 {"bizNo":"source.bizNo","objectDimension":"source.teamType","objectCode":"source.teamCode","objectName":"source.teamName","FIELD":{"path":"nested.value"}}。' />
-        </el-form-item>
-      </el-form>
-      <div class="access-page__actions">
-        <el-button v-if="currentProfile?.sourceType === 'HTTP_API'" type="warning" icon="Connection" :disabled="!selectedProfileId" @click="handlePreviewBuildByProfile" v-hasPermi="['cost:access:query']">按方案拉取并预演</el-button>
-        <el-button v-if="currentProfile?.sourceType === 'HTTP_API'" type="success" icon="Upload" :disabled="!selectedProfileId" @click="handleCreateBatchByProfile" v-hasPermi="['cost:task:execute']">按方案拉取并生成批次</el-button>
-        <el-button type="primary" icon="DataAnalysis" @click="handlePreviewBuild" v-hasPermi="['cost:simulation:list', 'cost:task:list']">预演计费对象</el-button>
-        <el-button icon="DocumentCopy" :disabled="!buildPreviewRecords.length" @click="handleUseBuildPreview">覆盖取价输入</el-button>
-        <el-button type="success" icon="Upload" :disabled="!buildPreviewRecords.length" @click="handleCreateBatchFromPreview" v-hasPermi="['cost:task:execute']">生成导入批次</el-button>
+      <div ref="previewStageRef" class="access-page__stage-panel">
+        <div class="access-page__pane-head">
+          <div>
+            <div class="access-page__pane-kicker">阶段 2B</div>
+            <h4>标准计费对象预演</h4>
+            <p>如果手里还是宽表报文或外部接口返回值，就在这里先把它整理成标准计费对象，再回填验证或直接生成导入批次。</p>
+          </div>
+          <div class="access-page__actions">
+            <el-button v-if="currentProfile?.sourceType === 'HTTP_API'" type="warning" icon="Connection" :disabled="!selectedProfileId" @click="handlePreviewBuildByProfile" v-hasPermi="['cost:access:query']">按方案拉取并预演</el-button>
+            <el-button v-if="currentProfile?.sourceType === 'HTTP_API'" type="success" icon="Upload" :disabled="!selectedProfileId" @click="handleCreateBatchByProfile" v-hasPermi="['cost:task:execute']">按方案拉取并生成批次</el-button>
+            <el-button type="primary" icon="DataAnalysis" @click="handlePreviewBuild" v-hasPermi="['cost:simulation:list', 'cost:task:list']">预演计费对象</el-button>
+            <el-button icon="DocumentCopy" :disabled="!buildPreviewRecords.length" @click="handleUseBuildPreview">覆盖取价输入</el-button>
+            <el-button type="success" icon="Upload" :disabled="!buildPreviewRecords.length" @click="handleCreateBatchFromPreview" v-hasPermi="['cost:task:execute']">生成导入批次</el-button>
+          </div>
+        </div>
+        <div class="access-page__editor-stack">
+          <JsonEditor v-if="currentProfile?.sourceType === 'HTTP_API'" v-model="builderForm.requestPayloadJson" title="请求载荷 JSON" :rows="7" :max-length="30000" placeholder="用于调用业务 HTTP 接口的请求载荷；留空则回退为方案内保存的样例请求。" />
+          <JsonEditor v-model="builderForm.rawJson" title="原始 JSON" :rows="9" :max-length="30000" :allow-empty="false" placeholder="支持 JSON 对象或对象数组。" />
+          <JsonEditor v-model="builderForm.mappingJson" title="字段映射 JSON" :rows="7" :max-length="20000" placeholder='可选，例如 {"bizNo":"source.bizNo","objectDimension":"source.teamType","objectCode":"source.teamCode","objectName":"source.teamName","attendance.female.headcount":"source.attendance.female.headcount","oddWork.quantity":"source.odd.hours"}。' />
+        </div>
+        <el-alert v-if="buildPreview.message" class="access-page__alert" :closable="false" :title="buildPreview.message" type="success" />
+        <el-alert v-if="buildPreview.fetchMeta" class="access-page__alert" :closable="false" :title="buildPreviewFetchTitle" :description="buildPreviewFetchDescription" type="warning" />
+        <el-alert v-if="buildPreviewLoadingGuide.title" class="access-page__alert" :closable="false" :title="buildPreviewLoadingGuide.title" :description="buildPreviewLoadingGuide.description" :type="buildPreviewLoadingGuide.type || 'info'" />
+        <div v-if="createdBatch.batch?.batchNo" class="access-page__summary">
+          <div class="access-page__card"><span>批次号</span><strong>{{ createdBatch.batch.batchNo }}</strong><small>{{ createdBatch.batch.billMonth || '-' }}</small></div>
+          <div class="access-page__card"><span>标准对象数</span><strong>{{ createdBatch.itemTotal || createdBatch.batch.totalCount || 0 }}</strong><small>当前批次对象总数</small></div>
+          <div class="access-page__card"><span>预计分片数</span><strong>{{ createdBatch.loadingGuide?.estimatedPartitionCount || 0 }}</strong><small>按正式核算默认口径估算</small></div>
+          <div v-if="createdBatch.resumable" class="access-page__card"><span>继续装载</span><strong>{{ createdBatchCheckpoint.nextPageNo || createdBatchCheckpoint.nextCursor || '待继续' }}</strong><small>{{ createdBatchResumeTip }}</small></div>
+        </div>
+        <div v-if="createdBatch.batch?.batchNo" class="access-page__actions">
+          <el-button v-if="createdBatch.resumable" type="warning" icon="RefreshRight" :disabled="!selectedProfileId" @click="handleResumeBatchByProfile" v-hasPermi="['cost:task:execute']">继续装载剩余分页</el-button>
+          <el-button type="primary" icon="Promotion" :disabled="createdBatch.resumable" @click="openCreatedBatchTaskCenter">用该批次发起正式核算</el-button>
+          <el-button icon="Tickets" @click="openCreatedBatchLedger">查看导入批次台账</el-button>
+        </div>
+        <div v-if="buildPreview.mappedRecordCount" class="access-page__summary">
+          <div class="access-page__card"><span>原始记录数</span><strong>{{ buildPreview.rawRecordCount || 0 }}</strong><small>参与预演的宽表记录数</small></div>
+          <div class="access-page__card"><span>标准对象数</span><strong>{{ buildPreview.mappedRecordCount || 0 }}</strong><small>转换后的标准计费对象数</small></div>
+          <div class="access-page__card"><span>对象维度</span><strong>{{ buildPreviewObjectDimensions.length || 0 }}</strong><small>{{ buildPreviewObjectDimensions.join(' / ') || templateObjectDimension || '待补映射' }}</small></div>
+          <div class="access-page__card"><span>未命中路径</span><strong>{{ buildPreview.missingPaths?.length || 0 }}</strong><small>仍需补映射的模板路径数</small></div>
+          <div class="access-page__card"><span>预计分片数</span><strong>{{ buildPreviewLoadingGuide.estimatedPartitionCount || 0 }}</strong><small>按正式核算默认口径估算</small></div>
+        </div>
+        <div v-if="buildPreviewObjectDimensions.length" class="access-page__tags">
+          <span>识别维度：</span>
+          <el-tag v-for="dimension in buildPreviewObjectDimensions" :key="dimension" size="small">{{ dimension }}</el-tag>
+        </div>
+        <div v-if="buildPreview.missingPaths?.length" class="access-page__tags">
+          <span>未命中路径：</span>
+          <el-tag v-for="path in buildPreview.missingPaths" :key="path" size="small" type="warning">{{ path }}</el-tag>
+        </div>
+        <el-table v-if="buildPreviewMappings.length" :data="buildPreviewMappings" size="small" border class="access-page__table">
+          <el-table-column label="模板路径" prop="path" min-width="220" />
+          <el-table-column label="变量" min-width="180">
+            <template #default="scope">{{ scope.row.variableName }} ({{ scope.row.variableCode }})</template>
+          </el-table-column>
+          <el-table-column label="映射说明" prop="mappingHint" min-width="180" />
+          <el-table-column label="纳入模板" width="96" align="center">
+            <template #default="scope">
+              <el-tag :type="scope.row.includedInTemplate ? 'success' : 'info'" size="small">{{ scope.row.includedInTemplate ? '是' : '否' }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-tabs v-if="buildPreviewRecords.length || buildPreview.fetchedPayloadJson" class="access-page__tabs">
+          <el-tab-pane label="标准计费对象"><JsonEditor :model-value="buildPreviewRecords" title="标准计费对象" readonly :rows="10" /></el-tab-pane>
+          <el-tab-pane v-if="buildPreview.fetchedPayloadJson" label="接口返回原始报文"><JsonEditor :model-value="buildPreview.fetchedPayloadJson" title="接口返回原始报文" readonly :rows="10" /></el-tab-pane>
+          <el-tab-pane label="完整预演结果"><JsonEditor :model-value="formattedBuildPreviewJson" title="完整预演结果" readonly :rows="10" /></el-tab-pane>
+        </el-tabs>
       </div>
-      <el-alert v-if="buildPreview.message" class="access-page__alert" :closable="false" :title="buildPreview.message" type="success" />
-      <el-alert v-if="buildPreview.fetchMeta" class="access-page__alert" :closable="false" :title="buildPreviewFetchTitle" :description="buildPreviewFetchDescription" type="warning" />
-      <el-alert v-if="buildPreviewLoadingGuide.title" class="access-page__alert" :closable="false" :title="buildPreviewLoadingGuide.title" :description="buildPreviewLoadingGuide.description" :type="buildPreviewLoadingGuide.type || 'info'" />
-      <div v-if="createdBatch.batch?.batchNo" class="access-page__summary">
-        <div class="access-page__card"><span>批次号</span><strong>{{ createdBatch.batch.batchNo }}</strong><small>{{ createdBatch.batch.billMonth || '-' }}</small></div>
-        <div class="access-page__card"><span>标准对象数</span><strong>{{ createdBatch.itemTotal || createdBatch.batch.totalCount || 0 }}</strong><small>当前批次对象总数</small></div>
-        <div class="access-page__card"><span>预计分片数</span><strong>{{ createdBatch.loadingGuide?.estimatedPartitionCount || 0 }}</strong><small>按正式核算默认口径估算</small></div>
-        <div v-if="createdBatch.resumable" class="access-page__card"><span>继续装载</span><strong>{{ createdBatchCheckpoint.nextPageNo || createdBatchCheckpoint.nextCursor || '待继续' }}</strong><small>{{ createdBatchResumeTip }}</small></div>
-      </div>
-      <div v-if="createdBatch.batch?.batchNo" class="access-page__actions">
-        <el-button v-if="createdBatch.resumable" type="warning" icon="RefreshRight" :disabled="!selectedProfileId" @click="handleResumeBatchByProfile" v-hasPermi="['cost:task:execute']">继续装载剩余分页</el-button>
-        <el-button type="primary" icon="Promotion" :disabled="createdBatch.resumable" @click="openCreatedBatchTaskCenter">用该批次发起正式核算</el-button>
-        <el-button icon="Tickets" @click="openCreatedBatchLedger">查看导入批次台账</el-button>
-      </div>
-      <div v-if="buildPreview.mappedRecordCount" class="access-page__summary">
-        <div class="access-page__card"><span>原始记录数</span><strong>{{ buildPreview.rawRecordCount || 0 }}</strong><small>参与预演的宽表记录数</small></div>
-        <div class="access-page__card"><span>标准对象数</span><strong>{{ buildPreview.mappedRecordCount || 0 }}</strong><small>转换后的标准计费对象数</small></div>
-        <div class="access-page__card"><span>对象维度</span><strong>{{ buildPreviewObjectDimensions.length || 0 }}</strong><small>{{ buildPreviewObjectDimensions.join(' / ') || templateObjectDimension || '待补映射' }}</small></div>
-        <div class="access-page__card"><span>未命中路径</span><strong>{{ buildPreview.missingPaths?.length || 0 }}</strong><small>仍需补映射的模板路径数</small></div>
-        <div class="access-page__card"><span>预计分片数</span><strong>{{ buildPreviewLoadingGuide.estimatedPartitionCount || 0 }}</strong><small>按正式核算默认口径估算</small></div>
-      </div>
-      <div v-if="buildPreviewObjectDimensions.length" class="access-page__tags">
-        <span>识别维度：</span>
-        <el-tag v-for="dimension in buildPreviewObjectDimensions" :key="dimension" size="small">{{ dimension }}</el-tag>
-      </div>
-      <div v-if="buildPreview.missingPaths?.length" class="access-page__tags">
-        <span>未命中路径：</span>
-        <el-tag v-for="path in buildPreview.missingPaths" :key="path" size="small" type="warning">{{ path }}</el-tag>
-      </div>
-      <el-table v-if="buildPreviewMappings.length" :data="buildPreviewMappings" size="small" border class="access-page__table">
-        <el-table-column label="模板路径" prop="path" min-width="220" />
-        <el-table-column label="变量" min-width="180">
-          <template #default="scope">{{ scope.row.variableName }} ({{ scope.row.variableCode }})</template>
-        </el-table-column>
-        <el-table-column label="映射说明" prop="mappingHint" min-width="180" />
-        <el-table-column label="纳入模板" width="96" align="center">
-          <template #default="scope">
-            <el-tag :type="scope.row.includedInTemplate ? 'success' : 'info'" size="small">{{ scope.row.includedInTemplate ? '是' : '否' }}</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-tabs v-if="buildPreviewRecords.length || buildPreview.fetchedPayloadJson" class="access-page__tabs">
-        <el-tab-pane label="标准计费对象"><JsonEditor :model-value="buildPreviewRecords" title="标准计费对象" readonly :rows="10" /></el-tab-pane>
-        <el-tab-pane v-if="buildPreview.fetchedPayloadJson" label="接口返回原始报文"><JsonEditor :model-value="buildPreview.fetchedPayloadJson" title="接口返回原始报文" readonly :rows="10" /></el-tab-pane>
-        <el-tab-pane label="完整预演结果"><JsonEditor :model-value="formattedBuildPreviewJson" title="完整预演结果" readonly :rows="10" /></el-tab-pane>
-      </el-tabs>
     </section>
 
     <el-dialog v-model="profileDialogVisible" :title="profileDialogTitle" width="720px">
@@ -318,6 +370,10 @@ const autoMappingJson = ref('')
 const selectedProfileId = ref(undefined)
 const profileDialogVisible = ref(false)
 const profileDialogMode = ref('add')
+const activeStageKey = ref('template')
+const templateStageRef = ref()
+const feeStageRef = ref()
+const previewStageRef = ref()
 
 const selectionForm = reactive({
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
@@ -382,6 +438,12 @@ const createdBatchResumeTip = computed(() => {
 const formattedTemplateJson = computed(() => formatJson(templateData.value.inputJson))
 const formattedBuildPreviewJson = computed(() => formatJson(buildPreview.value))
 const currentProfile = computed(() => profileOptions.value.find(item => item.profileId === selectedProfileId.value))
+const currentScene = computed(() => sceneOptions.value.find(item => item.sceneId === selectionForm.sceneId))
+const currentFee = computed(() => {
+  if (!selectionForm.feeId && !selectionForm.feeCode) return undefined
+  return feeOptions.value.find(item => item.feeId === selectionForm.feeId || item.feeCode === selectionForm.feeCode)
+})
+const currentVersion = computed(() => versionOptions.value.find(item => item.versionId === selectionForm.versionId))
 const profileDialogTitle = computed(() => profileDialogMode.value === 'edit' ? '更新接入方案' : '保存接入方案')
 const buildPreviewFetchTitle = computed(() => {
   const fetchMeta = buildPreview.value.fetchMeta
@@ -404,6 +466,67 @@ const metricItems = computed(() => [
   { label: '模板字段', value: templateData.value.inputFieldCount || 0, desc: '当前费用模板要求准备的字段数' },
   { label: '本次记录', value: feeResult.value.recordCount || 0, desc: '最近一次单费用取价返回的记录数' }
 ])
+const contextItems = computed(() => [
+  {
+    label: '当前场景',
+    value: currentScene.value?.sceneName || '未选择场景',
+    desc: currentScene.value?.sceneCode || '请选择需要接入的业务场景'
+  },
+  {
+    label: '目标费用',
+    value: currentFee.value?.feeName || selectionForm.feeCode || '未选择费用',
+    desc: currentFee.value?.feeCode || '生成模板前需要先定位费用主线'
+  },
+  {
+    label: '执行版本',
+    value: currentVersion.value?.versionNo || '按当前配置或生效版本',
+    desc: currentVersion.value?.versionStatusName || currentVersion.value?.versionStatus || '未强制绑定版本'
+  },
+  {
+    label: '当前方案',
+    value: currentProfile.value?.profileName || '未选择复用方案',
+    desc: currentProfile.value?.profileCode || '可直接把当前映射和样例沉淀为方案'
+  }
+])
+const workflowStages = computed(() => [
+  {
+    key: 'template',
+    order: '01',
+    label: '模板准备',
+    desc: templateData.value.fee?.feeCode
+      ? `${templateData.value.inputFieldCount || 0} 个模板字段已就绪`
+      : '先锁定场景、费用与任务类型',
+    status: templateData.value.fee?.feeCode ? 'done' : selectionForm.sceneId && selectionForm.feeId ? 'ready' : 'pending'
+  },
+  {
+    key: 'fee',
+    order: '02A',
+    label: '单费用验证',
+    desc: feeResult.value.recordCount
+      ? `最近一次回算 ${feeResult.value.recordCount} 条`
+      : calcForm.inputJson?.trim()
+        ? '可直接用标准对象验证计价'
+        : '等待模板示例或预演结果回填',
+    status: feeResult.value.recordCount ? 'done' : calcForm.inputJson?.trim() ? 'ready' : 'pending'
+  },
+  {
+    key: 'preview',
+    order: '02B',
+    label: '对象预演与入批',
+    desc: createdBatch.value?.batch?.batchNo
+      ? `已生成批次 ${createdBatch.value.batch.batchNo}`
+      : buildPreview.value.mappedRecordCount
+        ? `已预演 ${buildPreview.value.mappedRecordCount} 个标准对象`
+        : currentProfile.value?.sourceType === 'HTTP_API'
+          ? '支持按方案直连接口拉取'
+          : '支持原始报文整理与导入批次生成',
+    status: createdBatch.value?.batch?.batchNo || buildPreview.value.mappedRecordCount
+      ? 'done'
+      : builderForm.rawJson?.trim() || currentProfile.value?.sourceType === 'HTTP_API'
+        ? 'ready'
+        : 'pending'
+  }
+])
 const profileSummary = computed(() => {
   if (!currentProfile.value) return ''
   const sourceLabel = currentProfile.value.sourceType === 'HTTP_API' ? '外部 HTTP 接口' : '原始 JSON / 宽表报文'
@@ -414,6 +537,18 @@ const feeResultSummary = computed(() => {
   if (!feeResult.value.recordCount) return ''
   return `本次回算 ${feeResult.value.recordCount} 条，成功 ${feeResult.value.successCount || 0} 条，未命中 ${feeResult.value.noMatchCount || 0} 条，失败 ${feeResult.value.failedCount || 0} 条。`
 })
+
+function scrollToStage(stageKey) {
+  activeStageKey.value = stageKey
+  nextTick(() => {
+    const stageMap = {
+      template: templateStageRef.value,
+      fee: feeStageRef.value,
+      preview: previewStageRef.value
+    }
+    stageMap[stageKey]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
 
 async function loadScenes() {
   const response = await optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
@@ -507,6 +642,7 @@ async function handleFeeChange(feeId) {
 }
 
 async function handleBuildTemplate() {
+  activeStageKey.value = 'template'
   if (!selectionForm.sceneId || (!selectionForm.feeId && !selectionForm.feeCode)) {
     proxy.$modal.msgWarning('请先选择场景和目标费用')
     return
@@ -536,6 +672,7 @@ async function handleBuildTemplate() {
 }
 
 async function handleCalculateFee() {
+  activeStageKey.value = 'fee'
   if (!selectionForm.sceneId || (!selectionForm.feeId && !selectionForm.feeCode)) {
     proxy.$modal.msgWarning('请先选择场景和目标费用')
     return
@@ -557,6 +694,7 @@ async function handleCalculateFee() {
 }
 
 async function handlePreviewBuild() {
+  activeStageKey.value = 'preview'
   if (!selectionForm.sceneId || (!selectionForm.feeId && !selectionForm.feeCode)) {
     proxy.$modal.msgWarning('请先选择场景和目标费用')
     return
@@ -584,10 +722,12 @@ function handleUseBuildPreview() {
     return
   }
   calcForm.inputJson = formatJson(buildPreviewRecords.value)
+  scrollToStage('fee')
   proxy.$modal.msgSuccess('已用预演结果覆盖单费用取价输入')
 }
 
 async function handleCreateBatchFromPreview() {
+  activeStageKey.value = 'preview'
   if (!selectionForm.sceneId) {
     proxy.$modal.msgWarning('请先选择场景')
     return
@@ -732,6 +872,7 @@ async function handleProfileChange(profileId) {
 }
 
 async function handlePreviewBuildByProfile() {
+  activeStageKey.value = 'preview'
   if (!selectedProfileId.value) {
     proxy.$modal.msgWarning('请先选择接入方案')
     return
@@ -751,6 +892,7 @@ async function handlePreviewBuildByProfile() {
 }
 
 async function handleCreateBatchByProfile() {
+  activeStageKey.value = 'preview'
   if (!selectedProfileId.value) {
     proxy.$modal.msgWarning('请先选择接入方案')
     return
@@ -786,6 +928,7 @@ async function handleCreateBatchByProfile() {
 }
 
 async function handleResumeBatchByProfile() {
+  activeStageKey.value = 'preview'
   if (!selectedProfileId.value) {
     proxy.$modal.msgWarning('请先选择接入方案')
     return
@@ -936,18 +1079,13 @@ onActivated(async () => {
   margin-top: 8px;
 }
 
-.access-page__metrics,
-.access-page__grid {
+.access-page__metrics {
   display: grid;
   gap: 16px;
 }
 
 .access-page__metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.access-page__grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .access-page__metric,
@@ -964,11 +1102,15 @@ onActivated(async () => {
 }
 
 .access-page__panel {
-  padding: 16px;
+  padding: 18px;
 }
 
 .access-page__panel h3 {
   margin: 0 0 12px;
+}
+
+.access-page__query-shell {
+  background: color-mix(in srgb, var(--el-color-success-light-9) 12%, var(--el-bg-color-overlay));
 }
 
 .access-page__section-head {
@@ -987,6 +1129,12 @@ onActivated(async () => {
   margin-top: 14px;
 }
 
+.access-page__form-shell,
+.access-page__work-pane {
+  display: grid;
+  gap: 14px;
+}
+
 .access-page__alert,
 .access-page__table,
 .access-page__tabs,
@@ -1001,9 +1149,133 @@ onActivated(async () => {
   margin-top: 14px;
 }
 
+.access-page__summary--context {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .access-page__card {
   border-radius: 14px;
   background: color-mix(in srgb, var(--el-color-success-light-9) 30%, var(--el-bg-color-overlay));
+}
+
+.access-page__card--context strong {
+  font-size: 18px;
+  line-height: 1.45;
+  color: var(--el-text-color-primary);
+  word-break: break-word;
+}
+
+.access-page__workflow-shell {
+  display: grid;
+  gap: 16px;
+  padding-top: 20px;
+}
+
+.access-page__stage-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.access-page__stage-chip {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid var(--el-border-color);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--el-color-success-light-9) 20%, var(--el-bg-color-overlay));
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.access-page__stage-chip:hover {
+  border-color: var(--el-color-success-light-3);
+  transform: translateY(-1px);
+}
+
+.access-page__stage-chip.is-active {
+  border-color: var(--el-color-success);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--el-color-success) 18%, transparent);
+}
+
+.access-page__stage-chip.is-done {
+  background: color-mix(in srgb, var(--el-color-success-light-8) 35%, var(--el-bg-color-overlay));
+}
+
+.access-page__stage-chip.is-ready {
+  background: color-mix(in srgb, var(--el-color-warning-light-8) 28%, var(--el-bg-color-overlay));
+}
+
+.access-page__stage-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--el-color-success-light-7) 65%, var(--el-bg-color));
+  color: var(--el-color-success-dark-2);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.access-page__stage-main {
+  display: grid;
+  gap: 4px;
+}
+
+.access-page__stage-main strong {
+  font-size: 15px;
+  color: var(--el-text-color-primary);
+}
+
+.access-page__stage-main small {
+  color: var(--el-text-color-secondary);
+  line-height: 1.45;
+}
+
+.access-page__stage-panel {
+  border: 1px solid var(--el-border-color);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--el-color-success-light-9) 14%, var(--el-bg-color-overlay));
+  padding: 18px;
+}
+
+.access-page__pane-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.access-page__pane-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--el-color-success-light-8) 50%, var(--el-bg-color));
+  color: var(--el-color-success-dark-2);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.access-page__pane-head h4 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.access-page__pane-head p {
+  margin: 6px 0 0;
+  color: var(--el-text-color-secondary);
+}
+
+.access-page__editor-stack {
+  display: grid;
+  gap: 14px;
 }
 
 .access-page__tags {
@@ -1019,9 +1291,22 @@ onActivated(async () => {
   word-break: break-all;
 }
 
+.access-page.is-compact-mode {
+  gap: 14px;
+}
+
+.access-page.is-compact-mode .access-page__panel {
+  padding: 14px;
+}
+
+.access-page.is-compact-mode .access-page__stage-strip {
+  grid-template-columns: 1fr;
+}
+
 @media (max-width: 1280px) {
   .access-page__metrics,
-  .access-page__grid {
+  .access-page__summary--context,
+  .access-page__stage-strip {
     grid-template-columns: 1fr;
   }
 
@@ -1029,7 +1314,8 @@ onActivated(async () => {
     flex-direction: column;
   }
 
-  .access-page__section-head {
+  .access-page__section-head,
+  .access-page__pane-head {
     flex-direction: column;
   }
 }

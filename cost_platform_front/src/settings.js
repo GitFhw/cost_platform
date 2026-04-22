@@ -62,6 +62,6 @@ export default {
   /**
    * 底部版权文本内容
    */
-  footerContent: 'Copyright © 2026 企业级成本核算平台'
+  footerContent: 'Copyright © 2026 成本核算平台'
 }
 

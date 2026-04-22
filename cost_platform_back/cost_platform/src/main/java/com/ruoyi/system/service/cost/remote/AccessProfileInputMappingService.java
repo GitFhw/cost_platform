@@ -63,8 +63,8 @@ public class AccessProfileInputMappingService {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> field : fields) {
             LinkedHashMap<String, Object> item = new LinkedHashMap<>();
-            String path = stringValue(field.get("path"));
             String variableCode = stringValue(field.get("variableCode"));
+            String path = firstNonBlank(stringValue(field.get("path")), variableCode);
             Object mappingSpec = resolveInputBuildMappingSpec(mapping, path, variableCode);
             item.put("path", path);
             item.put("variableCode", variableCode);
@@ -102,15 +102,12 @@ public class AccessProfileInputMappingService {
             if (!Boolean.TRUE.equals(field.get("includedInTemplate"))) {
                 continue;
             }
-            String path = stringValue(field.get("path"));
             String variableCode = stringValue(field.get("variableCode"));
+            String path = firstNonBlank(stringValue(field.get("path")), variableCode);
             Object mappedValue = resolveMappedFieldValue(rawRecord, mapping, path, variableCode);
             if (mappedValue == null) {
-                missingPaths.add(firstNonBlank(variableCode, path));
+                missingPaths.add(firstNonBlank(path, variableCode));
                 continue;
-            }
-            if (StringUtils.isNotEmpty(variableCode)) {
-                populatePathValue(target, variableCode, mappedValue);
             }
             populatePathValue(target, path, mappedValue);
         }

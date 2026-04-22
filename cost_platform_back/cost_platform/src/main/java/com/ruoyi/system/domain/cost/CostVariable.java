@@ -200,11 +200,11 @@ public class CostVariable extends BaseEntity {
     private String authConfigJson;
 
     /**
-     * 上下文取值路径，可选。多系统接入优先通过变量编码绑定。
+     * 标准对象来源路径。为空时按变量编码从平铺运行上下文取值；配置后按多级路径取值。
      */
-    @Excel(name = "上下文路径")
+    @Excel(name = "来源路径")
     @TableField("data_path")
-    @Size(max = 255, message = "上下文路径长度不能超过255个字符")
+    @Size(max = 255, message = "来源路径长度不能超过255个字符")
     private String dataPath;
 
     /**

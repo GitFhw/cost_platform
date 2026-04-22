@@ -2,9 +2,8 @@
 -- 说明：
 -- 1. 清理 10001/10002/10003 三套演示场景及其发布、任务、结果台账。
 -- 2. 回填“首钢矿石人力费用”真实费用结构。
--- 3. 非费用项（如吞吐量二次分配、资金池预留、界面调整）不落成 fee。
+-- 3. 非费用项（如吞吐量二次分配、资金池预留、界面调整）不落成本平台 fee。
 -- 4. 部分上游整理口径继续由第三方组织后传入，例如带缆作业人数、季节性补贴计发份额。
-
 create temporary table if not exists tmp_reset_scene_ids as
 select scene_id
 from cost_scene
@@ -108,6 +107,9 @@ drop temporary table if exists tmp_reset_task_ids;
 drop temporary table if exists tmp_reset_version_ids;
 drop temporary table if exists tmp_reset_scene_ids;
 
+-- 首钢矿石人力费用真实配置（不含演示场景清理）
+-- 来源：cost_init_demo.sql V20260405_018__replace_demo_with_shougang_hr_costs.sql
+-- 说明：用于仅初始化基础库后回填真实业务配置
 insert into sys_dict_type (dict_id, dict_name, dict_type, status, create_by, create_time, remark)
 select (select coalesce(max(dict_id), 0) + 1 from sys_dict_type), '核算-首钢苫盖动作', 'cost_sg_cover_action', '0', 'flyway', sysdate(), '首钢矿石人力费用苫盖动作字典'
 from dual
@@ -193,19 +195,13 @@ from cost_scene s
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable_group where scene_id = s.scene_id and group_code = 'SG_ALLOWANCE');
 
-insert into cost_variable_group (scene_id, group_code, group_name, sort_no, status, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, 'SG_FORMULA', '派生指标', 50, '0', '通过公式编码治理的派生指标', 'flyway', sysdate(), 'flyway', sysdate()
-from cost_scene s
-where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_variable_group where scene_id = s.scene_id and group_code = 'SG_FORMULA');
-
 insert into cost_formula (scene_id, formula_code, formula_name, formula_desc, business_formula, formula_expr, asset_type, workbench_mode, workbench_pattern, namespace_scope, return_type, status, sort_no, remark, create_by, create_time, update_by, update_time)
 select s.scene_id,
-       'SG_FORMULA_FEMALE_ATTEND_EQUIV',
-       '女工出勤折算量',
-       '按女工人数和出勤占比折算固定类劳务费计价基数',
-       '队女工人数 * (女工实际出勤 / 女工应出勤)',
-       'V.FEMALE_TEAM_HEADCOUNT * (V.FEMALE_ACTUAL_ATTENDANCE / max(V.FEMALE_REQUIRED_ATTENDANCE, 1))',
+       'SG_RULE_FEMALE_SHIFT_LABOR_AMOUNT',
+       '女工固定类劳务费金额公式',
+       '直接按女工人数和出勤占比计算固定类劳务费金额，不再依赖折算量派生变量',
+       '21700 / 6 * 队女工人数 * (女工实际出勤 / 女工应出勤)',
+       'round((21700 / 6) * V.FEMALE_TEAM_HEADCOUNT * (V.FEMALE_ACTUAL_ATTENDANCE / max(V.FEMALE_REQUIRED_ATTENDANCE, 1)), 2)',
        'FORMULA',
        'EXPERT',
        'IF_ELSE',
@@ -213,22 +209,22 @@ select s.scene_id,
        'NUMBER',
        '0',
        10,
-       '首钢真实费用：女工固定类劳务费派生基数',
+       '首钢真实费用：女工固定类劳务费直接公式',
        'flyway',
        sysdate(),
        'flyway',
        sysdate()
 from cost_scene s
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_formula where scene_id = s.scene_id and formula_code = 'SG_FORMULA_FEMALE_ATTEND_EQUIV');
+  and not exists (select 1 from cost_formula where scene_id = s.scene_id and formula_code = 'SG_RULE_FEMALE_SHIFT_LABOR_AMOUNT');
 
 insert into cost_formula (scene_id, formula_code, formula_name, formula_desc, business_formula, formula_expr, asset_type, workbench_mode, workbench_pattern, namespace_scope, return_type, status, sort_no, remark, create_by, create_time, update_by, update_time)
 select s.scene_id,
-       'SG_FORMULA_SPECIAL_ATTEND_EQUIV',
-       '专班出勤折算量',
-       '按专班人数和出勤占比折算固定类劳务费计价基数',
-       '专班人数 * (专班实际出勤 / 专班应出勤)',
-       'V.SPECIAL_TEAM_HEADCOUNT * (V.SPECIAL_ACTUAL_ATTENDANCE / max(V.SPECIAL_REQUIRED_ATTENDANCE, 1))',
+       'SG_RULE_SPECIAL_SHIFT_LABOR_AMOUNT',
+       '清料专班库场专班固定类劳务费金额公式',
+       '直接按专班人数和出勤占比计算固定类劳务费金额，不再依赖折算量派生变量',
+       '253000 / 30 * 专班人数 * (专班实际出勤 / 专班应出勤)',
+       'round((253000 / 30) * V.SPECIAL_TEAM_HEADCOUNT * (V.SPECIAL_ACTUAL_ATTENDANCE / max(V.SPECIAL_REQUIRED_ATTENDANCE, 1)), 2)',
        'FORMULA',
        'EXPERT',
        'IF_ELSE',
@@ -236,22 +232,22 @@ select s.scene_id,
        'NUMBER',
        '0',
        20,
-       '首钢真实费用：清料专班/库场专班固定类劳务费派生基数',
+       '首钢真实费用：清料专班/库场专班固定类劳务费直接公式',
        'flyway',
        sysdate(),
        'flyway',
        sysdate()
 from cost_scene s
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_formula where scene_id = s.scene_id and formula_code = 'SG_FORMULA_SPECIAL_ATTEND_EQUIV');
+  and not exists (select 1 from cost_formula where scene_id = s.scene_id and formula_code = 'SG_RULE_SPECIAL_SHIFT_LABOR_AMOUNT');
 
 insert into cost_formula (scene_id, formula_code, formula_name, formula_desc, business_formula, formula_expr, asset_type, workbench_mode, workbench_pattern, namespace_scope, return_type, status, sort_no, remark, create_by, create_time, update_by, update_time)
 select s.scene_id,
-       'SG_FORMULA_DUTY_TEAM_SHARE',
-       '值守专班分摊系数',
-       '按该队应出勤占比和实际出勤占比计算值守专班分摊系数',
-       '(该队应出勤 / 所有队应出勤) * (该队实际出勤 / 该队应出勤)',
-       '(V.DUTY_TEAM_REQUIRED_ATTENDANCE / max(V.ALL_TEAMS_REQUIRED_ATTENDANCE, 1)) * (V.DUTY_TEAM_ACTUAL_ATTENDANCE / max(V.DUTY_TEAM_REQUIRED_ATTENDANCE, 1))',
+       'SG_RULE_DUTY_SHIFT_LABOR_AMOUNT',
+       '值守专班劳务费金额公式',
+       '按真实口径从前置费用差额中扣减后，再直接乘以值守专班分摊公式',
+       '(吞吐量计件类费用 - 女工固定类劳务费 - 清料/库场专班固定类劳务费 - 清舱劳务费 - 苫盖零工劳务费 - 带缆费 - 零工费) * ((该队应出勤 / 所有队应出勤) * (该队实际出勤 / 该队应出勤))',
+       'round((coalesce(F[''SG_THRPT_PIECE_FEE'']?.pricing?.amountValue, 0) - coalesce(F[''SG_FEMALE_SHIFT_LABOR'']?.pricing?.amountValue, 0) - coalesce(F[''SG_SPECIAL_SHIFT_LABOR'']?.pricing?.amountValue, 0) - coalesce(F[''SG_HOLD_CLEANING_LABOR'']?.pricing?.amountValue, 0) - coalesce(F[''SG_COVER_ODD_JOB_LABOR'']?.pricing?.amountValue, 0) - coalesce(F[''SG_MOORING_FEE'']?.pricing?.amountValue, 0) - coalesce(F[''SG_ODD_JOB_FEE'']?.pricing?.amountValue, 0)) * (V.DUTY_TEAM_REQUIRED_ATTENDANCE / max(V.ALL_TEAMS_REQUIRED_ATTENDANCE, 1)) * (V.DUTY_TEAM_ACTUAL_ATTENDANCE / max(V.DUTY_TEAM_REQUIRED_ATTENDANCE, 1)), 2)',
        'FORMULA',
        'EXPERT',
        'IF_ELSE',
@@ -259,30 +255,7 @@ select s.scene_id,
        'NUMBER',
        '0',
        30,
-       '首钢真实费用：值守专班劳务费分摊系数',
-       'flyway',
-       sysdate(),
-       'flyway',
-       sysdate()
-from cost_scene s
-where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_formula where scene_id = s.scene_id and formula_code = 'SG_FORMULA_DUTY_TEAM_SHARE');
-
-insert into cost_formula (scene_id, formula_code, formula_name, formula_desc, business_formula, formula_expr, asset_type, workbench_mode, workbench_pattern, namespace_scope, return_type, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id,
-       'SG_RULE_DUTY_SHIFT_LABOR_AMOUNT',
-       '值守专班劳务费金额公式',
-       '按真实口径从前置费用差额中扣减后再按分摊系数分配',
-       '(吞吐量计件类费用 - 女工固定类劳务费 - 清料/库场专班固定类劳务费 - 清舱劳务费 - 苫盖零工劳务费 - 带缆费 - 零工费) * 值守专班分摊系数',
-       'round((coalesce(F[''SG_THRPT_PIECE_FEE'']?.pricing?.amountValue, 0) - coalesce(F[''SG_FEMALE_SHIFT_LABOR'']?.pricing?.amountValue, 0) - coalesce(F[''SG_SPECIAL_SHIFT_LABOR'']?.pricing?.amountValue, 0) - coalesce(F[''SG_HOLD_CLEANING_LABOR'']?.pricing?.amountValue, 0) - coalesce(F[''SG_COVER_ODD_JOB_LABOR'']?.pricing?.amountValue, 0) - coalesce(F[''SG_MOORING_FEE'']?.pricing?.amountValue, 0) - coalesce(F[''SG_ODD_JOB_FEE'']?.pricing?.amountValue, 0)) * V.DUTY_TEAM_SHARE, 2)',
-       'FORMULA',
-       'EXPERT',
-       'IF_ELSE',
-       'V,C,I,F,T',
-       'NUMBER',
-       '0',
-       40,
-       '首钢真实费用：值守专班劳务费',
+       '首钢真实费用：值守专班劳务费直接公式',
        'flyway',
        sysdate(),
        'flyway',
@@ -338,179 +311,158 @@ where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_formula where scene_id = s.scene_id and formula_code = 'SG_RULE_MANAGEMENT_FEE_AMOUNT');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'ALLOCATED_THROUGHPUT_TON', '吞吐量二次分配量', 'NUMBER', 'INPUT', '', 'ALLOCATED_THROUGHPUT_TON', null, '', 'NUMBER', '0', 4, '0', 10, '第三方整理后的吞吐量二次分配结果，按吨传入', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'ALLOCATED_THROUGHPUT_TON', '吞吐量二次分配量', 'NUMBER', 'INPUT', '', 'throughput.quantity', null, '', 'NUMBER', '0', 4, '0', 10, '第三方整理后的吞吐量二次分配结果，按吨传入', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_BASE'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'ALLOCATED_THROUGHPUT_TON');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'HOLD_COUNT', '清舱舱数', 'NUMBER', 'INPUT', '', 'HOLD_COUNT', null, '', 'NUMBER', '0', 2, '0', 20, '清舱劳务费按舱数计价', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'HOLD_COUNT', '清舱舱数', 'NUMBER', 'INPUT', '', 'holdCleaning.quantity', null, '', 'NUMBER', '0', 2, '0', 20, '清舱劳务费按舱数计价', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_BASE'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'HOLD_COUNT');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'ODD_JOB_HOURS', '零工作业时长', 'NUMBER', 'INPUT', '', 'ODD_JOB_HOURS', null, '', 'NUMBER', '0', 2, '0', 30, '零工费按小时计价', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'ODD_JOB_HOURS', '零工作业时长', 'NUMBER', 'INPUT', '', 'oddWork.quantity', null, '', 'NUMBER', '0', 2, '0', 30, '零工费按小时计价', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_BASE'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'ODD_JOB_HOURS');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'OVERTIME_DAYS', '加班天数', 'NUMBER', 'INPUT', '', 'OVERTIME_DAYS', null, '', 'NUMBER', '0', 2, '0', 40, '加班费用按天数计价', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'OVERTIME_DAYS', '加班天数', 'NUMBER', 'INPUT', '', 'overtime.quantity', null, '', 'NUMBER', '0', 2, '0', 40, '加班费用按天数计价', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_BASE'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'OVERTIME_DAYS');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'FEMALE_TEAM_HEADCOUNT', '队女工人数', 'NUMBER', 'INPUT', '', 'FEMALE_TEAM_HEADCOUNT', null, '', 'NUMBER', '0', 2, '0', 10, '女工固定类劳务费基础人数', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'FEMALE_TEAM_HEADCOUNT', '队女工人数', 'NUMBER', 'INPUT', '', 'attendance.female.headcount', null, '', 'NUMBER', '0', 2, '0', 10, '女工固定类劳务费基础人数', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ATTEND'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'FEMALE_TEAM_HEADCOUNT');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'FEMALE_ACTUAL_ATTENDANCE', '女工实际出勤', 'NUMBER', 'INPUT', '', 'FEMALE_ACTUAL_ATTENDANCE', null, '', 'NUMBER', '0', 2, '0', 20, '女工实际出勤量', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'FEMALE_ACTUAL_ATTENDANCE', '女工实际出勤', 'NUMBER', 'INPUT', '', 'attendance.female.actual', null, '', 'NUMBER', '0', 2, '0', 20, '女工实际出勤量', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ATTEND'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'FEMALE_ACTUAL_ATTENDANCE');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'FEMALE_REQUIRED_ATTENDANCE', '女工应出勤', 'NUMBER', 'INPUT', '', 'FEMALE_REQUIRED_ATTENDANCE', null, '', 'NUMBER', '1', 2, '0', 30, '女工应出勤量', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'FEMALE_REQUIRED_ATTENDANCE', '女工应出勤', 'NUMBER', 'INPUT', '', 'attendance.female.required', null, '', 'NUMBER', '1', 2, '0', 30, '女工应出勤量', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ATTEND'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'FEMALE_REQUIRED_ATTENDANCE');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'SPECIAL_TEAM_HEADCOUNT', '专班人数', 'NUMBER', 'INPUT', '', 'SPECIAL_TEAM_HEADCOUNT', null, '', 'NUMBER', '0', 2, '0', 40, '清料专班、库场专班人数', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'SPECIAL_TEAM_HEADCOUNT', '专班人数', 'NUMBER', 'INPUT', '', 'attendance.special.headcount', null, '', 'NUMBER', '0', 2, '0', 40, '清料专班、库场专班人数', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ATTEND'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'SPECIAL_TEAM_HEADCOUNT');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'SPECIAL_ACTUAL_ATTENDANCE', '专班实际出勤', 'NUMBER', 'INPUT', '', 'SPECIAL_ACTUAL_ATTENDANCE', null, '', 'NUMBER', '0', 2, '0', 50, '清料专班、库场专班实际出勤量', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'SPECIAL_ACTUAL_ATTENDANCE', '专班实际出勤', 'NUMBER', 'INPUT', '', 'attendance.special.actual', null, '', 'NUMBER', '0', 2, '0', 50, '清料专班、库场专班实际出勤量', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ATTEND'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'SPECIAL_ACTUAL_ATTENDANCE');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'SPECIAL_REQUIRED_ATTENDANCE', '专班应出勤', 'NUMBER', 'INPUT', '', 'SPECIAL_REQUIRED_ATTENDANCE', null, '', 'NUMBER', '1', 2, '0', 60, '清料专班、库场专班应出勤量', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'SPECIAL_REQUIRED_ATTENDANCE', '专班应出勤', 'NUMBER', 'INPUT', '', 'attendance.special.required', null, '', 'NUMBER', '1', 2, '0', 60, '清料专班、库场专班应出勤量', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ATTEND'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'SPECIAL_REQUIRED_ATTENDANCE');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'DUTY_TEAM_ACTUAL_ATTENDANCE', '值守队实际出勤', 'NUMBER', 'INPUT', '', 'DUTY_TEAM_ACTUAL_ATTENDANCE', null, '', 'NUMBER', '0', 2, '0', 70, '值守专班该队实际出勤量', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'DUTY_TEAM_ACTUAL_ATTENDANCE', '值守队实际出勤', 'NUMBER', 'INPUT', '', 'attendance.duty.actual', null, '', 'NUMBER', '0', 2, '0', 70, '值守专班该队实际出勤量', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ATTEND'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'DUTY_TEAM_ACTUAL_ATTENDANCE');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'DUTY_TEAM_REQUIRED_ATTENDANCE', '值守队应出勤', 'NUMBER', 'INPUT', '', 'DUTY_TEAM_REQUIRED_ATTENDANCE', null, '', 'NUMBER', '1', 2, '0', 80, '值守专班该队应出勤量', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'DUTY_TEAM_REQUIRED_ATTENDANCE', '值守队应出勤', 'NUMBER', 'INPUT', '', 'attendance.duty.required', null, '', 'NUMBER', '1', 2, '0', 80, '值守专班该队应出勤量', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ATTEND'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'DUTY_TEAM_REQUIRED_ATTENDANCE');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'ALL_TEAMS_REQUIRED_ATTENDANCE', '所有队应出勤', 'NUMBER', 'INPUT', '', 'ALL_TEAMS_REQUIRED_ATTENDANCE', null, '', 'NUMBER', '1', 2, '0', 90, '值守专班所有队应出勤量', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'ALL_TEAMS_REQUIRED_ATTENDANCE', '所有队应出勤', 'NUMBER', 'INPUT', '', 'attendance.duty.totalRequired', null, '', 'NUMBER', '1', 2, '0', 90, '值守专班所有队应出勤量', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ATTEND'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'ALL_TEAMS_REQUIRED_ATTENDANCE');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'COVER_ACTION', '苫盖动作', 'DICT', 'DICT', 'cost_sg_cover_action', 'COVER_ACTION', null, '', 'STRING', '', 2, '0', 10, '苫盖零工劳务费动作条件', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'COVER_ACTION', '苫盖动作', 'DICT', 'DICT', 'cost_sg_cover_action', 'cover.action', null, '', 'STRING', '', 2, '0', 10, '苫盖零工劳务费动作条件', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_SPECIAL'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'COVER_ACTION');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'COVER_CARGO_TYPE', '苫盖货种', 'DICT', 'DICT', 'cost_sg_cover_cargo_type', 'COVER_CARGO_TYPE', null, '', 'STRING', '', 2, '0', 20, '苫盖零工劳务费货种条件', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'COVER_CARGO_TYPE', '苫盖货种', 'DICT', 'DICT', 'cost_sg_cover_cargo_type', 'cover.cargoType', null, '', 'STRING', '', 2, '0', 20, '苫盖零工劳务费货种条件', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_SPECIAL'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'COVER_CARGO_TYPE');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'COVER_WORKLOAD_TON', '苫盖作业量', 'NUMBER', 'INPUT', '', 'COVER_WORKLOAD_TON', null, '', 'NUMBER', '0', 4, '0', 30, '苫盖零工劳务费按作业量计价', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'COVER_WORKLOAD_TON', '苫盖作业量', 'NUMBER', 'INPUT', '', 'cover.quantity', null, '', 'NUMBER', '0', 4, '0', 30, '苫盖零工劳务费按作业量计价', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_SPECIAL'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'COVER_WORKLOAD_TON');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'MOORING_ACTION', '带缆动作', 'DICT', 'DICT', 'cost_sg_mooring_action', 'MOORING_ACTION', null, '', 'STRING', '', 2, '0', 40, '带缆费动作条件', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'MOORING_ACTION', '带缆动作', 'DICT', 'DICT', 'cost_sg_mooring_action', 'mooring.action', null, '', 'STRING', '', 2, '0', 40, '带缆费动作条件', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_SPECIAL'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'MOORING_ACTION');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'MOORING_HEADCOUNT', '带缆作业人数', 'NUMBER', 'INPUT', '', 'MOORING_HEADCOUNT', null, '', 'NUMBER', '0', 2, '0', 50, '首期由第三方按船型和动作整理后传入作业人数', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'MOORING_HEADCOUNT', '带缆作业人数', 'NUMBER', 'INPUT', '', 'mooring.headcount', null, '', 'NUMBER', '0', 2, '0', 50, '首期由第三方按船型和动作整理后传入作业人数', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_SPECIAL'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'MOORING_HEADCOUNT');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'SEASONAL_SUBSIDY_EQUIV', '季节性补贴计发份额', 'NUMBER', 'INPUT', '', 'SEASONAL_SUBSIDY_EQUIV', null, '', 'NUMBER', '0', 4, '0', 10, '第三方按请假扣减规则整理后的计发份额', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'SEASONAL_SUBSIDY_EQUIV', '季节性补贴计发份额', 'NUMBER', 'INPUT', '', 'allowance.seasonal.equivalent', null, '', 'NUMBER', '0', 4, '0', 10, '第三方按请假扣减规则整理后的计发份额', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ALLOWANCE'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'SEASONAL_SUBSIDY_EQUIV');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'UNIT_BEARING_AMOUNT', '单位承担费用', 'NUMBER', 'INPUT', '', 'UNIT_BEARING_AMOUNT', null, '', 'NUMBER', '0', 2, '0', 20, '单位承担部分的费用，支持手工录入或导入', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'UNIT_BEARING_AMOUNT', '单位承担费用', 'NUMBER', 'INPUT', '', 'insurance.unitBearing.amount', null, '', 'NUMBER', '0', 2, '0', 20, '单位承担部分的费用，支持手工录入或导入', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ALLOWANCE'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'UNIT_BEARING_AMOUNT');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'INSURANCE_TAXABLE_AMOUNT', '五险应税额', 'NUMBER', 'INPUT', '', 'INSURANCE_TAXABLE_AMOUNT', null, '', 'NUMBER', '0', 2, '0', 30, '五险应税额，支持手工录入', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'INSURANCE_TAXABLE_AMOUNT', '五险应税额', 'NUMBER', 'INPUT', '', 'insurance.taxable.amount', null, '', 'NUMBER', '0', 2, '0', 30, '五险应税额，支持手工录入', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ALLOWANCE'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'INSURANCE_TAXABLE_AMOUNT');
 
 insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'EMPLOYER_LIABILITY_AMOUNT', '雇主责任险', 'NUMBER', 'INPUT', '', 'EMPLOYER_LIABILITY_AMOUNT', null, '', 'NUMBER', '0', 2, '0', 40, '雇主责任险，支持手工录入', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, g.group_id, 'EMPLOYER_LIABILITY_AMOUNT', '雇主责任险', 'NUMBER', 'INPUT', '', 'insurance.employerLiability.amount', null, '', 'NUMBER', '0', 2, '0', 40, '雇主责任险，支持手工录入', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_ALLOWANCE'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'EMPLOYER_LIABILITY_AMOUNT');
-
-insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'FEMALE_ATTENDANCE_EQUIV', '女工出勤折算量', 'FORMULA', 'FORMULA', '', 'FEMALE_ATTENDANCE_EQUIV', 'V.FEMALE_TEAM_HEADCOUNT * (V.FEMALE_ACTUAL_ATTENDANCE / max(V.FEMALE_REQUIRED_ATTENDANCE, 1))', 'SG_FORMULA_FEMALE_ATTEND_EQUIV', 'NUMBER', '0', 4, '0', 10, '公式派生：女工出勤折算量', 'flyway', sysdate(), 'flyway', sysdate()
-from cost_scene s
-join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_FORMULA'
-where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'FEMALE_ATTENDANCE_EQUIV');
-
-insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'SPECIAL_ATTENDANCE_EQUIV', '专班出勤折算量', 'FORMULA', 'FORMULA', '', 'SPECIAL_ATTENDANCE_EQUIV', 'V.SPECIAL_TEAM_HEADCOUNT * (V.SPECIAL_ACTUAL_ATTENDANCE / max(V.SPECIAL_REQUIRED_ATTENDANCE, 1))', 'SG_FORMULA_SPECIAL_ATTEND_EQUIV', 'NUMBER', '0', 4, '0', 20, '公式派生：清料专班、库场专班出勤折算量', 'flyway', sysdate(), 'flyway', sysdate()
-from cost_scene s
-join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_FORMULA'
-where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'SPECIAL_ATTENDANCE_EQUIV');
-
-insert into cost_variable (scene_id, group_id, variable_code, variable_name, variable_type, source_type, dict_type, data_path, formula_expr, formula_code, data_type, default_value, precision_scale, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, g.group_id, 'DUTY_TEAM_SHARE', '值守专班分摊系数', 'FORMULA', 'FORMULA', '', 'DUTY_TEAM_SHARE', '(V.DUTY_TEAM_REQUIRED_ATTENDANCE / max(V.ALL_TEAMS_REQUIRED_ATTENDANCE, 1)) * (V.DUTY_TEAM_ACTUAL_ATTENDANCE / max(V.DUTY_TEAM_REQUIRED_ATTENDANCE, 1))', 'SG_FORMULA_DUTY_TEAM_SHARE', 'NUMBER', '0', 6, '0', 30, '公式派生：值守专班分摊系数', 'flyway', sysdate(), 'flyway', sysdate()
-from cost_scene s
-join cost_variable_group g on g.scene_id = s.scene_id and g.group_code = 'SG_FORMULA'
-where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_variable where scene_id = s.scene_id and variable_code = 'DUTY_TEAM_SHARE');
 
 insert into cost_fee_item (scene_id, fee_code, fee_name, fee_category, unit_code, factor_summary, scope_description, object_dimension, sort_no, status, remark, create_by, create_time, update_by, update_time)
 select s.scene_id, 'SG_THRPT_PIECE_FEE', '吞吐量计件类费用', '劳务费', '吨', '吞吐量二次分配量 * 0.261 元/吨', '适用于矿石场景吞吐量计件费用', '队组', 10, '0', '首钢真实费用：吞吐量计件类费用', 'flyway', sysdate(), 'flyway', sysdate()
@@ -519,13 +471,13 @@ where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_fee_item where scene_id = s.scene_id and fee_code = 'SG_THRPT_PIECE_FEE');
 
 insert into cost_fee_item (scene_id, fee_code, fee_name, fee_category, unit_code, factor_summary, scope_description, object_dimension, sort_no, status, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, 'SG_FEMALE_SHIFT_LABOR', '女工固定类劳务费', '固定劳务费', '折算量', '21700/6 * 女工出勤折算量', '适用于倒班女工固定类劳务费', '队组', 20, '0', '首钢真实费用：女工（倒班，编制 6 人）', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, 'SG_FEMALE_SHIFT_LABOR', '女工固定类劳务费', '固定劳务费', '元', '21700/6 * 队女工人数 * (女工实际出勤 / 女工应出勤)', '适用于倒班女工固定类劳务费', '队组', 20, '0', '首钢真实费用：女工（倒班，编制 6 人）', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_fee_item where scene_id = s.scene_id and fee_code = 'SG_FEMALE_SHIFT_LABOR');
 
 insert into cost_fee_item (scene_id, fee_code, fee_name, fee_category, unit_code, factor_summary, scope_description, object_dimension, sort_no, status, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, 'SG_SPECIAL_SHIFT_LABOR', '清料专班库场专班固定类劳务费', '固定劳务费', '折算量', '253000/30 * 专班出勤折算量', '适用于清料专班、库场专班固定类劳务费', '队组', 30, '0', '首钢真实费用：清料专班、库场专班（白班，编制 30 人）', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, 'SG_SPECIAL_SHIFT_LABOR', '清料专班库场专班固定类劳务费', '固定劳务费', '元', '253000/30 * 专班人数 * (专班实际出勤 / 专班应出勤)', '适用于清料专班、库场专班固定类劳务费', '队组', 30, '0', '首钢真实费用：清料专班、库场专班（白班，编制 30 人）', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_fee_item where scene_id = s.scene_id and fee_code = 'SG_SPECIAL_SHIFT_LABOR');
@@ -555,7 +507,7 @@ where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_fee_item where scene_id = s.scene_id and fee_code = 'SG_ODD_JOB_FEE');
 
 insert into cost_fee_item (scene_id, fee_code, fee_name, fee_category, unit_code, factor_summary, scope_description, object_dimension, sort_no, status, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, 'SG_DUTY_SHIFT_LABOR', '值守专班劳务费', '劳务费', '元', '按前置费用差额 * 值守专班分摊系数计算', '适用于值守专班倒班场景', '队组', 80, '0', '首钢真实费用：值守专班劳务费', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, 'SG_DUTY_SHIFT_LABOR', '值守专班劳务费', '劳务费', '元', '按前置费用差额 * ((该队应出勤 / 所有队应出勤) * (该队实际出勤 / 该队应出勤)) 计算', '适用于值守专班倒班场景', '队组', 80, '0', '首钢真实费用：值守专班劳务费', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_fee_item where scene_id = s.scene_id and fee_code = 'SG_DUTY_SHIFT_LABOR');
@@ -605,20 +557,52 @@ where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'REQUIRED');
 
 insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 10, '女工固定类劳务费按女工出勤折算量计价', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 10, '女工固定类劳务费依赖队女工人数', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_FEMALE_SHIFT_LABOR'
-join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'FEMALE_ATTENDANCE_EQUIV'
+join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'FEMALE_TEAM_HEADCOUNT'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT');
+  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT' and sort_no = 10);
 
 insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 10, '清料专班库场专班固定类劳务费按专班出勤折算量计价', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 20, '女工固定类劳务费依赖女工实际出勤', 'flyway', sysdate(), 'flyway', sysdate()
+from cost_scene s
+join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_FEMALE_SHIFT_LABOR'
+join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'FEMALE_ACTUAL_ATTENDANCE'
+where s.scene_code = 'SHOUGANG-ORE-HR-001'
+  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT' and sort_no = 20);
+
+insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
+select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 30, '女工固定类劳务费依赖女工应出勤', 'flyway', sysdate(), 'flyway', sysdate()
+from cost_scene s
+join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_FEMALE_SHIFT_LABOR'
+join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'FEMALE_REQUIRED_ATTENDANCE'
+where s.scene_code = 'SHOUGANG-ORE-HR-001'
+  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT' and sort_no = 30);
+
+insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
+select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 10, '清料专班库场专班固定类劳务费依赖专班人数', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_SPECIAL_SHIFT_LABOR'
-join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'SPECIAL_ATTENDANCE_EQUIV'
+join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'SPECIAL_TEAM_HEADCOUNT'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT');
+  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT' and sort_no = 10);
+
+insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
+select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 20, '清料专班库场专班固定类劳务费依赖专班实际出勤', 'flyway', sysdate(), 'flyway', sysdate()
+from cost_scene s
+join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_SPECIAL_SHIFT_LABOR'
+join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'SPECIAL_ACTUAL_ATTENDANCE'
+where s.scene_code = 'SHOUGANG-ORE-HR-001'
+  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT' and sort_no = 20);
+
+insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
+select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 30, '清料专班库场专班固定类劳务费依赖专班应出勤', 'flyway', sysdate(), 'flyway', sysdate()
+from cost_scene s
+join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_SPECIAL_SHIFT_LABOR'
+join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'SPECIAL_REQUIRED_ATTENDANCE'
+where s.scene_code = 'SHOUGANG-ORE-HR-001'
+  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT' and sort_no = 30);
 
 insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
 select s.scene_id, f.fee_id, v.variable_id, 'REQUIRED', 10, '清舱劳务费依赖清舱数量', 'flyway', sysdate(), 'flyway', sysdate()
@@ -677,12 +661,28 @@ where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'REQUIRED');
 
 insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 10, '值守专班劳务费按分摊系数承接公式计算', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 10, '值守专班劳务费依赖值守队实际出勤', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_DUTY_SHIFT_LABOR'
-join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'DUTY_TEAM_SHARE'
+join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'DUTY_TEAM_ACTUAL_ATTENDANCE'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT');
+  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT' and sort_no = 10);
+
+insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
+select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 20, '值守专班劳务费依赖值守队应出勤', 'flyway', sysdate(), 'flyway', sysdate()
+from cost_scene s
+join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_DUTY_SHIFT_LABOR'
+join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'DUTY_TEAM_REQUIRED_ATTENDANCE'
+where s.scene_code = 'SHOUGANG-ORE-HR-001'
+  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT' and sort_no = 20);
+
+insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
+select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 30, '值守专班劳务费依赖所有队应出勤', 'flyway', sysdate(), 'flyway', sysdate()
+from cost_scene s
+join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_DUTY_SHIFT_LABOR'
+join cost_variable v on v.scene_id = s.scene_id and v.variable_code = 'ALL_TEAMS_REQUIRED_ATTENDANCE'
+where s.scene_code = 'SHOUGANG-ORE-HR-001'
+  and not exists (select 1 from cost_fee_variable_rel where fee_id = f.fee_id and variable_id = v.variable_id and relation_type = 'FORMULA_INPUT' and sort_no = 30);
 
 insert into cost_fee_variable_rel (scene_id, fee_id, variable_id, relation_type, sort_no, remark, create_by, create_time, update_by, update_time)
 select s.scene_id, f.fee_id, v.variable_id, 'FORMULA_INPUT', 10, '季节性补贴依赖第三方整理后的计发份额', 'flyway', sysdate(), 'flyway', sysdate()
@@ -734,22 +734,22 @@ where s.scene_code = 'SHOUGANG-ORE-HR-001'
   and not exists (select 1 from cost_rule where scene_id = s.scene_id and rule_code = 'SG_THRPT_PIECE_RATE_01');
 
 insert into cost_rule (scene_id, fee_id, rule_code, rule_name, rule_type, condition_logic, priority, quantity_variable_code, pricing_mode, pricing_json, amount_formula, amount_formula_code, note_template, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, f.fee_id, 'SG_FEMALE_SHIFT_RATE_01', '女工固定类劳务费规则', 'FIXED_RATE', 'AND', 100, 'FEMALE_ATTENDANCE_EQUIV', 'TYPED',
-       '{"mode":"FIXED_RATE","basis":"FEMALE_ATTENDANCE_EQUIV","unit":"折算量","rateValue":3616.666667,"summary":"按 21700/6 * 女工出勤折算量计价"}',
-       null, null, '女工固定类劳务费按 21700/6 * 女工出勤折算量计价', '0', 20, '首钢真实费用：女工（倒班，编制 6 人）', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, f.fee_id, 'SG_FEMALE_SHIFT_FORMULA_01', '女工固定类劳务费公式规则', 'FORMULA', 'AND', 100, '', 'TYPED',
+       null,
+       '21700 / 6 * 队女工人数 * (女工实际出勤 / 女工应出勤)', 'SG_RULE_FEMALE_SHIFT_LABOR_AMOUNT', '女工固定类劳务费按人数和出勤占比直接计算', '0', 20, '首钢真实费用：女工（倒班，编制 6 人）', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_FEMALE_SHIFT_LABOR'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_rule where scene_id = s.scene_id and rule_code = 'SG_FEMALE_SHIFT_RATE_01');
+  and not exists (select 1 from cost_rule where scene_id = s.scene_id and rule_code = 'SG_FEMALE_SHIFT_FORMULA_01');
 
 insert into cost_rule (scene_id, fee_id, rule_code, rule_name, rule_type, condition_logic, priority, quantity_variable_code, pricing_mode, pricing_json, amount_formula, amount_formula_code, note_template, status, sort_no, remark, create_by, create_time, update_by, update_time)
-select s.scene_id, f.fee_id, 'SG_SPECIAL_SHIFT_RATE_01', '清料专班库场专班固定类劳务费规则', 'FIXED_RATE', 'AND', 100, 'SPECIAL_ATTENDANCE_EQUIV', 'TYPED',
-       '{"mode":"FIXED_RATE","basis":"SPECIAL_ATTENDANCE_EQUIV","unit":"折算量","rateValue":8433.333333,"summary":"按 253000/30 * 专班出勤折算量计价"}',
-       null, null, '清料专班库场专班固定类劳务费按 253000/30 * 专班出勤折算量计价', '0', 30, '首钢真实费用：清料专班、库场专班（白班，编制 30 人）', 'flyway', sysdate(), 'flyway', sysdate()
+select s.scene_id, f.fee_id, 'SG_SPECIAL_SHIFT_FORMULA_01', '清料专班库场专班固定类劳务费公式规则', 'FORMULA', 'AND', 100, '', 'TYPED',
+       null,
+       '253000 / 30 * 专班人数 * (专班实际出勤 / 专班应出勤)', 'SG_RULE_SPECIAL_SHIFT_LABOR_AMOUNT', '清料专班库场专班固定类劳务费按人数和出勤占比直接计算', '0', 30, '首钢真实费用：清料专班、库场专班（白班，编制 30 人）', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_SPECIAL_SHIFT_LABOR'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'
-  and not exists (select 1 from cost_rule where scene_id = s.scene_id and rule_code = 'SG_SPECIAL_SHIFT_RATE_01');
+  and not exists (select 1 from cost_rule where scene_id = s.scene_id and rule_code = 'SG_SPECIAL_SHIFT_FORMULA_01');
 
 insert into cost_rule (scene_id, fee_id, rule_code, rule_name, rule_type, condition_logic, priority, quantity_variable_code, pricing_mode, pricing_json, amount_formula, amount_formula_code, note_template, status, sort_no, remark, create_by, create_time, update_by, update_time)
 select s.scene_id, f.fee_id, 'SG_HOLD_CLEANING_RATE_01', '清舱劳务费规则', 'FIXED_RATE', 'AND', 100, 'HOLD_COUNT', 'TYPED',
@@ -790,8 +790,8 @@ where s.scene_code = 'SHOUGANG-ORE-HR-001'
 insert into cost_rule (scene_id, fee_id, rule_code, rule_name, rule_type, condition_logic, priority, quantity_variable_code, pricing_mode, pricing_json, amount_formula, amount_formula_code, note_template, status, sort_no, remark, create_by, create_time, update_by, update_time)
 select s.scene_id, f.fee_id, 'SG_DUTY_SHIFT_FORMULA_01', '值守专班劳务费公式规则', 'FORMULA', 'AND', 100, '', 'TYPED',
        null,
-       '(吞吐量计件类费用 - 女工固定类劳务费 - 清料/库场专班固定类劳务费 - 清舱劳务费 - 苫盖零工劳务费 - 带缆费 - 零工费) * 值守专班分摊系数',
-       'SG_RULE_DUTY_SHIFT_LABOR_AMOUNT', '值守专班劳务费按前置费用差额和分摊系数计算', '0', 80, '首钢真实费用：值守专班劳务费', 'flyway', sysdate(), 'flyway', sysdate()
+       '(吞吐量计件类费用 - 女工固定类劳务费 - 清料/库场专班固定类劳务费 - 清舱劳务费 - 苫盖零工劳务费 - 带缆费 - 零工费) * ((该队应出勤 / 所有队应出勤) * (该队实际出勤 / 该队应出勤))',
+       'SG_RULE_DUTY_SHIFT_LABOR_AMOUNT', '值守专班劳务费按前置费用差额和多变量分摊公式直接计算', '0', 80, '首钢真实费用：值守专班劳务费', 'flyway', sysdate(), 'flyway', sysdate()
 from cost_scene s
 join cost_fee_item f on f.scene_id = s.scene_id and f.fee_code = 'SG_DUTY_SHIFT_LABOR'
 where s.scene_code = 'SHOUGANG-ORE-HR-001'

@@ -8,7 +8,7 @@
           统一管理业务输入、字典取值、第三方接入和公式变量，支撑规则配置、批量运行和结果追溯的输入口径。
         </p>
       </div>
-      <el-tag type="info">变量编码优先，接入中心映射优先，上下文路径可选</el-tag>
+      <el-tag type="info">来源路径优先，变量编码仅作兼容兜底</el-tag>
     </section>
 
     <section v-show="!isCompactMode" class="variable-center__metrics">
@@ -92,15 +92,15 @@
         <div class="variable-center__guide-list">
           <div class="variable-center__guide-item">
             <el-tag type="success" size="small">INPUT</el-tag>
-            <span>直接承接业务输入，优先按变量编码取值；上下文路径只作为标准 JSON 直传的可选兼容。</span>
+            <span>直接承接业务输入；来源路径可选，未配置时按变量编码接收平铺输入，配置后按多级对象取值，例如 oddWork.quantity。</span>
           </div>
           <div class="variable-center__guide-item">
             <el-tag type="info" size="small">DICT</el-tag>
-            <span>从系统字典或核算字典取值，避免在规则里重复硬编码枚举。</span>
+            <span>字典负责值域约束；来源路径可选，未配置时按变量编码取值，配置后可从对象属性取值，例如 cover.action。</span>
           </div>
           <div class="variable-center__guide-item">
             <el-tag type="warning" size="small">REMOTE</el-tag>
-            <span>承接第三方接口变量；当前配置能力已齐，但真实执行链仍属于后续增强项。</span>
+            <span>承接第三方接口变量；可按变量编码平铺落入上下文，也可声明来源路径落入多级对象。</span>
           </div>
           <div class="variable-center__guide-item">
             <el-tag size="small">FORMULA</el-tag>
@@ -178,6 +178,9 @@
       <el-table-column label="来源" prop="sourceType" width="120" align="center">
         <template #default="scope"><dict-tag :options="sourceTypeOptions" :value="scope.row.sourceType" /></template>
       </el-table-column>
+      <el-table-column label="来源路径" prop="dataPath" width="140" align="center">
+        <template #default="scope">{{ scope.row.dataPath || '-' }}</template>
+      </el-table-column>
       <el-table-column label="来源系统" prop="sourceSystem" width="140" align="center">
         <template #default="scope">{{ scope.row.sourceSystem || '-' }}</template>
       </el-table-column>
@@ -222,12 +225,12 @@
           <el-col :span="12"><el-form-item label="状态" prop="status"><el-radio-group v-model="form.status"><el-radio v-for="item in variableStatusOptions" :key="item.value" :label="item.value">{{ item.label }}</el-radio></el-radio-group></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="默认值" prop="defaultValue"><el-input v-model="form.defaultValue" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="精度" prop="precisionScale"><el-input-number v-model="form.precisionScale" :min="0" :max="8" style="width: 100%" /></el-form-item></el-col>
-          <el-col v-if="['INPUT', 'REMOTE'].includes(form.sourceType)" :span="24">
-            <el-form-item label="上下文路径" prop="dataPath">
-              <el-input v-model="form.dataPath" placeholder="可选，如 job.weightTon；接入中心已按变量编码绑定时可不填" />
+          <el-col v-if="['INPUT', 'DICT', 'REMOTE'].includes(form.sourceType)" :span="24">
+            <el-form-item label="来源路径" prop="dataPath">
+              <el-input v-model="form.dataPath" placeholder="可选；为空时按变量编码平铺取值，填写后如 cover.action、oddWork.quantity" />
             </el-form-item>
             <div class="variable-center__drawer-tip variable-center__drawer-tip--compact">
-              运行时优先按变量编码取值；上下文路径仅用于兼容标准 JSON 直传或旧版路径模型。
+              运行时优先按来源路径取值；未配置时自动按变量编码取平铺输入。字典类型只负责值域约束，不代表取值位置。
             </div>
           </el-col>
         </el-row>
@@ -244,7 +247,7 @@
             </el-option-group>
           </el-select>
           <div class="variable-center__drawer-tip variable-center__drawer-tip--compact">
-            字典来源变量统一从系统字典与核算字典下拉选择，不再手工录入 `dictType` 编码。
+            字典来源变量统一从系统字典与核算字典下拉选择；来源路径可选，配置后可绑定对象内属性，例如 cover.action。
           </div>
         </el-form-item>
         <template v-if="form.sourceType === 'REMOTE'">
@@ -334,7 +337,7 @@
           <el-table :data="previewResult.mappedRows" height="260" size="small">
             <el-table-column prop="variableCode" label="变量编码" />
             <el-table-column prop="mappedValue" label="映射值" />
-            <el-table-column prop="dataPath" label="上下文路径" />
+            <el-table-column prop="dataPath" label="来源路径" />
             <el-table-column prop="rawJson" label="映射依据" min-width="220" show-overflow-tooltip />
           </el-table>
         </el-col>
@@ -602,7 +605,7 @@
           <el-descriptions-item label="内容类型">{{ detailInfo.contentType || '-' }}</el-descriptions-item>
           <el-descriptions-item label="适配器类型">{{ resolveRemoteOptionLabel(adapterTypeOptions, detailInfo.adapterType) }}</el-descriptions-item>
           <el-descriptions-item label="鉴权方式">{{ resolveDictLabel(authTypeOptions, detailInfo.authType) }}</el-descriptions-item>
-          <el-descriptions-item label="上下文路径">{{ detailInfo.dataPath || '未配置，按变量编码取值' }}</el-descriptions-item>
+          <el-descriptions-item label="来源路径">{{ detailInfo.dataPath || '未配置，按变量编码平铺取值' }}</el-descriptions-item>
           <el-descriptions-item label="同步方式">{{ resolveDictLabel(syncModeOptions, detailInfo.syncMode) }}</el-descriptions-item>
           <el-descriptions-item label="缓存策略">{{ resolveDictLabel(cachePolicyOptions, detailInfo.cachePolicy) }}</el-descriptions-item>
           <el-descriptions-item label="失败兜底">{{ resolveDictLabel(fallbackPolicyOptions, detailInfo.fallbackPolicy) }}</el-descriptions-item>

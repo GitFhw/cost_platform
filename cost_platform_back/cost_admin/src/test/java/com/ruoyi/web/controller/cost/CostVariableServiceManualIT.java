@@ -84,6 +84,56 @@ class CostVariableServiceManualIT {
     }
 
     @Test
+    void shouldKeepDictVariableDataPathThroughSourceHandlerChain() {
+        Long sceneId = requireSceneId();
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+
+        CostVariable variable = buildBaseVariable(sceneId, "TMP_VAR_DICT_CHAIN_" + stamp, "dict-chain-" + stamp);
+        variable.setSourceType("DICT");
+        variable.setDictType("cost_variable_status");
+        variable.setDataPath("cover.action");
+        variable.setRemoteApi("https://example.internal/demo");
+        variable.setFormulaCode("TMP_FORMULA");
+
+        variableService.insertVariable(variable);
+        CostVariable stored = variableMapper.selectById(variable.getVariableId());
+
+        assertThat(stored.getSourceType()).isEqualTo("DICT");
+        assertThat(stored.getDictType()).isEqualTo("cost_variable_status");
+        assertThat(stored.getDataPath()).isEqualTo("cover.action");
+        assertThat(stored.getRemoteApi()).isEmpty();
+        assertThat(stored.getFormulaCode()).isEmpty();
+    }
+
+    @Test
+    void shouldAllowBlankDataPathForFlatInputAndDictVariables() {
+        Long sceneId = requireSceneId();
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+
+        CostVariable input = buildBaseVariable(sceneId, "TMP_VAR_FLAT_INPUT_" + stamp, "flat-input-" + stamp);
+        input.setSourceType("INPUT");
+        input.setDataPath(" ");
+
+        variableService.insertVariable(input);
+        CostVariable storedInput = variableMapper.selectById(input.getVariableId());
+
+        assertThat(storedInput.getSourceType()).isEqualTo("INPUT");
+        assertThat(storedInput.getDataPath()).isEmpty();
+
+        CostVariable dict = buildBaseVariable(sceneId, "TMP_VAR_FLAT_DICT_" + stamp, "flat-dict-" + stamp);
+        dict.setSourceType("DICT");
+        dict.setDictType("cost_variable_status");
+        dict.setDataPath("");
+
+        variableService.insertVariable(dict);
+        CostVariable storedDict = variableMapper.selectById(dict.getVariableId());
+
+        assertThat(storedDict.getSourceType()).isEqualTo("DICT");
+        assertThat(storedDict.getDictType()).isEqualTo("cost_variable_status");
+        assertThat(storedDict.getDataPath()).isEmpty();
+    }
+
+    @Test
     void shouldNormalizeRemoteAndFormulaVariableFieldsThroughSourceHandlerChain() {
         Long sceneId = requireSceneId();
         String stamp = LocalTime.now().format(STAMP_FORMATTER);
@@ -92,6 +142,7 @@ class CostVariableServiceManualIT {
         remote.setSourceType("REMOTE");
         remote.setSourceSystem("PRODUCE");
         remote.setRemoteApi("https://example.internal/remote/list");
+        remote.setDataPath("remote.amount");
         remote.setRequestMethod("post");
         remote.setContentType("");
         remote.setAuthType("");
@@ -117,6 +168,7 @@ class CostVariableServiceManualIT {
         assertThat(storedRemote.getSourceType()).isEqualTo("REMOTE");
         assertThat(storedRemote.getSourceSystem()).isEqualTo("PRODUCE");
         assertThat(storedRemote.getRemoteApi()).isEqualTo("https://example.internal/remote/list");
+        assertThat(storedRemote.getDataPath()).isEqualTo("remote.amount");
         assertThat(storedRemote.getRequestMethod()).isEqualTo("POST");
         assertThat(storedRemote.getContentType()).isEqualTo("application/json");
         assertThat(storedRemote.getAuthType()).isEqualTo("NONE");

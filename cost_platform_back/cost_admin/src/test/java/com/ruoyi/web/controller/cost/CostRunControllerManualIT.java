@@ -161,11 +161,14 @@ class CostRunControllerManualIT {
 
         CostRule femaleRule = ruleMapper.selectOne(Wrappers.<CostRule>lambdaQuery()
                 .eq(CostRule::getSceneId, sceneId)
-                .eq(CostRule::getRuleCode, "SG_FEMALE_SHIFT_RATE_01"));
+                .eq(CostRule::getRuleCode, "SG_FEMALE_SHIFT_FORMULA_01"));
         assertThat(femaleRule).isNotNull();
-        String previousPricingJson = femaleRule.getPricingJson();
-        femaleRule.setPricingJson("{\"mode\":\"FIXED_RATE\",\"basis\":\"FEMALE_ATTENDANCE_EQUIV\",\"unit\":\"UNIT\",\"rateValue\":4000,\"summary\":\"draft regression price\"}");
-        ruleMapper.updateById(femaleRule);
+        CostFormula femaleFormula = requireFormula(sceneId, "SG_RULE_FEMALE_SHIFT_LABOR_AMOUNT");
+        String previousBusinessFormula = femaleFormula.getBusinessFormula();
+        String previousFormulaExpr = femaleFormula.getFormulaExpr();
+        femaleFormula.setBusinessFormula("4000 * femaleTeamHeadcount");
+        femaleFormula.setFormulaExpr("round(4000 * V.FEMALE_TEAM_HEADCOUNT, 2)");
+        formulaMapper.updateById(femaleFormula);
 
         try {
             ObjectNode input = createManagementInputItem("SG-SNAPSHOT-BIZ-" + stamp, "SG-SNAPSHOT-" + stamp, "snapshot-regression");
@@ -236,8 +239,9 @@ class CostRunControllerManualIT {
             assertThat(femaleLedger).isNotNull();
             assertThat(femaleLedger.path("amountValue").decimalValue()).isEqualByComparingTo("7233.33");
         } finally {
-            femaleRule.setPricingJson(previousPricingJson);
-            ruleMapper.updateById(femaleRule);
+            femaleFormula.setBusinessFormula(previousBusinessFormula);
+            femaleFormula.setFormulaExpr(previousFormulaExpr);
+            formulaMapper.updateById(femaleFormula);
         }
     }
 
@@ -1782,7 +1786,7 @@ class CostRunControllerManualIT {
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
         String stamp = LocalTime.now().format(STAMP_FORMATTER);
-        Long versionId = publishScene(sceneId, authorization, "结果台账详情与追溯查询回归-" + stamp);
+        Long versionId = publishScene(sceneId, authorization, "结果台账详情与追溯查询回归" + stamp);
         String billMonth = YearMonth.now().plusMonths(2).toString();
 
         JsonNode simulationTemplate = readData(mockMvc.perform(get("/cost/run/input-template")
@@ -1810,7 +1814,7 @@ class CostRunControllerManualIT {
                 .containsEntry("FEMALE_TEAM_HEADCOUNT", true)
                 .containsEntry("FEMALE_ACTUAL_ATTENDANCE", true)
                 .containsEntry("FEMALE_REQUIRED_ATTENDANCE", true)
-                .containsEntry("FEMALE_ATTENDANCE_EQUIV", false);
+                .doesNotContainKey("FEMALE_ATTENDANCE_EQUIV");
 
         String requestNo = "SG-FEMALE-" + stamp;
         String objectCode = "SG-FEMALE-" + stamp + "-A";
@@ -1841,8 +1845,8 @@ class CostRunControllerManualIT {
 
         JsonNode firstRecord = findNodeByField(feeCalculate.path("records"), "objectCode", objectCode);
         JsonNode secondRecord = findNodeByField(feeCalculate.path("records"), "objectCode", "SG-FEMALE-" + stamp + "-B");
-        assertFixedRateRecord(firstRecord, "7233.33");
-        assertFixedRateRecord(secondRecord, "0.00");
+        assertFormulaRecord(firstRecord, "7233.33");
+        assertFormulaRecord(secondRecord, "0.00");
 
         ObjectNode taskBody = objectMapper.createObjectNode();
         taskBody.put("sceneId", sceneId);
@@ -1878,7 +1882,7 @@ class CostRunControllerManualIT {
         assertThat(femaleLedger).isNotNull();
         assertThat(femaleLedger.path("feeCode").asText()).isEqualTo(FEMALE_FEE_CODE);
         assertThat(femaleLedger.path("amountValue").decimalValue()).isEqualByComparingTo("7233.33");
-        assertThat(femaleLedger.path("pricingSource").asText()).isEqualTo("FIXED_RATE");
+        assertThat(femaleLedger.path("pricingSource").asText()).isEqualTo("FORMULA");
 
         JsonNode resultDetail = readData(mockMvc.perform(get("/cost/run/result/{resultId}", femaleLedger.path("resultId").asLong())
                         .header("Authorization", authorization))
@@ -1886,7 +1890,7 @@ class CostRunControllerManualIT {
                 .andReturn());
 
         assertThat(resultDetail.path("ledger").path("feeCode").asText()).isEqualTo(FEMALE_FEE_CODE);
-        assertThat(resultDetail.path("trace").path("pricing").path("pricingSource").asText()).isEqualTo("FIXED_RATE");
+        assertThat(resultDetail.path("trace").path("pricing").path("pricingSource").asText()).isEqualTo("FORMULA");
         assertThat(resultDetail.path("trace").path("pricing").path("amountValue").decimalValue())
                 .isEqualByComparingTo("7233.33");
         assertThat(resultDetail.path("trace").path("timeline").isMissingNode()).isFalse();
@@ -1916,9 +1920,9 @@ class CostRunControllerManualIT {
         mapping.put("bizNo", "meta.bizNo");
         mapping.put("objectCode", "team.code");
         mapping.put("objectName", "team.name");
-        mapping.put("FEMALE_TEAM_HEADCOUNT", "metrics.female.headcount");
-        mapping.put("FEMALE_ACTUAL_ATTENDANCE", "metrics.female.actual");
-        mapping.put("FEMALE_REQUIRED_ATTENDANCE", "metrics.female.required");
+        mapping.put("attendance.female.headcount", "metrics.female.headcount");
+        mapping.put("attendance.female.actual", "metrics.female.actual");
+        mapping.put("attendance.female.required", "metrics.female.required");
 
         ObjectNode previewBody = objectMapper.createObjectNode();
         previewBody.put("sceneId", sceneId);
@@ -1941,16 +1945,16 @@ class CostRunControllerManualIT {
         assertThat(preview.path("missingPaths").isEmpty()).isTrue();
         assertThat(preview.path("loadingGuide").path("estimatedPartitionCount").asInt()).isEqualTo(1);
         assertThat(preview.path("loadingGuide").path("partitionSize").asInt()).isEqualTo(500);
-        assertThat(findNodeByField(preview.path("fieldMappings"), "path", "FEMALE_TEAM_HEADCOUNT")
+        assertThat(findNodeByField(preview.path("fieldMappings"), "path", "attendance.female.headcount")
                 .path("mappingHint").asText()).isEqualTo("metrics.female.headcount");
 
         JsonNode mappedRecord = preview.path("mappedRecords").get(0);
         assertThat(mappedRecord.path("bizNo").asText()).isEqualTo("SG-PREVIEW-BIZ-" + stamp);
         assertThat(mappedRecord.path("objectCode").asText()).isEqualTo("SG-PREVIEW-" + stamp);
         assertThat(mappedRecord.path("objectName").asText()).isEqualTo("preview-team");
-        assertThat(mappedRecord.path("FEMALE_TEAM_HEADCOUNT").asInt()).isEqualTo(2);
-        assertThat(mappedRecord.path("FEMALE_ACTUAL_ATTENDANCE").asInt()).isEqualTo(6);
-        assertThat(mappedRecord.path("FEMALE_REQUIRED_ATTENDANCE").asInt()).isEqualTo(6);
+        assertThat(mappedRecord.path("attendance").path("female").path("headcount").asInt()).isEqualTo(2);
+        assertThat(mappedRecord.path("attendance").path("female").path("actual").asInt()).isEqualTo(6);
+        assertThat(mappedRecord.path("attendance").path("female").path("required").asInt()).isEqualTo(6);
     }
 
     @Test
@@ -2011,9 +2015,9 @@ class CostRunControllerManualIT {
             mapping.put("bizNo", "meta.bizNo");
             mapping.put("objectCode", "team.code");
             mapping.put("objectName", "team.name");
-            mapping.put("FEMALE_TEAM_HEADCOUNT", "metrics.female.headcount");
-            mapping.put("FEMALE_ACTUAL_ATTENDANCE", "metrics.female.actual");
-            mapping.put("FEMALE_REQUIRED_ATTENDANCE", "metrics.female.required");
+            mapping.put("attendance.female.headcount", "metrics.female.headcount");
+            mapping.put("attendance.female.actual", "metrics.female.actual");
+            mapping.put("attendance.female.required", "metrics.female.required");
 
             ObjectNode previewBody = objectMapper.createObjectNode();
             previewBody.put("sceneId", sceneId);
@@ -2049,7 +2053,7 @@ class CostRunControllerManualIT {
         String token = loginAndGetToken();
         String authorization = "Bearer " + token;
         String stamp = LocalTime.now().format(STAMP_FORMATTER);
-        Long versionId = publishScene(sceneId, authorization, "结果台账大表防宽查回归-" + stamp);
+        Long versionId = publishScene(sceneId, authorization, "结果台账大表防宽查回归" + stamp);
         String billMonth = YearMonth.now().plusMonths(2).toString();
 
         JsonNode publishDetail = readData(mockMvc.perform(get("/cost/publish/{versionId}", versionId)
@@ -2495,7 +2499,7 @@ class CostRunControllerManualIT {
         variable.setSourceSystem("ERP");
         variable.setRemoteApi("https://erp.example.com/api/cost");
         variable.setAuthType("NONE");
-        variable.setDataPath("value");
+        variable.setDataPath("remote.amount");
         variable.setMappingConfigJson("{\"valuePath\":\"value\"}");
         variable.setSyncMode("REALTIME");
         variable.setCachePolicy("MANUAL_REFRESH");
@@ -2566,20 +2570,17 @@ class CostRunControllerManualIT {
             JsonNode remoteField = findNodeByField(feeTemplate.path("fields"), "variableCode", variableCode);
             assertThat(remoteField).isNotNull();
             assertThat(remoteField.path("sourceType").asText()).isEqualTo("REMOTE");
-            assertThat(remoteField.path("path").asText()).isEqualTo("remoteContext.ERP." + variableCode + ".value");
+            assertThat(remoteField.path("path").asText()).isEqualTo("remote.amount");
             assertThat(remoteField.path("includedInTemplate").asBoolean()).isTrue();
 
             JsonNode templateInput = objectMapper.readTree(feeTemplate.path("inputJson").asText("{}"));
-            assertThat(templateInput.path("remoteContext").path("ERP").path(variableCode).path("value").isMissingNode()).isFalse();
+            assertThat(templateInput.path("remote").path("amount").isMissingNode()).isFalse();
 
             ObjectNode successInput = objectMapper.createObjectNode();
             successInput.put("bizNo", "REMOTE-BIZ-" + stamp + "-01");
             successInput.put("objectCode", objectCode);
             successInput.put("objectName", "remote-snapshot-success");
-            successInput.putObject("remoteContext")
-                    .putObject("ERP")
-                    .putObject(variableCode)
-                    .put("value", 7);
+            successInput.putObject("remote").put("amount", 7);
 
             ArrayNode successItems = objectMapper.createArrayNode().add(successInput);
             ObjectNode feeCalculateBody = objectMapper.createObjectNode();
@@ -2851,6 +2852,17 @@ class CostRunControllerManualIT {
         assertThat(record.path("pricingSource").asText()).isEqualTo("FIXED_RATE");
         assertThat(record.path("amountValue").decimalValue()).isEqualByComparingTo(amountValue);
         assertThat(record.path("explain").path("pricing").path("pricingSource").asText()).isEqualTo("FIXED_RATE");
+        assertThat(record.path("explain").path("pricing").path("amountValue").decimalValue())
+                .isEqualByComparingTo(amountValue);
+        assertThat(record.path("explain").path("timeline").isArray()).isTrue();
+    }
+
+    private void assertFormulaRecord(JsonNode record, String amountValue) {
+        assertThat(record).isNotNull();
+        assertThat(record.path("status").asText()).isEqualTo("SUCCESS");
+        assertThat(record.path("pricingSource").asText()).isEqualTo("FORMULA");
+        assertThat(record.path("amountValue").decimalValue()).isEqualByComparingTo(amountValue);
+        assertThat(record.path("explain").path("pricing").path("pricingSource").asText()).isEqualTo("FORMULA");
         assertThat(record.path("explain").path("pricing").path("amountValue").decimalValue())
                 .isEqualByComparingTo(amountValue);
         assertThat(record.path("explain").path("timeline").isArray()).isTrue();
