@@ -267,6 +267,68 @@
                 <div class="rule-center__formula-preview">{{ selectedAmountFormulaMeta.businessFormula || '请选择公式编码，系统会自动回填金额公式。' }}</div>
               </el-form-item>
             </el-col>
+            <el-col :span="24">
+              <div class="rule-center__formula-guide">
+                <div class="rule-center__formula-guide-head">
+                  <div>
+                    <strong>公式取值说明</strong>
+                    <p>金额公式优先通过 <code>V.变量编码</code> 取值，也支持通过 <code>F.费用编码</code> 读取前序费用结果或试算上下文中的费用对象，尽量避免把原始输入字段直接写死在公式里。</p>
+                  </div>
+                  <div class="rule-center__formula-guide-tags">
+                    <el-tag size="small" effect="plain">引用映射 {{ selectedFormulaReferenceDetails.length }}</el-tag>
+                    <el-tag size="small" effect="plain" :type="formulaUsesInputNamespace ? 'warning' : 'success'">
+                      {{ formulaUsesInputNamespace ? '含 I. 直取输入' : '按变量映射取值' }}
+                    </el-tag>
+                    <el-tag v-if="formulaUsesFeeNamespace" size="small" effect="plain" type="warning">含 F. 上下文费用</el-tag>
+                  </div>
+                </div>
+                <div class="rule-center__formula-guide-grid">
+                  <div class="rule-center__formula-guide-item">
+                    <strong>推荐写法</strong>
+                    <span>规则金额公式优先使用 <code>V.变量编码</code>，这样接入结构变化时只需要调整变量来源路径，不需要批量改规则公式。</span>
+                  </div>
+                  <div class="rule-center__formula-guide-item">
+                    <strong>运行时取值</strong>
+                    <span>变量先按 <code>dataPath</code> 读取来源字段；如果来源路径为空，则回退为按平铺字段 <code>variableCode</code> 取值。费用引用则统一从 <code>F.费用编码</code> 读取前序费用结果。</span>
+                  </div>
+                  <div class="rule-center__formula-guide-item">
+                    <strong>I. 命名空间说明</strong>
+                    <span v-if="formulaUsesInputNamespace">当前公式包含 <code>I.</code> 直接取输入写法，这会绕过变量来源路径映射，适合排障，正式规则请谨慎使用。</span>
+                    <span v-else><code>I.</code> 仅建议用于排障或少数特殊场景；正式规则更推荐通过变量中心维护来源路径，再在公式里引用 <code>V.</code>。</span>
+                  </div>
+                  <div class="rule-center__formula-guide-item">
+                    <strong>F. 命名空间说明</strong>
+                    <span v-if="formulaUsesFeeNamespace">当前公式包含 <code>F.</code> 上下文费用引用，适合表达“后续费用基于前序费用结果”这类口径。试算时也建议在 <code>F</code> 对象中补齐示例值。</span>
+                    <span v-else><code>F.</code> 用于引用前序费用结果或试算上下文中的费用对象；如果当前规则需要依赖已生成费用，可优先通过 <code>F.费用编码</code> 表达。</span>
+                  </div>
+                </div>
+                <div v-if="selectedFormulaReferenceDetails.length" class="rule-center__formula-reference-list">
+                  <div v-for="item in selectedFormulaReferenceDetails" :key="item.key" class="rule-center__formula-reference-card">
+                    <div class="rule-center__formula-reference-head">
+                      <div>
+                        <strong>{{ item.name }}</strong>
+                        <span>{{ item.namespace }}.{{ item.code }}</span>
+                      </div>
+                      <el-tag size="small" effect="plain" :type="item.readTagType">
+                        {{ item.readTagLabel }}
+                      </el-tag>
+                    </div>
+                    <div class="rule-center__formula-reference-meta">
+                      <el-tag size="small" effect="plain">{{ item.typeLabel }}</el-tag>
+                      <el-tag size="small" effect="plain">{{ item.sourceTypeLabel }}</el-tag>
+                      <el-tag size="small" effect="plain">{{ item.dataTypeLabel }}</el-tag>
+                      <el-tag size="small" effect="plain">
+                        {{ item.readPathLabel }}
+                      </el-tag>
+                    </div>
+                    <p>{{ item.summary }}</p>
+                  </div>
+                </div>
+                <div v-else class="rule-center__formula-reference-empty">
+                  当前公式尚未引用 <code>V.</code> 变量或 <code>F.</code> 上下文费用，或还没有选定公式资产。选定公式后，这里会列出变量实际读取的来源路径，以及费用引用所对应的上下文编码。
+                </div>
+              </div>
+            </el-col>
             <el-col :span="24" v-if="selectedAmountFormulaMeta.formulaCode && selectedFormulaValidationMessages.length">
               <el-alert title="当前公式资产存在预校验问题" type="warning" :closable="false" show-icon>
                 <template #default>
@@ -276,7 +338,7 @@
             </el-col>
             <el-col :span="24">
               <div class="rule-center__formula-helper">
-                <span>命名空间提示：`V.` 变量、`I.` 输入、`C.` 上下文、`F.` 费用结果、`T.` 临时值</span>
+                <span>命名空间提示：`V.` 变量、`I.` 输入、`C.` 上下文、`F.` 费用结果（前序费用/试算 F 对象）、`T.` 临时值</span>
                 <el-button link type="primary" @click="expressionOpen = true">打开表达式助手</el-button>
               </div>
             </el-col>
@@ -669,7 +731,7 @@
         <el-alert
           v-else-if="expressionDraft"
           title="草稿预校验通过"
-          description="括号、命名空间和当前场景变量引用已通过前端预校验。"
+          description="括号、命名空间以及当前场景中的变量与上下文费用引用已通过前端预校验。"
           type="success"
           :closable="false"
           show-icon
@@ -860,6 +922,17 @@ const expressionHelperSections = computed(() => [
     }))
   },
   {
+    key: 'fee',
+    title: '上下文费用',
+    display: 'list',
+    emptyText: '当前场景暂无可引用的上下文费用，请先维护费用主线。',
+    items: feeOptions.value.map(item => ({
+      label: item.feeName || `F.${item.feeCode}`,
+      value: `F.${item.feeCode}`,
+      desc: `${item.feeCode} / 前序费用结果或试算上下文 F 对象`
+    }))
+  },
+  {
     key: 'function',
     title: '常用函数',
     display: 'list',
@@ -870,14 +943,18 @@ const selectedFormulaValidationResult = computed(() => validateCostExpression({
   expression: selectedAmountFormulaMeta.value.formulaExpr || form.value.amountFormula,
   namespaceScope: 'V,C,I,F,T',
   variableCodes: variableOptions.value.map(item => item.variableCode),
-  validateVariableRefs: Boolean(form.value.sceneId || currentFee.value?.sceneId)
+  feeCodes: feeOptions.value.map(item => item.feeCode),
+  validateVariableRefs: Boolean(form.value.sceneId || currentFee.value?.sceneId),
+  validateFeeRefs: Boolean(form.value.sceneId || currentFee.value?.sceneId)
 }))
 const selectedFormulaValidationMessages = computed(() => selectedFormulaValidationResult.value.issues.map(item => item.message))
 const expressionDraftValidationResult = computed(() => validateCostExpression({
   expression: expressionDraft.value,
   namespaceScope: 'V,C,I,F,T',
   variableCodes: variableOptions.value.map(item => item.variableCode),
-  validateVariableRefs: Boolean(form.value.sceneId || currentFee.value?.sceneId)
+  feeCodes: feeOptions.value.map(item => item.feeCode),
+  validateVariableRefs: Boolean(form.value.sceneId || currentFee.value?.sceneId),
+  validateFeeRefs: Boolean(form.value.sceneId || currentFee.value?.sceneId)
 }))
 const expressionDraftValidationMessages = computed(() => expressionDraftValidationResult.value.issues.map(item => item.message))
 const selectedTierVariableMeta = computed(() => variableMetaMap.value[form.value.quantityVariableCode])
@@ -927,6 +1004,61 @@ const metricItems = computed(() => [
 ])
 const variableSourceOptions = computed(() => proxy.useDict('cost_variable_source_type').cost_variable_source_type || [])
 const variableDataTypeOptions = computed(() => proxy.useDict('cost_variable_data_type').cost_variable_data_type || [])
+const formulaUsesInputNamespace = computed(() => selectedFormulaValidationResult.value.namespaces.includes('I'))
+const formulaUsesFeeNamespace = computed(() => selectedFormulaValidationResult.value.namespaces.includes('F'))
+const selectedFormulaReferenceDetails = computed(() => {
+  const variableRefs = (selectedFormulaValidationResult.value.variableRefs || []).map(code => {
+    const meta = variableMetaMap.value[code]
+    const readPath = String(meta?.dataPath || '').trim()
+    const actualField = readPath || meta?.variableCode || code
+    return {
+      key: `V-${code}`,
+      type: 'variable',
+      typeLabel: '变量',
+      namespace: 'V',
+      code,
+      name: meta?.variableName || code,
+      sourceTypeLabel: meta ? (resolveTagLabel(variableSourceOptions.value, meta.sourceType) || '未配置来源') : '变量未找到',
+      dataTypeLabel: meta ? (resolveTagLabel(variableDataTypeOptions.value, meta.dataType) || meta.dataType || '未配置类型') : '未知类型',
+      readByPath: Boolean(readPath),
+      readPath,
+      actualField,
+      readPathLabel: readPath ? `来源路径：${readPath}` : `平铺字段：${actualField}`,
+      readTagType: readPath ? 'success' : 'info',
+      readTagLabel: readPath ? '按来源路径取值' : '按平铺字段取值',
+      summary: meta
+        ? (readPath
+          ? `运行时会先按来源路径 ${readPath} 取值，再把结果注入 V.${code}。`
+          : `当前未配置来源路径，运行时会按平铺字段 ${actualField} 取值，再注入 V.${code}。`)
+        : `当前场景下未找到变量 ${code} 的元数据，请先检查变量中心配置。`
+    }
+  })
+
+  const feeRefs = (selectedFormulaValidationResult.value.feeRefs || []).map(code => {
+    const meta = feeOptions.value.find(item => item.feeCode === code)
+    return {
+      key: `F-${code}`,
+      type: 'fee',
+      typeLabel: '上下文费用',
+      namespace: 'F',
+      code,
+      name: meta?.feeName || code,
+      sourceTypeLabel: meta?.feeTypeName || '前序费用结果',
+      dataTypeLabel: '费用结果对象',
+      readByPath: false,
+      readPath: '',
+      actualField: code,
+      readPathLabel: `上下文费用：F.${code}`,
+      readTagType: 'warning',
+      readTagLabel: '按费用上下文取值',
+      summary: meta
+        ? `运行时会从前序费用结果或试算上下文中的 F.${code} 读取 ${meta.feeName || code}。`
+        : `当前场景下未找到费用 ${code} 的元数据，请先检查费用主线配置或切换场景。`
+    }
+  })
+
+  return [...variableRefs, ...feeRefs]
+})
 
 watch(() => form.value.amountFormulaCode, value => {
   if (form.value.ruleType !== 'FORMULA') {
@@ -1855,6 +1987,125 @@ getList()
   color: var(--el-text-color-regular);
 }
 
+.rule-center__formula-guide {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--el-color-primary-light-7) 48%, var(--el-border-color-light));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 24%, var(--el-bg-color-overlay));
+}
+
+.rule-center__formula-guide code,
+.rule-center__formula-reference-empty code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--el-fill-color);
+  color: var(--el-color-primary-dark-2);
+  font-family: Consolas, Monaco, monospace;
+}
+
+.rule-center__formula-guide-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rule-center__formula-guide-head strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+}
+
+.rule-center__formula-guide-head p {
+  margin: 0;
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.rule-center__formula-guide-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rule-center__formula-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rule-center__formula-guide-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--el-fill-color-blank);
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.rule-center__formula-guide-item strong {
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+}
+
+.rule-center__formula-guide-item span {
+  color: var(--el-text-color-regular);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.rule-center__formula-reference-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rule-center__formula-reference-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--el-fill-color-blank);
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.rule-center__formula-reference-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rule-center__formula-reference-head strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+}
+
+.rule-center__formula-reference-head span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.rule-center__formula-reference-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rule-center__formula-reference-card p,
+.rule-center__formula-reference-empty {
+  margin: 0;
+  color: var(--el-text-color-regular);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
 .rule-center__tier-basis,
 .rule-center__copy-basis {
   display: grid;
@@ -2010,6 +2261,11 @@ getList()
   }
 
   .rule-center__workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .rule-center__formula-guide-grid,
+  .rule-center__formula-reference-list {
     grid-template-columns: 1fr;
   }
 

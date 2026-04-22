@@ -55,6 +55,7 @@ import 'ace-builds/src-noconflict/mode-text'
 import 'ace-builds/src-noconflict/theme-chrome'
 import 'ace-builds/src-noconflict/theme-tomorrow_night_eighties'
 import { formatJsonText, minifyJsonText, normalizeJsonText, parseJsonText } from '@/utils/jsonTools'
+import useSettingsStore from '@/store/modules/settings'
 
 const props = defineProps({
   modelValue: {
@@ -71,7 +72,7 @@ const props = defineProps({
   },
   theme: {
     type: String,
-    default: 'chrome'
+    default: ''
   },
   width: {
     type: [String, Number],
@@ -148,6 +149,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'valid', 'parsed'])
+const settingsStore = useSettingsStore()
 
 const rootRef = ref()
 const editorRef = ref()
@@ -162,6 +164,7 @@ let syncingEditor = false
 
 const isReadOnly = computed(() => props.readonly || props.disabled)
 const isJsonLanguage = computed(() => normalizeLanguage(props.lang) === 'json')
+const effectiveTheme = computed(() => props.theme || (settingsStore.isDark ? 'tomorrow_night_eighties' : 'chrome'))
 const titleText = computed(() => props.title || (isJsonLanguage.value ? 'JSON 编辑器' : '代码编辑器'))
 const languageLabel = computed(() => normalizeLanguage(props.lang).toUpperCase())
 const isOverflow = computed(() => Boolean(props.maxLength && innerValue.value.length > props.maxLength))
@@ -205,8 +208,8 @@ watch(() => props.lang, () => {
   }
 })
 
-watch(() => props.theme, () => {
-  editor.value?.setTheme(resolveTheme(props.theme))
+watch(effectiveTheme, value => {
+  editor.value?.setTheme(resolveTheme(value))
 })
 
 watch(isReadOnly, value => {
@@ -245,7 +248,7 @@ function initEditor() {
     return
   }
   editor.value = ace.edit(editorRef.value)
-  editor.value.setTheme(resolveTheme(props.theme))
+  editor.value.setTheme(resolveTheme(effectiveTheme.value))
   editor.value.session.setMode(resolveMode(props.lang))
   editor.value.session.setUseWorker(false)
   editor.value.session.setUseWrapMode(true)
@@ -541,7 +544,7 @@ function resolveHeight() {
   border: 1px solid var(--el-border-color);
   border-bottom: 0;
   border-radius: 8px 8px 0 0;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--el-fill-color-lighter);
 }
 
 .json-editor__title {
@@ -550,7 +553,7 @@ function resolveHeight() {
   flex: 1 1 240px;
   gap: 8px;
   min-width: 0;
-  color: #334155;
+  color: var(--el-text-color-primary);
   font-weight: 600;
 }
 
@@ -569,7 +572,7 @@ function resolveHeight() {
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: var(--el-bg-color-overlay);
 }
 
 .json-editor__body.has-toolbar {
@@ -665,8 +668,8 @@ function resolveHeight() {
   flex-direction: column;
   padding: 16px;
   border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 20px 60px rgb(15 23 42 / 24%);
+  background: var(--el-bg-color-overlay);
+  box-shadow: var(--el-box-shadow-dark);
 
   .json-editor__body {
     flex: 1;

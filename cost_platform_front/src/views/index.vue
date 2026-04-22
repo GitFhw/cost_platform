@@ -2,7 +2,7 @@
   <div class="app-container cost-dashboard">
     <section class="dashboard-hero">
       <div class="dashboard-hero__main">
-        <div class="dashboard-hero__eyebrow">企业级成本核算平台</div>
+        <div class="dashboard-hero__eyebrow">成本核算平台</div>
         <h1 class="dashboard-hero__title">面向多行业、多场景、多费用的统一核算驾驶舱</h1>
         <p class="dashboard-hero__subtitle">
           统一承接多行业、多场景、多费用对象的规则配置、版本管理、批量核算与结果追溯，帮助企业在同一平台完成成本口径治理与运行管理。

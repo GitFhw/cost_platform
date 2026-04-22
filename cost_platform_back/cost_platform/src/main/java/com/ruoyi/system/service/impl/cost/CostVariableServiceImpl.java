@@ -1280,6 +1280,7 @@ public class CostVariableServiceImpl implements ICostVariableService {
         variable.setVariableName(Objects.toString(item.get("variableName"), ""));
         variable.setVariableType(Objects.toString(item.get("variableType"), "TEXT"));
         variable.setSourceType(Objects.toString(item.get("sourceType"), "INPUT"));
+        variable.setDataPath(Objects.toString(item.get("dataPath"), variable.getVariableCode()));
         variable.setDataType(Objects.toString(item.get("dataType"), "STRING"));
         variable.setDefaultValue(Objects.toString(item.get("defaultValue"), ""));
         variable.setPrecisionScale(parseInteger(item.get("precisionScale"), 2));
@@ -1353,6 +1354,7 @@ public class CostVariableServiceImpl implements ICostVariableService {
         item.put("variableName", variableName);
         item.put("variableType", variableType);
         item.put("sourceType", sourceType);
+        item.put("dataPath", variableCode);
         item.put("dataType", dataType);
         item.put("defaultValue", defaultValue);
         item.put("precisionScale", 2);

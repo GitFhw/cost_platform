@@ -33,7 +33,8 @@ export function validateCostExpression(options = {}) {
       valid: true,
       issues: [],
       namespaces: [],
-      variableRefs: []
+      variableRefs: [],
+      feeRefs: []
     }
   }
 
@@ -41,9 +42,12 @@ export function validateCostExpression(options = {}) {
   const issueSet = new Set()
   const allowedNamespaces = normalizeNamespaceScope(options.namespaceScope)
   const variableCodes = new Set((options.variableCodes || []).filter(Boolean))
+  const feeCodes = new Set((options.feeCodes || []).filter(Boolean))
   const validateVariableRefs = Boolean(options.validateVariableRefs)
+  const validateFeeRefs = Boolean(options.validateFeeRefs)
   const namespaces = new Set()
   const variableRefs = new Set()
+  const feeRefs = new Set()
 
   let inQuote = false
   let escaped = false
@@ -123,6 +127,12 @@ export function validateCostExpression(options = {}) {
           pushIssue(issues, issueSet, `变量引用 V.${identifier} 在当前场景下不存在，请先维护变量或切换场景。`)
         }
       }
+      if (namespace === 'F') {
+        feeRefs.add(identifier)
+        if (validateFeeRefs && !feeCodes.has(identifier)) {
+          pushIssue(issues, issueSet, `上下文费用引用 F.${identifier} 在当前场景下不存在，请先维护费用或切换场景。`)
+        }
+      }
     } else if (originalNamespace === originalNamespace.toUpperCase()) {
       pushIssue(issues, issueSet, `暂不支持命名空间 ${originalNamespace}.，请改用 V/I/C/F/T 之一。`)
     }
@@ -134,6 +144,7 @@ export function validateCostExpression(options = {}) {
     valid: issues.length === 0,
     issues,
     namespaces: [...namespaces],
-    variableRefs: [...variableRefs]
+    variableRefs: [...variableRefs],
+    feeRefs: [...feeRefs]
   }
 }

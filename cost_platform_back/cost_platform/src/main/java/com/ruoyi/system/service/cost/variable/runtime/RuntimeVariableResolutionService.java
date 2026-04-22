@@ -160,11 +160,11 @@ public class RuntimeVariableResolutionService {
             return null;
         }
         Object value = null;
-        if (StringUtils.isNotEmpty(variable.variableCode)) {
-            value = resolveByPath(input, variable.variableCode);
-        }
-        if (value == null && StringUtils.isNotEmpty(variable.dataPath)) {
+        if (StringUtils.isNotEmpty(variable.dataPath)) {
             value = resolveByPath(input, variable.dataPath);
+        }
+        if (value == null && StringUtils.isNotEmpty(variable.variableCode)) {
+            value = resolveByPath(input, variable.variableCode);
         }
         return value != null ? value : variable.defaultValue;
     }

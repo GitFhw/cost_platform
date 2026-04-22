@@ -62,7 +62,7 @@
         <div class="formula-lab__panel-head">
           <div>
             <h3>公式工作台</h3>
-            <p>优先用点选向导生成公式；需要补高级表达式时再切换到专家模式。</p>
+            <p>业务人员优先维护中文公式；结构助手用于条件分支与区间档位，系统统一编译标准表达式。</p>
           </div>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
         </div>
@@ -104,11 +104,11 @@
           <el-col :span="12">
             <div class="formula-lab__preview-card">
               <div class="formula-lab__preview-title">业务公式预览</div>
-              <div class="formula-lab__preview-text">{{ derivedFormula.businessFormula || '请从下方工作台点选变量、条件、结果，系统会自动生成中文业务公式。' }}</div>
+              <div class="formula-lab__preview-text">{{ activeBusinessFormula || '请先在下方业务编排区维护中文公式，系统会自动生成业务表达。' }}</div>
             </div>
             <div class="formula-lab__preview-card formula-lab__preview-card--code">
               <div class="formula-lab__preview-title">标准表达式预览</div>
-              <pre class="formula-lab__code">{{ derivedFormula.formulaExpr || '请先配置公式结构，系统会同步生成标准表达式。' }}</pre>
+              <pre class="formula-lab__code">{{ activeFormulaExpression || '系统会把中文公式或结构助手内容编译为标准表达式。' }}</pre>
             </div>
             <el-alert
               v-if="formulaValidationMessages.length"
@@ -134,14 +134,117 @@
           </el-col>
         </el-row>
 
-        <div class="formula-lab__pattern-bar" v-if="workbench.mode === 'GUIDED'">
-          <el-radio-group v-model="workbench.pattern">
-            <el-radio-button label="IF_ELSE">条件分支</el-radio-button>
-            <el-radio-button label="RANGE_LOOKUP">区间档位</el-radio-button>
-          </el-radio-group>
+        <div v-if="workbench.mode === 'BUSINESS'" class="formula-lab__business">
+          <div class="formula-lab__editor-card">
+            <div class="formula-lab__section-title">
+              <span>中文公式编辑区</span>
+              <el-button link type="primary" @click="scrollToResourceWorkbench">定位资源工作台</el-button>
+            </div>
+            <el-form label-width="96px">
+              <el-form-item label="中文公式">
+                <el-input
+                  ref="businessFormulaInputRef"
+                  v-model="form.businessFormula"
+                  type="textarea"
+                  :rows="5"
+                  placeholder="例如：四舍五入((21700 / 6) × 队女工人数 × (女工实际出勤 / 最大值(女工应出勤, 1)), 2)"
+                  @click="captureBusinessCursor"
+                  @keyup="captureBusinessCursor"
+                  @mouseup="captureBusinessCursor"
+                />
+              </el-form-item>
+            </el-form>
+            <div class="formula-lab__note-card">
+              <strong>业务侧只维护中文公式</strong>
+              <span>系统会自动把中文变量名、中文费用名、中文函数和条件结构编译成标准表达式，并用于保存、试算和后续治理。</span>
+            </div>
+          </div>
+
+          <div class="formula-lab__draft-card">
+            <div class="formula-lab__section-title">
+              <span>可视化公式草稿</span>
+              <div class="formula-lab__draft-actions">
+                <el-button link type="primary" @click="focusBusinessEditor">继续输入</el-button>
+                <el-button link type="warning" @click="focusFirstRiskToken" :disabled="!businessRiskTokens.length">定位风险片段</el-button>
+                <el-button link type="info" @click="removeLastBusinessToken" :disabled="!businessDraftTokens.length">回退一段</el-button>
+                <el-button link type="danger" @click="clearBusinessFormula" :disabled="!activeBusinessFormula">清空草稿</el-button>
+              </div>
+            </div>
+            <div v-if="businessDraftTokens.length" class="formula-lab__draft-list">
+              <button
+                v-for="token in businessDraftTokens"
+                :key="token.key"
+                type="button"
+                class="formula-lab__draft-token"
+                :class="[`is-${token.type}`, { 'is-active': selectedDraftKey === token.key }]"
+                @click="focusBusinessToken(token)"
+              >
+                <span>{{ token.label }}</span>
+                <em>{{ token.typeLabel }}</em>
+                <i @click.stop="removeBusinessToken(token)">×</i>
+              </button>
+            </div>
+            <el-empty v-else :image-size="72" description="先输入中文公式或点选变量、费用、函数、运算符，这里会自动拆成业务块。" />
+          </div>
+
+          <div class="formula-lab__quick-grid">
+            <div class="formula-lab__quick-card">
+              <div class="formula-lab__tool-title">运算符与数字速插</div>
+              <div class="formula-lab__chip-grid">
+                <button v-for="item in operatorButtons" :key="`operator-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
+                <button v-for="item in numberButtons" :key="`number-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
+              </div>
+            </div>
+
+            <div class="formula-lab__quick-card">
+              <div class="formula-lab__tool-title">条件比较速插</div>
+              <div class="formula-lab__chip-grid">
+                <button v-for="item in keywordButtons" :key="`keyword-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
+              </div>
+            </div>
+
+            <div class="formula-lab__quick-card">
+              <div class="formula-lab__tool-title">常用函数速插</div>
+              <div class="formula-lab__chip-grid">
+                <button v-for="item in functionButtons" :key="`function-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
+              </div>
+            </div>
+
+            <div class="formula-lab__quick-card">
+              <div class="formula-lab__tool-title">场景变量速插</div>
+              <div class="formula-lab__chip-grid">
+                <button v-for="item in highFrequencyVariableOptions" :key="`variable-${item.variableCode}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.variableName || item.variableCode)">{{ item.variableName || item.variableCode }}</button>
+              </div>
+            </div>
+
+            <div class="formula-lab__quick-card">
+              <div class="formula-lab__tool-title">上下文费用速插</div>
+              <div class="formula-lab__chip-grid">
+                <button v-for="item in highFrequencyFeeOptions" :key="`fee-${item.feeCode}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.feeName || item.feeCode)">{{ item.feeName || item.feeCode }}</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="formula-lab__test-card">
+            <div class="formula-lab__section-title">
+              <span>试算上下文</span>
+              <el-button link type="primary" @click="handleGenerateSample">按引用生成示例</el-button>
+            </div>
+            <JsonEditor v-model="testInputJson" title="试算上下文 JSON" :rows="6" placeholder="请输入测试 JSON，上下文建议按 V/C/I/F/T 命名空间组织。" />
+            <div class="formula-lab__test-result">
+              <div><strong>试算结果：</strong>{{ testResultDisplay }}</div>
+            </div>
+          </div>
         </div>
 
-        <div v-if="workbench.mode === 'GUIDED'" class="formula-lab__guided">
+        <div v-else class="formula-lab__guided">
+          <div class="formula-lab__pattern-bar">
+            <el-radio-group v-model="workbench.pattern">
+              <el-radio-button label="IF_ELSE">条件分支</el-radio-button>
+              <el-radio-button label="RANGE_LOOKUP">区间档位</el-radio-button>
+            </el-radio-group>
+          </div>
+
           <div v-if="workbench.pattern === 'IF_ELSE'">
             <div class="formula-lab__section-title">
               <span>条件配置</span>
@@ -215,33 +318,91 @@
               <el-table-column label="操作" width="90" align="center"><template #default="scope"><el-button link type="danger" icon="Delete" @click="handleRemoveRange(scope.$index)">删除</el-button></template></el-table-column>
             </el-table>
           </div>
-        </div>
 
-        <div v-else class="formula-lab__expert">
-          <el-form label-width="96px">
-            <el-form-item label="中文公式"><el-input v-model="form.businessFormula" type="textarea" :rows="3" /></el-form-item>
-            <el-form-item label="标准表达式"><el-input v-model="form.formulaExpr" type="textarea" :rows="8" /></el-form-item>
-          </el-form>
-        </div>
-
-        <div class="formula-lab__test-card">
-          <div class="formula-lab__section-title"><span>试算上下文</span><el-button link type="primary" @click="handleGenerateSample">按变量生成示例</el-button></div>
-          <JsonEditor v-model="testInputJson" title="试算上下文 JSON" :rows="6" placeholder="请输入测试 JSON，上下文建议按 V/C/I/F/T 命名空间组织。" />
-          <div class="formula-lab__test-result">
-            <div><strong>试算结果：</strong>{{ testResultDisplay }}</div>
+          <div class="formula-lab__test-card">
+            <div class="formula-lab__section-title"><span>试算上下文</span><el-button link type="primary" @click="handleGenerateSample">按引用生成示例</el-button></div>
+            <JsonEditor v-model="testInputJson" title="试算上下文 JSON" :rows="6" placeholder="请输入测试 JSON，上下文建议按 V/C/I/F/T 命名空间组织。" />
+            <div class="formula-lab__test-result">
+              <div><strong>试算结果：</strong>{{ testResultDisplay }}</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <aside class="formula-lab__toolbox">
+      <aside ref="resourceWorkbenchRef" class="formula-lab__toolbox">
         <div class="formula-lab__panel-head">
           <div>
-            <h3>点选工具箱</h3>
-            <p>点一下就插入条件、模板、函数或变量，优先服务业务人员配置。</p>
+            <h3>资源工作台</h3>
+            <p>同页完成中文公式排障、变量/费用映射核对和资源点选，不再来回跳转。</p>
           </div>
         </div>
         <div class="formula-lab__tool-section">
-          <ExpressionResourcePanel :sections="expressionResourceSections" @append="handleAppendResourceToken" />
+          <div class="formula-lab__tool-title">业务编排建议</div>
+          <div class="formula-lab__note-list">
+            <div class="formula-lab__note-item">
+              <strong>先写中文，再由系统翻译</strong>
+              <span>优先维护业务人员能读懂的中文公式，复杂分档建议切到结构助手，不建议直接手写长段编码表达式。</span>
+            </div>
+          </div>
+        </div>
+        <div class="formula-lab__tool-section">
+          <div class="formula-lab__tool-title">定位式校验</div>
+          <div v-if="workbench.mode === 'BUSINESS' && businessIssueItems.length" class="formula-lab__issue-list">
+            <div v-for="(item, index) in businessIssueItems" :key="item.key" class="formula-lab__issue-item">
+              <strong>中文编排问题 {{ index + 1 }}</strong>
+              <p>{{ item.message }}</p>
+              <span v-if="item.fragment">定位片段：{{ item.fragment }}</span>
+              <span v-if="item.suggestion">建议：{{ item.suggestion }}</span>
+              <div v-if="getRiskSuggestions(item.fragment).length" class="formula-lab__issue-actions">
+                <el-button
+                  v-for="suggestion in getRiskSuggestions(item.fragment)"
+                  :key="`${item.key}-${suggestion.value}`"
+                  link
+                  type="primary"
+                  @click="replaceRiskFragment(item.fragment, suggestion.value)"
+                >
+                  替换为 {{ suggestion.label }}
+                </el-button>
+              </div>
+            </div>
+          </div>
+          <el-alert
+            v-else-if="formulaValidationMessages.length"
+            title="标准表达式校验未通过"
+            type="warning"
+            :closable="false"
+            show-icon
+          >
+            <template #default>
+              <div v-for="message in formulaValidationMessages" :key="message" class="formula-lab__validation-item">{{ message }}</div>
+            </template>
+          </el-alert>
+          <el-alert
+            v-else
+            title="当前公式可用于保存与试算"
+            description="中文公式编译与标准表达式预校验已通过。"
+            type="success"
+            :closable="false"
+            show-icon
+          />
+        </div>
+        <div class="formula-lab__tool-section">
+          <div class="formula-lab__tool-title">引用映射清单</div>
+          <div v-if="referenceDetails.length" class="formula-lab__reference-list">
+            <div v-for="item in referenceDetails" :key="item.key" class="formula-lab__reference-item">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.type === 'variable' ? `V.${item.code}` : `F.${item.code}` }}</span>
+              <small>{{ item.description }}</small>
+            </div>
+          </div>
+          <el-empty v-else :image-size="72" description="编辑区里还没有识别到变量或上下文费用引用。" />
+        </div>
+        <div class="formula-lab__tool-section">
+          <div class="formula-lab__section-title">
+            <span>资源工作台</span>
+            <el-input v-model="resourceKeyword" clearable placeholder="搜索变量、费用、函数" style="width: 220px" />
+          </div>
+          <ExpressionResourcePanel :sections="businessResourceSections" @append="handleAppendResourceToken" />
         </div>
         <div class="formula-lab__tool-section">
           <div class="formula-lab__tool-title">平台模板</div>
@@ -379,8 +540,10 @@ import {
   testFormula,
   updateFormula
 } from '@/api/cost/formula'
+import { optionselectFee } from '@/api/cost/fee'
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
+import { compileCostBusinessFormula } from '@/utils/costBusinessFormulaCompiler'
 import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { optionselectVariable } from '@/api/cost/variable'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
@@ -396,6 +559,7 @@ const showSearch = ref(true)
 const total = ref(0)
 const sceneOptions = ref([])
 const variableOptions = ref([])
+const feeOptions = ref([])
 const formulaOptionList = ref([])
 const templateOptionList = ref([])
 const businessDomainOptions = ref([])
@@ -411,6 +575,11 @@ const versionFormulaTitle = ref('')
 const formulaList = ref([])
 const testInputJson = ref('')
 const testResult = ref(undefined)
+const resourceKeyword = ref('')
+const businessFormulaInputRef = ref()
+const resourceWorkbenchRef = ref()
+const businessCursor = reactive({ start: 0, end: 0 })
+const selectedDraftKey = ref('')
 
 const statistics = reactive({
   formulaCount: 0,
@@ -440,7 +609,7 @@ const form = reactive({
   businessFormula: undefined,
   formulaExpr: undefined,
   assetType: 'FORMULA',
-  workbenchMode: 'GUIDED',
+  workbenchMode: 'BUSINESS',
   workbenchPattern: 'IF_ELSE',
   templateCode: undefined,
   workbenchConfigJson: undefined,
@@ -453,7 +622,7 @@ const form = reactive({
 })
 
 const workbench = reactive({
-  mode: 'GUIDED',
+  mode: 'BUSINESS',
   pattern: 'IF_ELSE',
   templateCode: undefined,
   conditionLogic: 'AND',
@@ -480,8 +649,8 @@ const rules = {
 }
 
 const builderModes = [
-  { label: '点选向导', value: 'GUIDED' },
-  { label: '专家模式', value: 'EXPERT' }
+  { label: '业务编排', value: 'BUSINESS' },
+  { label: '结构助手', value: 'GUIDED' }
 ]
 
 const conditionOperators = [
@@ -496,29 +665,56 @@ const conditionOperators = [
 const operatorButtons = [
   { label: '+', value: ' + ' },
   { label: '-', value: ' - ' },
-  { label: '*', value: ' * ' },
-  { label: '/', value: ' / ' },
-  { label: '(', value: '(' },
-  { label: ')', value: ')' },
-  { label: '且', value: ' and ' },
-  { label: '或', value: ' or ' }
+  { label: '×', value: ' × ' },
+  { label: '÷', value: ' ÷ ' },
+  { label: '%', value: '%' },
+  { label: '（', value: '（' },
+  { label: '）', value: '）' },
+  { label: '，', value: '，' }
 ]
 
 const functionButtons = [
-  { label: 'if(cond,a,b)', value: 'if(, , )', desc: '条件判断，适合价格分支。' },
-  { label: 'between(x,a,b)', value: 'between(, , )', desc: '区间命中，适合档位判断。' },
-  { label: 'round(x,2)', value: 'round(, 2)', desc: '结果保留精度。' },
-  { label: 'coalesce(a,b)', value: 'coalesce(, )', desc: '空值兜底。' },
-  { label: 'max(a,b)', value: 'max(, )', desc: '取最大值。' },
-  { label: 'min(a,b)', value: 'min(, )', desc: '取最小值。' }
+  { label: '四舍五入', value: '四舍五入(, 2)', desc: '结果保留指定精度。' },
+  { label: '最大值', value: '最大值(, )', desc: '适合保底值与上限比较。' },
+  { label: '最小值', value: '最小值(, )', desc: '适合封顶值与下限比较。' },
+  { label: '空值兜底', value: '空值兜底(, )', desc: '空值时回退到默认值。' }
+]
+
+const keywordButtons = [
+  { label: '如果', value: '如果 ' },
+  { label: '那么', value: ' 那么 ' },
+  { label: '否则', value: ' 否则 ' },
+  { label: '且', value: ' 且 ' },
+  { label: '或', value: ' 或 ' },
+  { label: '等于', value: ' 等于 ' },
+  { label: '不等于', value: ' 不等于 ' },
+  { label: '大于', value: ' 大于 ' },
+  { label: '大于等于', value: ' 大于等于 ' },
+  { label: '小于', value: ' 小于 ' },
+  { label: '小于等于', value: ' 小于等于 ' }
+]
+
+const numberButtons = [
+  { label: '7', value: '7' },
+  { label: '8', value: '8' },
+  { label: '9', value: '9' },
+  { label: '4', value: '4' },
+  { label: '5', value: '5' },
+  { label: '6', value: '6' },
+  { label: '1', value: '1' },
+  { label: '2', value: '2' },
+  { label: '3', value: '3' },
+  { label: '0', value: '0' },
+  { label: '00', value: '00' },
+  { label: '.', value: '.' }
 ]
 
 const namespaceTokens = [
-  { label: 'V.变量', value: 'V.', type: 'warning' },
-  { label: 'I.输入', value: 'I.', type: 'warning' },
-  { label: 'C.上下文', value: 'C.', type: 'warning' },
-  { label: 'F.费用结果', value: 'F.', type: 'warning' },
-  { label: 'T.临时值', value: 'T.', type: 'warning' }
+  { label: 'V.变量', value: 'V.', type: 'warning', desc: '标准变量上下文' },
+  { label: 'I.输入', value: 'I.', type: 'warning', desc: '原始输入 JSON' },
+  { label: 'C.上下文', value: 'C.', type: 'warning', desc: '场景/版本/账期等运行信息' },
+  { label: 'F.费用结果', value: 'F.', type: 'warning', desc: '前序费用结果与试算费用对象' },
+  { label: 'T.临时值', value: 'T.', type: 'warning', desc: '预留临时变量空间' }
 ]
 
 const platformTemplates = [
@@ -548,10 +744,9 @@ const platformTemplates = [
   {
     code: 'KEEP_AMOUNT',
     name: '面积 × 天数 × 单价',
-    desc: '适合仓储保管费类金额公式，切到专家模式后继续补细节。',
-    pattern: 'EXPERT',
-    businessFormula: '面积 × 天数 × 单价',
-    formulaExpr: 'V.AREA * V.DAYS * V.UNIT_PRICE'
+    desc: '适合仓储保管费类金额公式，直接用中文公式编排即可。',
+    pattern: 'BUSINESS',
+    businessFormula: '面积 × 天数 × 单价'
   }
 ]
 
@@ -567,68 +762,178 @@ const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) 
   return acc
 }, {}))
 
-const expressionResourceSections = computed(() => [
-  {
-    key: 'namespace',
-    title: '命名空间',
-    tip: '规则中心与公式实验室共用同一套命名空间口径。',
-    display: 'tag',
-    items: namespaceTokens
-  },
-  {
-    key: 'operator',
-    title: '运算符',
-    display: 'tag',
-    items: operatorButtons.map(item => ({
-      ...item,
-      type: 'info'
-    }))
-  },
-  {
-    key: 'variable',
-    title: '场景变量',
-    display: 'list',
-    emptyText: resolveVariablePlaceholder('当前场景暂无变量，请先到变量中心维护'),
-    items: variableOptions.value.map(item => ({
-      label: item.variableName || item.variableCode,
-      value: `V.${item.variableCode}`,
-      desc: `${item.variableCode}${item.dataType ? ` / ${item.dataType}` : ''}`
-    }))
-  },
-  {
-    key: 'function',
-    title: '函数库',
-    display: 'list',
-    items: functionButtons
-  }
-])
+const feeMetaMap = computed(() => feeOptions.value.reduce((acc, item) => {
+  acc[item.feeCode] = item
+  return acc
+}, {}))
 
-const activeFormulaExpression = computed(() => {
-  return workbench.mode === 'EXPERT'
-    ? String(form.formulaExpr || '').trim()
-    : String(derivedFormula.value.formulaExpr || '').trim()
-})
+const highFrequencyVariableOptions = computed(() => variableOptions.value.slice(0, 12))
+const highFrequencyFeeOptions = computed(() => feeOptions.value.slice(0, 12))
 
-const formulaValidationResult = computed(() => validateCostExpression({
-  expression: activeFormulaExpression.value,
-  namespaceScope: form.namespaceScope,
-  variableCodes: variableOptions.value.map(item => item.variableCode),
-  validateVariableRefs: Boolean(form.sceneId)
+const businessCompileResult = computed(() => compileCostBusinessFormula({
+  businessFormula: form.businessFormula,
+  variableOptions: variableOptions.value,
+  feeOptions: feeOptions.value
 }))
 
+const activeBusinessFormula = computed(() => {
+  return workbench.mode === 'GUIDED'
+    ? String(derivedFormula.value.businessFormula || '').trim()
+    : String(form.businessFormula || '').trim()
+})
+
+const activeFormulaExpression = computed(() => {
+  return workbench.mode === 'GUIDED'
+    ? String(derivedFormula.value.formulaExpr || '').trim()
+    : String(businessCompileResult.value.expression || '').trim()
+})
+
+const formulaValidationResult = computed(() => {
+  if (workbench.mode !== 'GUIDED' && businessCompileResult.value.issues?.length) {
+    return {
+      valid: false,
+      issues: businessCompileResult.value.issues.map(item => ({ message: item.message })),
+      namespaces: [],
+      variableRefs: businessCompileResult.value.variableRefs || [],
+      feeRefs: businessCompileResult.value.feeRefs || []
+    }
+  }
+  return validateCostExpression({
+    expression: activeFormulaExpression.value,
+    namespaceScope: form.namespaceScope,
+    variableCodes: variableOptions.value.map(item => item.variableCode),
+    feeCodes: feeOptions.value.map(item => item.feeCode),
+    validateVariableRefs: Boolean(form.sceneId),
+    validateFeeRefs: Boolean(form.sceneId)
+  })
+})
+
 const formulaValidationMessages = computed(() => formulaValidationResult.value.issues.map(item => item.message))
+
+const referenceDetails = computed(() => {
+  const variableRefs = (formulaValidationResult.value.variableRefs || []).map(code => {
+    const meta = variableMetaMap.value[code]
+    const readPath = String(meta?.dataPath || '').trim()
+    return {
+      key: `V-${code}`,
+      type: 'variable',
+      label: meta?.variableName || code,
+      code,
+      description: readPath ? `来源路径：${readPath}` : `平铺字段：${meta?.variableCode || code}`
+    }
+  })
+  const feeRefs = (formulaValidationResult.value.feeRefs || []).map(code => {
+    const meta = feeMetaMap.value[code]
+    return {
+      key: `F-${code}`,
+      type: 'fee',
+      label: meta?.feeName || code,
+      code,
+      description: `上下文费用：F.${code}`
+    }
+  })
+  return [...variableRefs, ...feeRefs]
+})
+
+const businessIssueItems = computed(() => {
+  return (businessCompileResult.value.issues || []).map((item, index) => ({
+    key: `${item.code || 'ISSUE'}-${index}`,
+    message: item.message,
+    fragment: item.fragment || '',
+    suggestion: item.suggestion || ''
+  }))
+})
+
+const businessTokenDefinitions = computed(() => {
+  return [
+    ...variableOptions.value.map(item => ({
+      type: 'variable',
+      label: item.variableName,
+      value: item.variableName,
+      code: item.variableCode,
+      description: item.dataPath ? `来源路径：${item.dataPath}` : `平铺字段：${item.variableCode}`
+    })),
+    ...feeOptions.value.map(item => ({
+      type: 'fee',
+      label: item.feeName,
+      value: item.feeName,
+      code: item.feeCode,
+      description: `上下文费用：F.${item.feeCode}`
+    })),
+    ...functionButtons.map(item => ({
+      type: 'function',
+      label: item.label,
+      value: item.label,
+      description: item.desc
+    })),
+    ...keywordButtons.map(item => ({
+      type: 'keyword',
+      label: item.label,
+      value: item.label.trim(),
+      description: '条件与比较关键字'
+    }))
+  ].filter(item => item.label).sort((a, b) => String(b.label).length - String(a.label).length)
+})
+
+const businessDraftTokens = computed(() => tokenizeBusinessFormula(activeBusinessFormula.value, businessTokenDefinitions.value))
+const businessRiskTokens = computed(() => businessDraftTokens.value.filter(item => item.type === 'risk'))
+
+const businessResourceSections = computed(() => {
+  const keyword = resourceKeyword.value.trim().toLowerCase()
+  const filterItems = items => {
+    if (!keyword) return items
+    return items.filter(item => `${item.label || ''} ${item.desc || ''}`.toLowerCase().includes(keyword))
+  }
+  return [
+    {
+      key: 'function',
+      title: '中文函数',
+      tip: '业务人员优先写中文函数，系统会自动编译成标准表达式。',
+      display: 'tag',
+      items: filterItems(functionButtons.map(item => ({ ...item, type: 'success' })))
+    },
+    {
+      key: 'keyword',
+      title: '条件关键字',
+      display: 'tag',
+      items: filterItems(keywordButtons.map(item => ({ ...item, type: 'warning' })))
+    },
+    {
+      key: 'variable',
+      title: '场景变量',
+      display: 'list',
+      emptyText: resolveVariablePlaceholder('当前场景暂无变量，请先到变量中心维护'),
+      items: filterItems(variableOptions.value.map(item => ({
+        label: item.variableName || item.variableCode,
+        value: item.variableName || item.variableCode,
+        desc: `${item.variableCode}${item.dataPath ? ` / ${item.dataPath}` : ''}${item.dataType ? ` / ${item.dataType}` : ''}`
+      })))
+    },
+    {
+      key: 'fee',
+      title: '上下文费用',
+      display: 'list',
+      emptyText: '当前场景暂无可引用费用，请先维护费用主线。',
+      items: filterItems(feeOptions.value.map(item => ({
+        label: item.feeName || item.feeCode,
+        value: item.feeName || item.feeCode,
+        desc: `${item.feeCode} / 前序费用结果或试算 F 对象`
+      })))
+    },
+    {
+      key: 'namespace',
+      title: '系统命名空间说明',
+      display: 'tag',
+      items: namespaceTokens
+    }
+  ]
+})
 
 const numericVariableOptions = computed(() => {
   return variableOptions.value.filter(item => ['NUMBER', 'INTEGER', 'DECIMAL', 'LONG'].includes(String(item.dataType || '').toUpperCase()))
 })
 
 const derivedFormula = computed(() => {
-  if (workbench.mode === 'EXPERT') {
-    return {
-      businessFormula: (form.businessFormula || '').trim(),
-      formulaExpr: (form.formulaExpr || '').trim()
-    }
-  }
   return workbench.pattern === 'RANGE_LOOKUP' ? buildRangeFormula() : buildIfElseFormula()
 })
 
@@ -658,16 +963,19 @@ async function loadBaseOptions() {
 async function loadSceneAssets(sceneId) {
   if (!sceneId) {
     variableOptions.value = []
+    feeOptions.value = []
     formulaOptionList.value = []
     templateOptionList.value = []
     return
   }
-  const [variableResponse, formulaResponse, templateResponse] = await Promise.all([
+  const [variableResponse, feeResponse, formulaResponse, templateResponse] = await Promise.all([
     optionselectVariable({ sceneId, status: '0', pageNum: 1, pageSize: 1000 }),
+    optionselectFee({ sceneId, status: '0', pageNum: 1, pageSize: 1000 }),
     optionselectFormula({ sceneId, status: '0', pageNum: 1, pageSize: 1000 }),
     listFormulaTemplates({ sceneId, pageNum: 1, pageSize: 1000 })
   ])
   variableOptions.value = variableResponse?.data || []
+  feeOptions.value = feeResponse?.data || []
   formulaOptionList.value = (formulaResponse?.data || []).filter(item => item.formulaCode !== form.formulaCode)
   templateOptionList.value = templateResponse?.data || []
 }
@@ -695,7 +1003,7 @@ async function getList() {
 }
 
 function resetWorkbench() {
-  workbench.mode = 'GUIDED'
+  workbench.mode = 'BUSINESS'
   workbench.pattern = 'IF_ELSE'
   workbench.templateCode = undefined
   workbench.conditionLogic = 'AND'
@@ -717,7 +1025,7 @@ function resetFormModel() {
   form.businessFormula = undefined
   form.formulaExpr = undefined
   form.assetType = 'FORMULA'
-  form.workbenchMode = 'GUIDED'
+  form.workbenchMode = 'BUSINESS'
   form.workbenchPattern = 'IF_ELSE'
   form.templateCode = undefined
   form.workbenchConfigJson = undefined
@@ -729,6 +1037,8 @@ function resetFormModel() {
   form.remark = undefined
   testInputJson.value = ''
   testResult.value = undefined
+  resourceKeyword.value = ''
+  selectedDraftKey.value = ''
   resetWorkbench()
   proxy.resetForm('formulaRef')
 }
@@ -838,26 +1148,256 @@ function resolveVersionChangeType(changeType) {
   return { label: '更新', type: 'info' }
 }
 
-function appendExpertToken(token) {
-  if (workbench.mode !== 'EXPERT') {
-    workbench.mode = 'EXPERT'
-    workbench.templateCode = undefined
-    form.businessFormula = derivedFormula.value.businessFormula
-    form.formulaExpr = derivedFormula.value.formulaExpr
+function normalizeWorkbenchMode(mode) {
+  return mode === 'GUIDED' ? 'GUIDED' : 'BUSINESS'
+}
+
+function getBusinessTextarea() {
+  return businessFormulaInputRef.value?.textarea || businessFormulaInputRef.value?.$el?.querySelector('textarea')
+}
+
+function captureBusinessCursor() {
+  const textarea = getBusinessTextarea()
+  if (!textarea) {
+    return
   }
-  form.formulaExpr = `${form.formulaExpr || ''}${token}`
+  businessCursor.start = textarea.selectionStart ?? 0
+  businessCursor.end = textarea.selectionEnd ?? businessCursor.start
+}
+
+function focusBusinessEditor(start = businessCursor.start, end = businessCursor.end) {
+  nextTick(() => {
+    const textarea = getBusinessTextarea()
+    if (!textarea) {
+      return
+    }
+    textarea.focus()
+    textarea.setSelectionRange(start, end)
+    businessCursor.start = start
+    businessCursor.end = end
+  })
+}
+
+function setBusinessFormulaText(text, start = text.length, end = start) {
+  form.businessFormula = text
+  focusBusinessEditor(start, end)
+}
+
+function appendBusinessToken(token) {
+  workbench.mode = 'BUSINESS'
+  workbench.templateCode = undefined
+  captureBusinessCursor()
+  const source = String(form.businessFormula || '')
+  const start = businessCursor.start ?? source.length
+  const end = businessCursor.end ?? start
+  const nextText = `${source.slice(0, start)}${token}${source.slice(end)}`
+  const cursor = start + token.length
+  selectedDraftKey.value = ''
+  setBusinessFormulaText(nextText, cursor, cursor)
+}
+
+function removeBusinessToken(token) {
+  const source = String(form.businessFormula || '')
+  const nextText = `${source.slice(0, token.start)}${source.slice(token.end)}`
+  selectedDraftKey.value = ''
+  setBusinessFormulaText(nextText, token.start, token.start)
+}
+
+function removeLastBusinessToken() {
+  const last = businessDraftTokens.value.at(-1)
+  if (last) {
+    removeBusinessToken(last)
+  }
+}
+
+function clearBusinessFormula() {
+  selectedDraftKey.value = ''
+  setBusinessFormulaText('', 0, 0)
+}
+
+function focusBusinessToken(token) {
+  selectedDraftKey.value = token.key
+  setBusinessFormulaText(String(form.businessFormula || ''), token.start, token.end)
+}
+
+function focusFirstRiskToken() {
+  if (businessRiskTokens.value.length) {
+    focusBusinessToken(businessRiskTokens.value[0])
+  }
+}
+
+function scrollToResourceWorkbench() {
+  const target = resourceWorkbenchRef.value?.$el || resourceWorkbenchRef.value
+  target?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
+
+function resolveDraftTokenTypeLabel(type) {
+  const labelMap = {
+    variable: '变量',
+    fee: '费用',
+    function: '函数',
+    keyword: '关键字',
+    number: '数值',
+    operator: '运算符',
+    risk: '待识别'
+  }
+  return labelMap[type] || '片段'
+}
+
+function tokenizeBusinessFormula(text, definitions = []) {
+  const source = String(text || '')
+  if (!source.trim()) {
+    return []
+  }
+  const tokens = []
+  let cursor = 0
+  let sequence = 0
+  while (cursor < source.length) {
+    const rest = source.slice(cursor)
+    if (/^\s+/.test(rest)) {
+      cursor += rest.match(/^\s+/)[0].length
+      continue
+    }
+    const definition = definitions.find(item => item?.value && source.startsWith(item.value, cursor))
+    if (definition) {
+      const value = definition.value
+      tokens.push({
+        key: `${definition.type}-${sequence++}-${cursor}`,
+        type: definition.type,
+        typeLabel: resolveDraftTokenTypeLabel(definition.type),
+        label: value,
+        code: definition.code,
+        description: definition.description,
+        start: cursor,
+        end: cursor + value.length
+      })
+      cursor += value.length
+      continue
+    }
+    const numberMatch = rest.match(/^\d+(?:\.\d+)?(?:%|％)?/)
+    if (numberMatch) {
+      const value = numberMatch[0]
+      tokens.push({
+        key: `number-${sequence++}-${cursor}`,
+        type: 'number',
+        typeLabel: resolveDraftTokenTypeLabel('number'),
+        label: value,
+        start: cursor,
+        end: cursor + value.length
+      })
+      cursor += value.length
+      continue
+    }
+    if (/^[+\-×÷*/%(),，（）]/.test(rest)) {
+      const value = rest[0]
+      tokens.push({
+        key: `operator-${sequence++}-${cursor}`,
+        type: 'operator',
+        typeLabel: resolveDraftTokenTypeLabel('operator'),
+        label: value,
+        start: cursor,
+        end: cursor + 1
+      })
+      cursor += 1
+      continue
+    }
+    let end = cursor + 1
+    while (end < source.length) {
+      const segment = source.slice(end)
+      if (/^\s/.test(segment) || /^[+\-×÷*/%(),，（）]/.test(segment) || /^\d/.test(segment)) {
+        break
+      }
+      if (definitions.some(item => item?.value && source.startsWith(item.value, end))) {
+        break
+      }
+      end += 1
+    }
+    const label = source.slice(cursor, end)
+    tokens.push({
+      key: `risk-${sequence++}-${cursor}`,
+      type: 'risk',
+      typeLabel: resolveDraftTokenTypeLabel('risk'),
+      label,
+      start: cursor,
+      end
+    })
+    cursor = end
+  }
+  return tokens
+}
+
+function calculateSuggestionScore(keyword, item) {
+  const normalizedKeyword = String(keyword || '').trim()
+  const label = String(item?.label || '')
+  if (!normalizedKeyword || !label) {
+    return 0
+  }
+  if (label === normalizedKeyword) {
+    return 100
+  }
+  if (label.includes(normalizedKeyword) || normalizedKeyword.includes(label)) {
+    return 80
+  }
+  const sharedChars = [...new Set(normalizedKeyword.split(''))].filter(char => label.includes(char)).length
+  return sharedChars >= Math.min(2, normalizedKeyword.length) ? sharedChars * 10 : 0
+}
+
+function getRiskSuggestions(fragment) {
+  const keyword = String(fragment || '').trim()
+  if (!keyword) {
+    return []
+  }
+  return businessTokenDefinitions.value
+    .map(item => ({
+      label: item.label,
+      value: item.value,
+      score: calculateSuggestionScore(keyword, item)
+    }))
+    .filter(item => item.score >= 20)
+    .sort((a, b) => b.score - a.score || a.label.length - b.label.length)
+    .slice(0, 3)
+}
+
+function replaceRiskFragment(fragment, replacement) {
+  const target = businessRiskTokens.value.find(item => item.label === fragment)
+  if (!target) {
+    return
+  }
+  const source = String(form.businessFormula || '')
+  const nextText = `${source.slice(0, target.start)}${replacement}${source.slice(target.end)}`
+  const cursor = target.start + replacement.length
+  selectedDraftKey.value = ''
+  setBusinessFormulaText(nextText, cursor, cursor)
+}
+
+function assignNestedValue(target, path, value) {
+  const segments = String(path || '').split('.').map(item => item.trim()).filter(Boolean)
+  if (!segments.length) {
+    return
+  }
+  let current = target
+  segments.forEach((segment, index) => {
+    if (index === segments.length - 1) {
+      current[segment] = value
+      return
+    }
+    if (!current[segment] || typeof current[segment] !== 'object') {
+      current[segment] = {}
+    }
+    current = current[segment]
+  })
 }
 
 function handleAppendResourceToken(payload) {
-  appendExpertToken(payload.value)
+  appendBusinessToken(payload.value)
 }
 
 function applyTemplate(template) {
   workbench.templateCode = template.code
-  if (template.pattern === 'EXPERT') {
-    workbench.mode = 'EXPERT'
+  if (template.pattern === 'BUSINESS') {
+    workbench.mode = 'BUSINESS'
     form.businessFormula = template.businessFormula
-    form.formulaExpr = template.formulaExpr
+    form.formulaExpr = businessCompileResult.value.expression
     return
   }
   workbench.mode = 'GUIDED'
@@ -875,7 +1415,7 @@ function applyTemplate(template) {
 function applyStoredTemplate(template) {
   form.assetType = 'FORMULA'
   restoreWorkbench({ ...template, templateCode: template.templateCode || template.formulaCode })
-  if (workbench.mode === 'EXPERT') {
+  if (workbench.mode === 'BUSINESS') {
     form.businessFormula = template.businessFormula
     form.formulaExpr = template.formulaExpr
   }
@@ -910,8 +1450,8 @@ function handleRemoveRange(index) {
 function buildPayload() {
   const payload = {
     ...form,
-    businessFormula: derivedFormula.value.businessFormula || form.businessFormula,
-    formulaExpr: derivedFormula.value.formulaExpr || form.formulaExpr,
+    businessFormula: activeBusinessFormula.value || form.businessFormula,
+    formulaExpr: activeFormulaExpression.value || form.formulaExpr,
     workbenchMode: workbench.mode,
     workbenchPattern: workbench.pattern,
     templateCode: workbench.templateCode,
@@ -925,7 +1465,7 @@ async function handleSave() {
   await proxy.$refs.formulaRef.validate()
   const payload = buildPayload()
   if (!payload.formulaExpr) {
-    proxy.$modal.msgError('请先通过点选向导或专家模式生成标准表达式')
+    proxy.$modal.msgError('请先通过业务编排或结构助手生成标准表达式')
     return
   }
   if (!formulaValidationResult.value.valid) {
@@ -975,6 +1515,8 @@ async function handleEdit(row) {
   queryParams.sceneId = form.sceneId
   testInputJson.value = form.testCaseJson || ''
   testResult.value = response.data?.sampleResultJson ? safeJsonParse(response.data.sampleResultJson) : undefined
+  resourceKeyword.value = ''
+  selectedDraftKey.value = ''
   await loadSceneAssets(form.sceneId)
   restoreWorkbench(response.data)
 }
@@ -1008,6 +1550,8 @@ async function handleLoadVersion(row) {
   const response = await getFormulaVersion(row.versionId)
   Object.assign(form, response.data || {})
   queryParams.sceneId = form.sceneId
+  resourceKeyword.value = ''
+  selectedDraftKey.value = ''
   await loadSceneAssets(form.sceneId)
   restoreWorkbench(response.data)
   testInputJson.value = form.testCaseJson || ''
@@ -1048,27 +1592,48 @@ function handleSelectionChange(selection) {
 
 async function handleGenerateSample() {
   if (!form.sceneId) {
-    proxy.$modal.msgWarning('请先选择场景，再按变量生成示例')
+    proxy.$modal.msgWarning('请先选择场景，再按引用生成示例')
     return
   }
   const V = {}
-  variableOptions.value.forEach(item => {
+  const I = {}
+  const F = {}
+  const variableRefCodes = formulaValidationResult.value.variableRefs?.length
+    ? formulaValidationResult.value.variableRefs
+    : variableOptions.value.map(item => item.variableCode)
+  variableRefCodes.forEach(code => {
+    const item = variableMetaMap.value[code]
+    if (!item) {
+      return
+    }
     const type = String(item.dataType || '').toUpperCase()
+    let sampleValue
     if (['NUMBER', 'INTEGER', 'DECIMAL', 'LONG'].includes(type)) {
-      V[item.variableCode] = 1
+      sampleValue = 1
     } else if (type === 'BOOLEAN') {
-      V[item.variableCode] = true
+      sampleValue = true
     } else {
-      V[item.variableCode] = item.variableName || item.variableCode
+      sampleValue = item.variableName || item.variableCode
+    }
+    V[item.variableCode] = sampleValue
+    if (item.dataPath) {
+      assignNestedValue(I, item.dataPath, sampleValue)
+    } else {
+      I[item.variableCode] = sampleValue
     }
   })
-  testInputJson.value = JSON.stringify({ V, C: {}, I: {}, F: {}, T: {} }, null, 2)
+  ;(formulaValidationResult.value.feeRefs || []).forEach(code => {
+    F[code] = 100
+  })
+  testInputJson.value = JSON.stringify({ V, C: {}, I, F, T: {} }, null, 2)
 }
 
 async function handleWorkbenchSceneChange(sceneId) {
   const workingSceneId = sceneId || resolveWorkingCostSceneId(sceneOptions.value)
   form.sceneId = workingSceneId
   queryParams.sceneId = workingSceneId
+  resourceKeyword.value = ''
+  selectedDraftKey.value = ''
   await loadSceneAssets(workingSceneId)
 }
 
@@ -1076,6 +1641,8 @@ async function handleQuerySceneChange(sceneId) {
   const workingSceneId = sceneId || resolveWorkingCostSceneId(sceneOptions.value)
   queryParams.sceneId = workingSceneId
   form.sceneId = workingSceneId
+  resourceKeyword.value = ''
+  selectedDraftKey.value = ''
   await loadSceneAssets(workingSceneId)
 }
 
@@ -1127,8 +1694,8 @@ function buildWorkbenchPayload() {
       resultValue: item.resultValue || ''
     })),
     defaultResultValue: workbench.defaultResultValue || '',
-    businessFormula: derivedFormula.value.businessFormula || form.businessFormula || '',
-    formulaExpr: derivedFormula.value.formulaExpr || form.formulaExpr || ''
+    businessFormula: activeBusinessFormula.value || form.businessFormula || '',
+    formulaExpr: activeFormulaExpression.value || form.formulaExpr || ''
   }
 }
 
@@ -1136,15 +1703,15 @@ function restoreWorkbench(data = {}) {
   resetWorkbench()
   const config = safeJsonParse(data.workbenchConfigJson)
   if (!config || typeof config !== 'object') {
-    workbench.mode = data.workbenchMode || 'EXPERT'
+    workbench.mode = normalizeWorkbenchMode(data.workbenchMode)
     workbench.pattern = data.workbenchPattern || 'IF_ELSE'
     workbench.templateCode = data.templateCode
     if (workbench.mode !== 'GUIDED') {
-      workbench.mode = 'EXPERT'
+      workbench.mode = 'BUSINESS'
     }
     return
   }
-  workbench.mode = config.mode || data.workbenchMode || 'GUIDED'
+  workbench.mode = normalizeWorkbenchMode(config.mode || data.workbenchMode)
   workbench.pattern = config.pattern || data.workbenchPattern || 'IF_ELSE'
   workbench.templateCode = config.templateCode || data.templateCode
   workbench.conditionLogic = config.conditionLogic || 'AND'
@@ -1166,7 +1733,7 @@ function restoreWorkbench(data = {}) {
     }))
     : [{ startValue: '', endValue: '', resultValue: '' }]
   workbench.defaultResultValue = config.defaultResultValue || ''
-  if (workbench.mode === 'EXPERT') {
+  if (workbench.mode === 'BUSINESS') {
     form.businessFormula = config.businessFormula || data.businessFormula
     form.formulaExpr = config.formulaExpr || data.formulaExpr
   }
@@ -1210,6 +1777,7 @@ onActivated(async () => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  color: var(--el-text-color-primary);
 }
 
 .formula-lab__hero {
@@ -1219,14 +1787,14 @@ onActivated(async () => {
   gap: 16px;
   padding: 28px 32px;
   border-radius: 24px;
-  background: linear-gradient(135deg, #f8fbff 0%, #fff7ef 100%);
-  border: 1px solid #e7eef7;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-light);
 }
 
 .formula-lab__eyebrow {
   font-size: 13px;
   font-weight: 600;
-  color: #c98a2b;
+  color: var(--el-color-warning);
   margin-bottom: 8px;
 }
 
@@ -1234,13 +1802,13 @@ onActivated(async () => {
   margin: 0 0 10px;
   font-size: 40px;
   line-height: 1.1;
-  color: #17233d;
+  color: var(--el-text-color-primary);
 }
 
 .formula-lab__subtitle {
   margin: 0;
   max-width: 880px;
-  color: #58627a;
+  color: var(--el-text-color-regular);
   line-height: 1.8;
 }
 
@@ -1255,9 +1823,9 @@ onActivated(async () => {
 .formula-lab__toolbox,
 .formula-lab__ledger {
   border-radius: 24px;
-  background: #fff;
-  border: 1px solid #edf1f7;
-  box-shadow: 0 12px 28px rgba(19, 41, 78, 0.06);
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-light);
+  box-shadow: var(--el-box-shadow-light);
 }
 
 .formula-lab__metric-card {
@@ -1269,13 +1837,13 @@ onActivated(async () => {
 
 .formula-lab__metric-card span,
 .formula-lab__metric-card small {
-  color: #6d7890;
+  color: var(--el-text-color-secondary);
 }
 
 .formula-lab__metric-card strong {
   font-size: 36px;
   line-height: 1;
-  color: #2878ff;
+  color: var(--el-color-primary);
 }
 
 .formula-lab__workspace {
@@ -1301,12 +1869,12 @@ onActivated(async () => {
 .formula-lab__panel-head h3 {
   margin: 0 0 6px;
   font-size: 24px;
-  color: #17233d;
+  color: var(--el-text-color-primary);
 }
 
 .formula-lab__panel-head p {
   margin: 0;
-  color: #697488;
+  color: var(--el-text-color-regular);
 }
 
 .formula-lab__drawer-head {
@@ -1316,12 +1884,12 @@ onActivated(async () => {
 .formula-lab__drawer-head strong {
   display: block;
   margin-bottom: 6px;
-  color: #1d2a44;
+  color: var(--el-text-color-primary);
 }
 
 .formula-lab__drawer-head p {
   margin: 0;
-  color: #697488;
+  color: var(--el-text-color-regular);
 }
 
 .formula-lab__toolbar,
@@ -1342,36 +1910,36 @@ onActivated(async () => {
   margin-bottom: 16px;
   padding: 18px 20px;
   border-radius: 18px;
-  background: #f8fafc;
-  border: 1px solid #e8eef7;
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
 }
 
 .formula-lab__preview-card--code {
-  background: #0f172a;
-  border-color: #152440;
+  background: var(--el-fill-color-dark);
+  border-color: var(--el-fill-color-darker);
 }
 
 .formula-lab__preview-title {
   margin-bottom: 10px;
   font-size: 14px;
   font-weight: 600;
-  color: #44516a;
+  color: var(--el-text-color-secondary);
 }
 
 .formula-lab__preview-card--code .formula-lab__preview-title {
-  color: #cad8ff;
+  color: var(--el-color-white);
 }
 
 .formula-lab__preview-text {
   min-height: 54px;
-  color: #1f2937;
+  color: var(--el-text-color-primary);
   line-height: 1.8;
 }
 
 .formula-lab__code {
   margin: 0;
   min-height: 132px;
-  color: #f8fafc;
+  color: var(--el-color-white);
   font-family: 'JetBrains Mono', 'Consolas', monospace;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1381,9 +1949,151 @@ onActivated(async () => {
   line-height: 1.7;
 }
 
-.formula-lab__guided,
-.formula-lab__expert {
+.formula-lab__business,
+.formula-lab__guided {
   margin-bottom: 18px;
+}
+
+.formula-lab__editor-card,
+.formula-lab__draft-card,
+.formula-lab__quick-card {
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.formula-lab__note-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--el-bg-color-overlay);
+  border: 1px dashed var(--el-border-color);
+}
+
+.formula-lab__note-card strong {
+  color: var(--el-text-color-primary);
+}
+
+.formula-lab__note-card span {
+  color: var(--el-text-color-regular);
+  line-height: 1.7;
+}
+
+.formula-lab__draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.formula-lab__draft-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.formula-lab__draft-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color-overlay);
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.formula-lab__draft-token:hover,
+.formula-lab__draft-token.is-active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 2px rgb(64 158 255 / 12%);
+}
+
+.formula-lab__draft-token em {
+  color: var(--el-text-color-secondary);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.formula-lab__draft-token i {
+  color: var(--el-text-color-placeholder);
+  font-style: normal;
+}
+
+.formula-lab__draft-token.is-variable {
+  border-color: var(--el-color-success-light-5);
+}
+
+.formula-lab__draft-token.is-fee {
+  border-color: var(--el-color-warning-light-5);
+}
+
+.formula-lab__draft-token.is-function {
+  border-color: var(--el-color-primary-light-5);
+}
+
+.formula-lab__draft-token.is-risk {
+  border-style: dashed;
+  border-color: var(--el-color-danger-light-5);
+  background: var(--el-color-danger-light-9);
+}
+
+.formula-lab__quick-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.formula-lab__note-list,
+.formula-lab__issue-list,
+.formula-lab__reference-list {
+  display: grid;
+  gap: 12px;
+}
+
+.formula-lab__note-item,
+.formula-lab__issue-item,
+.formula-lab__reference-item {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color);
+}
+
+.formula-lab__note-item strong,
+.formula-lab__issue-item strong,
+.formula-lab__reference-item strong {
+  color: var(--el-text-color-primary);
+}
+
+.formula-lab__note-item span,
+.formula-lab__issue-item p,
+.formula-lab__issue-item span,
+.formula-lab__reference-item span,
+.formula-lab__reference-item small {
+  margin: 0;
+  color: var(--el-text-color-regular);
+  line-height: 1.6;
+}
+
+.formula-lab__reference-item small {
+  color: var(--el-text-color-secondary);
+}
+
+.formula-lab__issue-item {
+  border-color: var(--el-color-warning-light-5);
+}
+
+.formula-lab__issue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }
 
 .formula-lab__section-title {
@@ -1394,7 +2104,7 @@ onActivated(async () => {
   margin-bottom: 12px;
   font-size: 15px;
   font-weight: 600;
-  color: #1d2a44;
+  color: var(--el-text-color-primary);
 }
 
 .formula-lab__result-grid {
@@ -1408,7 +2118,7 @@ onActivated(async () => {
   margin-bottom: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: #607086;
+  color: var(--el-text-color-secondary);
 }
 
 .formula-lab__test-card {
@@ -1419,9 +2129,9 @@ onActivated(async () => {
   margin-top: 14px;
   padding: 12px 14px;
   border-radius: 14px;
-  background: #fff;
-  border: 1px dashed #d5dfef;
-  color: #32415d;
+  background: var(--el-bg-color-overlay);
+  border: 1px dashed var(--el-border-color);
+  color: var(--el-text-color-regular);
   white-space: pre-wrap;
 }
 
@@ -1434,8 +2144,8 @@ onActivated(async () => {
 .formula-lab__tool-section {
   padding: 16px 18px;
   border-radius: 18px;
-  background: linear-gradient(180deg, #fbfdff 0%, #f6f9fe 100%);
-  border: 1px solid #e8eef7;
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
 }
 
 .formula-lab__chip-grid {
@@ -1447,8 +2157,8 @@ onActivated(async () => {
 .formula-lab__chip,
 .formula-lab__list-item {
   appearance: none;
-  border: 1px solid #d9e2f0;
-  background: #fff;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color-overlay);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -1456,13 +2166,13 @@ onActivated(async () => {
 .formula-lab__chip {
   padding: 8px 12px;
   border-radius: 999px;
-  color: #32415d;
+  color: var(--el-text-color-regular);
 }
 
 .formula-lab__chip:hover,
 .formula-lab__list-item:hover {
-  border-color: #3b82f6;
-  color: #2563eb;
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
   transform: translateY(-1px);
 }
 
@@ -1486,12 +2196,20 @@ onActivated(async () => {
 }
 
 .formula-lab__list-item strong {
-  color: #17233d;
+  color: var(--el-text-color-primary);
 }
 
 .formula-lab__list-item span {
-  color: #64748b;
+  color: var(--el-text-color-secondary);
   line-height: 1.6;
+}
+
+.formula-lab :deep(.el-empty__description p) {
+  color: var(--el-text-color-secondary);
+}
+
+.formula-lab :deep(.el-alert) {
+  border-radius: 16px;
 }
 
 .mt12 {
@@ -1523,6 +2241,11 @@ onActivated(async () => {
 
   .formula-lab__result-grid {
     grid-template-columns: 1fr;
+  }
+
+  .formula-lab__draft-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 </style>

@@ -137,7 +137,7 @@ class CostAccessProfileControllerManualIT {
         addBody.put("endpointUrl", "https://example.internal/report");
         addBody.put("authType", "BEARER");
         addBody.put("authConfigJson", "{\"token\":\"demo-token\",\"headers\":{\"X-App\":\"cost-platform\"}}");
-        addBody.put("mappingJson", "{\"bizNo\":\"payload.bizNo\",\"objectCode\":\"payload.teamCode\",\"objectName\":\"payload.teamName\",\"FEMALE_TEAM_HEADCOUNT\":\"payload.FEMALE_TEAM_HEADCOUNT\"}");
+        addBody.put("mappingJson", "{\"bizNo\":\"payload.bizNo\",\"objectCode\":\"payload.teamCode\",\"objectName\":\"payload.teamName\",\"attendance.female.headcount\":\"payload.FEMALE_TEAM_HEADCOUNT\"}");
         addBody.put("samplePayloadJson", "{\"billMonth\":\"2026-04\"}");
         addBody.put("status", "0");
 
@@ -181,6 +181,7 @@ class CostAccessProfileControllerManualIT {
             assertThat(preview.path("mappedRecordCount").asInt()).isEqualTo(1);
             assertThat(preview.path("mappedRecords").get(0).path("bizNo").asText()).isEqualTo("HTTP-001");
             assertThat(preview.path("mappedRecords").get(0).path("objectCode").asText()).isEqualTo("TEAM-01");
+            assertThat(preview.path("mappedRecords").get(0).path("attendance").path("female").path("headcount").asInt()).isEqualTo(2);
             assertThat(preview.path("fetchedPayloadJson").isArray()).isTrue();
         } finally {
             server.verify();
@@ -206,7 +207,7 @@ class CostAccessProfileControllerManualIT {
         addBody.put("endpointUrl", "https://example.internal/report-batch");
         addBody.put("authType", "BEARER");
         addBody.put("authConfigJson", "{\"token\":\"demo-token\"}");
-        addBody.put("mappingJson", "{\"bizNo\":\"payload.bizNo\",\"objectCode\":\"payload.teamCode\",\"objectName\":\"payload.teamName\",\"FEMALE_TEAM_HEADCOUNT\":\"payload.FEMALE_TEAM_HEADCOUNT\"}");
+        addBody.put("mappingJson", "{\"bizNo\":\"payload.bizNo\",\"objectCode\":\"payload.teamCode\",\"objectName\":\"payload.teamName\",\"attendance.female.headcount\":\"payload.FEMALE_TEAM_HEADCOUNT\"}");
         addBody.put("samplePayloadJson", "{\"billMonth\":\"2026-05\"}");
         addBody.put("status", "0");
 
@@ -249,6 +250,7 @@ class CostAccessProfileControllerManualIT {
             assertThat(batch.path("fetchMeta").path("statusCode").asInt()).isEqualTo(200);
             assertThat(batch.path("mappedRecordCount").asInt()).isEqualTo(1);
             assertThat(batch.path("mappedRecords").get(0).path("objectCode").asText()).isEqualTo("TEAM-BATCH-01");
+            assertThat(batch.path("mappedRecords").get(0).path("attendance").path("female").path("headcount").asInt()).isEqualTo(3);
         } finally {
             server.verify();
             mockMvc.perform(delete("/cost/access/profile/" + profileId)
@@ -273,7 +275,7 @@ class CostAccessProfileControllerManualIT {
         addBody.put("endpointUrl", "https://example.internal/paged-report");
         addBody.put("authType", "NONE");
         addBody.put("fetchConfigJson", "{\"recordsPath\":\"data.records\",\"paging\":{\"mode\":\"PAGE_NO\",\"pageField\":\"pageNo\",\"pageSizeField\":\"pageSize\",\"pageSize\":2,\"startPage\":1,\"maxPages\":5,\"hasMorePath\":\"data.hasMore\"}}");
-        addBody.put("mappingJson", "{\"bizNo\":\"payload.bizNo\",\"objectCode\":\"payload.teamCode\",\"objectName\":\"payload.teamName\",\"FEMALE_TEAM_HEADCOUNT\":\"payload.FEMALE_TEAM_HEADCOUNT\"}");
+        addBody.put("mappingJson", "{\"bizNo\":\"payload.bizNo\",\"objectCode\":\"payload.teamCode\",\"objectName\":\"payload.teamName\",\"attendance.female.headcount\":\"payload.FEMALE_TEAM_HEADCOUNT\"}");
         addBody.put("samplePayloadJson", "{\"billMonth\":\"2026-06\",\"tenantCode\":\"TENANT-A\"}");
         addBody.put("status", "0");
 
@@ -321,6 +323,7 @@ class CostAccessProfileControllerManualIT {
             assertThat(batch.path("fetchMeta").path("recordCount").asInt()).isEqualTo(3);
             assertThat(batch.path("mappedRecordCount").asInt()).isEqualTo(3);
             assertThat(batch.path("mappedRecords").get(0).path("objectCode").asText()).isEqualTo("TEAM-01");
+            assertThat(batch.path("mappedRecords").get(0).path("attendance").path("female").path("headcount").asInt()).isEqualTo(2);
         } finally {
             server.verify();
             mockMvc.perform(delete("/cost/access/profile/" + profileId)
@@ -345,7 +348,7 @@ class CostAccessProfileControllerManualIT {
         addBody.put("endpointUrl", "https://example.internal/paged-resume");
         addBody.put("authType", "NONE");
         addBody.put("fetchConfigJson", "{\"recordsPath\":\"data.records\",\"paging\":{\"mode\":\"PAGE_NO\",\"pageField\":\"pageNo\",\"pageSizeField\":\"pageSize\",\"pageSize\":2,\"startPage\":1,\"maxPages\":1,\"hasMorePath\":\"data.hasMore\"}}");
-        addBody.put("mappingJson", "{\"bizNo\":\"payload.bizNo\",\"objectCode\":\"payload.teamCode\",\"objectName\":\"payload.teamName\",\"FEMALE_TEAM_HEADCOUNT\":\"payload.FEMALE_TEAM_HEADCOUNT\"}");
+        addBody.put("mappingJson", "{\"bizNo\":\"payload.bizNo\",\"objectCode\":\"payload.teamCode\",\"objectName\":\"payload.teamName\",\"attendance.female.headcount\":\"payload.FEMALE_TEAM_HEADCOUNT\"}");
         addBody.put("samplePayloadJson", "{\"billMonth\":\"2026-07\",\"tenantCode\":\"TENANT-B\"}");
         addBody.put("status", "0");
 
