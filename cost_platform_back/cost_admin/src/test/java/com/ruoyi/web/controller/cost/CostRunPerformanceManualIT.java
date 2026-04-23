@@ -5,10 +5,13 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ruoyi.system.domain.cost.CostFeeItem;
 import com.ruoyi.system.domain.cost.CostPublishVersion;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.bo.CostCalcInputBatchCreateBo;
 import com.ruoyi.system.domain.cost.bo.CostCalcTaskSubmitBo;
+import com.ruoyi.system.domain.cost.bo.CostFeeCalculateBo;
+import com.ruoyi.system.mapper.cost.CostFeeMapper;
 import com.ruoyi.system.mapper.cost.CostPublishVersionMapper;
 import com.ruoyi.system.mapper.cost.CostSceneMapper;
 import com.ruoyi.system.service.cost.ICostRunService;
@@ -26,6 +29,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -64,6 +68,9 @@ class CostRunPerformanceManualIT {
 
     @Autowired
     private CostPublishVersionMapper publishVersionMapper;
+
+    @Autowired
+    private CostFeeMapper feeMapper;
 
     @Autowired
     private ThreadPoolTaskExecutor threadPoolTaskExecutor;
@@ -284,6 +291,88 @@ class CostRunPerformanceManualIT {
         }
     }
 
+    @Test
+    @EnabledIfSystemProperty(named = "cost.perf.enabled", matches = "true")
+    void shouldProduceFeeScopeCalculationPerformanceBaseline() throws Exception {
+        int recordCount = Integer.getInteger("cost.perf.recordCount", 1000);
+        String billMonth = System.getProperty("cost.perf.billMonth", YearMonth.now().plusMonths(6).toString());
+        String sceneCode = resolveSceneCode();
+        String scope = System.getProperty("cost.perf.feeScope", "ALL").trim().toUpperCase(Locale.ROOT);
+        boolean includeExplain = Boolean.getBoolean("cost.perf.includeExplain");
+        Long sceneId = requireSceneId();
+        Long versionId = requireVersionId(sceneId);
+
+        CostFeeCalculateBo bo = new CostFeeCalculateBo();
+        bo.setSceneId(sceneId);
+        bo.setVersionId(versionId);
+        bo.setBillMonth(billMonth);
+        bo.setIncludeExplain(includeExplain);
+
+        if ("SINGLE".equals(scope)) {
+            bo.setFeeCode(System.getProperty("cost.perf.feeCode", "SG_FEMALE_SHIFT_LABOR"));
+        } else if ("MULTI".equals(scope)) {
+            bo.setFeeIds(resolvePerfFeeIds(sceneId, resolvePerfFeeCodes()));
+        }
+
+        long buildJsonStart = System.currentTimeMillis();
+        String inputJson = buildInputJson(recordCount);
+        long buildJsonMs = System.currentTimeMillis() - buildJsonStart;
+        bo.setInputJson(inputJson);
+
+        long calculateStart = System.currentTimeMillis();
+        Map<String, Object> result = runService.calculateFee(bo);
+        long durationMs = System.currentTimeMillis() - calculateStart;
+
+        long targetFeeCount = toLong(result.get("targetFeeCount"));
+        long executionFeeCount = toLong(result.get("executionFeeCount"));
+        long inputCount = toLong(result.get("inputCount"));
+        long outputRecordCount = toLong(result.get("recordCount"));
+        long successCount = toLong(result.get("successCount"));
+        long failedCount = toLong(result.get("failedCount"));
+        long noMatchCount = toLong(result.get("noMatchCount"));
+        boolean allFeeScope = Boolean.TRUE.equals(result.get("allFeeScope"));
+
+        assertThat(inputCount).isEqualTo(recordCount);
+        assertThat(targetFeeCount).isGreaterThan(0L);
+        assertThat(executionFeeCount).isGreaterThanOrEqualTo(targetFeeCount);
+        assertThat(outputRecordCount).isEqualTo(recordCount * targetFeeCount);
+        assertThat(successCount + failedCount + noMatchCount).isEqualTo(outputRecordCount);
+        if ("ALL".equals(scope)) {
+            assertThat(allFeeScope).isTrue();
+        } else {
+            assertThat(allFeeScope).isFalse();
+        }
+
+        LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
+        summary.put("scenarioLabel", System.getProperty("cost.perf.scenarioLabel",
+                "fee-scope-" + scope.toLowerCase(Locale.ROOT) + "-" + recordCount));
+        summary.put("sceneCode", sceneCode);
+        summary.put("sceneId", sceneId);
+        summary.put("versionId", versionId);
+        summary.put("billMonth", billMonth);
+        summary.put("scope", scope);
+        summary.put("includeExplain", includeExplain);
+        summary.put("recordCount", recordCount);
+        summary.put("buildJsonMs", buildJsonMs);
+        summary.put("durationMs", durationMs);
+        summary.put("durationMinutes", round(durationMs / 60000D));
+        summary.put("inputCount", inputCount);
+        summary.put("targetFeeCount", targetFeeCount);
+        summary.put("executionFeeCount", executionFeeCount);
+        summary.put("outputRecordCount", outputRecordCount);
+        summary.put("successCount", successCount);
+        summary.put("failedCount", failedCount);
+        summary.put("noMatchCount", noMatchCount);
+        summary.put("allFeeScope", allFeeScope);
+        summary.put("recordsPerSecond", round(inputCount * 1000D / Math.max(durationMs, 1L)));
+        summary.put("pricingRowsPerSecond", round(outputRecordCount * 1000D / Math.max(durationMs, 1L)));
+        summary.put("targetFeeCodes", result.get("targetFeeCodes"));
+        summary.put("executionFeeCodes", result.get("executionFeeCodes"));
+        summary.put("dependentFeeCodes", result.get("dependentFeeCodes"));
+
+        System.out.println("COST_PERF_FEE_SCOPE_BASELINE=" + objectMapper.writeValueAsString(summary));
+    }
+
     private Long requireSceneId() {
         Long overrideSceneId = Long.getLong("cost.perf.sceneId");
         if (overrideSceneId != null) {
@@ -313,6 +402,36 @@ class CostRunPerformanceManualIT {
 
     private String resolveSceneCode() {
         return System.getProperty("cost.perf.sceneCode", DEFAULT_SCENE_CODE);
+    }
+
+    private List<String> resolvePerfFeeCodes() {
+        String configured = System.getProperty("cost.perf.feeCodes", "SG_FEMALE_SHIFT_LABOR,SG_MANAGEMENT_FEE");
+        LinkedHashSet<String> codes = new LinkedHashSet<>();
+        for (String item : configured.split(",")) {
+            String value = item == null ? "" : item.trim();
+            if (!value.isEmpty()) {
+                codes.add(value);
+            }
+        }
+        assertThat(codes).isNotEmpty();
+        return new ArrayList<>(codes);
+    }
+
+    private List<Long> resolvePerfFeeIds(Long sceneId, List<String> feeCodes) {
+        Map<String, Long> feeIdMap = feeMapper.selectList(Wrappers.<CostFeeItem>lambdaQuery()
+                        .eq(CostFeeItem::getSceneId, sceneId)
+                        .in(CostFeeItem::getFeeCode, feeCodes))
+                .stream()
+                .collect(LinkedHashMap::new,
+                        (acc, item) -> acc.put(item.getFeeCode(), item.getFeeId()),
+                        LinkedHashMap::putAll);
+        List<Long> result = new ArrayList<>();
+        for (String feeCode : feeCodes) {
+            Long feeId = feeIdMap.get(feeCode);
+            assertThat(feeId).as("missing perf fee %s for scene %s", feeCode, sceneId).isNotNull();
+            result.add(feeId);
+        }
+        return result;
     }
 
     private Map<String, Object> waitTaskFinished(Long taskId, int recordCount) throws Exception {

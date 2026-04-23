@@ -32,6 +32,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -2475,6 +2476,148 @@ class CostRunControllerManualIT {
     }
 
     @Test
+    void shouldSupportAllFeeScopeWhenFeeSelectionIsEmpty() throws Exception {
+        Long sceneId = requireSceneId();
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+        Long versionId = publishScene(sceneId, authorization, "shougang-all-fee-scope-" + stamp);
+        String billMonth = "2026-12";
+        String objectCode = "SG-ALL-FEE-" + stamp + "-A";
+
+        ArrayNode inputItems = objectMapper.createArrayNode();
+        inputItems.add(createShougangFullInputItem("SG-ALL-FEE-BIZ-" + stamp + "-001",
+                objectCode, "shougang-all-fee-scope-sample"));
+
+        Map<String, String> expectedAmounts = expectedShougangFullFeeAmounts();
+
+        JsonNode feeTemplate = readData(mockMvc.perform(get("/cost/run/input-template/fee")
+                        .header("Authorization", authorization)
+                        .param("sceneId", String.valueOf(sceneId))
+                        .param("versionId", String.valueOf(versionId))
+                        .param("taskType", "FORMAL_BATCH"))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        assertThat(feeTemplate.path("allFeeScope").asBoolean()).isTrue();
+        assertThat(feeTemplate.path("fee").path("mode").asText()).isEqualTo("ALL");
+        assertThat(feeTemplate.path("targetFeeCount").asInt()).isEqualTo(expectedAmounts.size());
+        assertThat(feeTemplate.path("executionFeeCount").asInt()).isEqualTo(expectedAmounts.size());
+        assertThat(readTextSet(feeTemplate.path("targetFeeCodes"))).containsAll(expectedAmounts.keySet());
+        assertThat(readTextSet(feeTemplate.path("dependentFeeCodes"))).isEmpty();
+        assertThat(feeTemplate.path("inputFieldCount").asInt()).isGreaterThanOrEqualTo(22);
+
+        ObjectNode feeCalculateBody = objectMapper.createObjectNode();
+        feeCalculateBody.put("sceneId", sceneId);
+        feeCalculateBody.put("versionId", versionId);
+        feeCalculateBody.put("billMonth", billMonth);
+        feeCalculateBody.put("includeExplain", true);
+        feeCalculateBody.put("inputJson", objectMapper.writeValueAsString(inputItems));
+
+        JsonNode feeCalculate = readData(mockMvc.perform(post("/cost/run/fee/calculate")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(feeCalculateBody)))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        assertThat(feeCalculate.path("allFeeScope").asBoolean()).isTrue();
+        assertThat(feeCalculate.path("fee").path("mode").asText()).isEqualTo("ALL");
+        assertThat(feeCalculate.path("targetFeeCount").asInt()).isEqualTo(expectedAmounts.size());
+        assertThat(feeCalculate.path("executionFeeCount").asInt()).isEqualTo(expectedAmounts.size());
+        assertThat(feeCalculate.path("recordCount").asInt()).isEqualTo(expectedAmounts.size());
+        assertThat(feeCalculate.path("successCount").asInt()).isEqualTo(expectedAmounts.size());
+        assertThat(feeCalculate.path("noMatchCount").asInt()).isEqualTo(0);
+        assertThat(feeCalculate.path("failedCount").asInt()).isEqualTo(0);
+        assertThat(readTextSet(feeCalculate.path("dependentFeeCodes"))).isEmpty();
+
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        for (Map.Entry<String, String> entry : expectedAmounts.entrySet()) {
+            JsonNode record = findNodeByField(feeCalculate.path("records"), "feeCode", entry.getKey());
+            assertThat(record).as("missing fee record %s", entry.getKey()).isNotNull();
+            assertThat(record.path("status").asText()).isEqualTo("SUCCESS");
+            assertThat(record.path("amountValue").decimalValue()).isEqualByComparingTo(entry.getValue());
+            totalAmount = totalAmount.add(record.path("amountValue").decimalValue());
+        }
+        assertThat(totalAmount.setScale(2, RoundingMode.HALF_UP)).isEqualByComparingTo(expectedShougangFullAmountTotal());
+    }
+
+    @Test
+    void shouldSupportMultiFeeScopeViaFeeIds() throws Exception {
+        Long sceneId = requireSceneId();
+        String token = loginAndGetToken();
+        String authorization = "Bearer " + token;
+        String stamp = LocalTime.now().format(STAMP_FORMATTER);
+        Long versionId = publishScene(sceneId, authorization, "shougang-multi-fee-scope-" + stamp);
+        String billMonth = "2026-12";
+        String objectCode = "SG-MULTI-FEE-" + stamp + "-A";
+
+        List<Long> targetFeeIds = requireFeeIds(sceneId, FEMALE_FEE_CODE, MANAGEMENT_FEE_CODE);
+        String feeIdsParam = targetFeeIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+
+        JsonNode feeTemplate = readData(mockMvc.perform(get("/cost/run/input-template/fee")
+                        .header("Authorization", authorization)
+                        .param("sceneId", String.valueOf(sceneId))
+                        .param("versionId", String.valueOf(versionId))
+                        .param("feeIds", feeIdsParam)
+                        .param("taskType", "FORMAL_BATCH"))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        assertThat(feeTemplate.path("allFeeScope").asBoolean()).isFalse();
+        assertThat(feeTemplate.path("fee").path("mode").asText()).isEqualTo("MULTI");
+        assertThat(feeTemplate.path("targetFeeCount").asInt()).isEqualTo(2);
+        assertThat(readTextSet(feeTemplate.path("targetFeeCodes"))).containsExactlyInAnyOrder(FEMALE_FEE_CODE, MANAGEMENT_FEE_CODE);
+        assertThat(feeTemplate.path("executionFeeCount").asInt()).isEqualTo(11);
+        assertThat(readTextSet(feeTemplate.path("dependentFeeCodes")))
+                .contains("SG_THRPT_PIECE_FEE", "SG_SPECIAL_SHIFT_LABOR", "SG_HOLD_CLEANING_LABOR",
+                        "SG_COVER_ODD_JOB_LABOR", "SG_MOORING_FEE", "SG_ODD_JOB_FEE",
+                        "SG_DUTY_SHIFT_LABOR", "SG_SEASONAL_ALLOWANCE", "SG_OVERTIME_FEE")
+                .doesNotContain(FEMALE_FEE_CODE, MANAGEMENT_FEE_CODE);
+        assertThat(feeTemplate.path("inputFieldCount").asInt()).isGreaterThanOrEqualTo(19);
+
+        ArrayNode inputItems = objectMapper.createArrayNode();
+        inputItems.add(createShougangFullInputItem("SG-MULTI-FEE-BIZ-" + stamp + "-001",
+                objectCode, "shougang-multi-fee-scope-sample"));
+
+        ObjectNode feeCalculateBody = objectMapper.createObjectNode();
+        feeCalculateBody.put("sceneId", sceneId);
+        feeCalculateBody.put("versionId", versionId);
+        feeCalculateBody.put("billMonth", billMonth);
+        feeCalculateBody.put("includeExplain", true);
+        ArrayNode feeIdsArray = feeCalculateBody.putArray("feeIds");
+        targetFeeIds.forEach(feeIdsArray::add);
+        feeCalculateBody.put("inputJson", objectMapper.writeValueAsString(inputItems));
+
+        JsonNode feeCalculate = readData(mockMvc.perform(post("/cost/run/fee/calculate")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(feeCalculateBody)))
+                .andExpect(status().isOk())
+                .andReturn());
+
+        assertThat(feeCalculate.path("allFeeScope").asBoolean()).isFalse();
+        assertThat(feeCalculate.path("fee").path("mode").asText()).isEqualTo("MULTI");
+        assertThat(feeCalculate.path("targetFeeCount").asInt()).isEqualTo(2);
+        assertThat(feeCalculate.path("recordCount").asInt()).isEqualTo(2);
+        assertThat(feeCalculate.path("successCount").asInt()).isEqualTo(2);
+        assertThat(feeCalculate.path("noMatchCount").asInt()).isEqualTo(0);
+        assertThat(feeCalculate.path("failedCount").asInt()).isEqualTo(0);
+        assertThat(readTextSet(feeCalculate.path("targetFeeCodes"))).containsExactlyInAnyOrder(FEMALE_FEE_CODE, MANAGEMENT_FEE_CODE);
+        assertThat(readTextSet(feeCalculate.path("dependentFeeCodes")))
+                .contains("SG_THRPT_PIECE_FEE", "SG_SPECIAL_SHIFT_LABOR", "SG_HOLD_CLEANING_LABOR",
+                        "SG_COVER_ODD_JOB_LABOR", "SG_MOORING_FEE", "SG_ODD_JOB_FEE",
+                        "SG_DUTY_SHIFT_LABOR", "SG_SEASONAL_ALLOWANCE", "SG_OVERTIME_FEE");
+
+        JsonNode femaleRecord = findNodeByField(feeCalculate.path("records"), "feeCode", FEMALE_FEE_CODE);
+        JsonNode managementRecord = findNodeByField(feeCalculate.path("records"), "feeCode", MANAGEMENT_FEE_CODE);
+        assertThat(femaleRecord).isNotNull();
+        assertThat(managementRecord).isNotNull();
+        assertThat(femaleRecord.path("amountValue").decimalValue()).isEqualByComparingTo(expectedShougangFullFeeAmounts().get(FEMALE_FEE_CODE));
+        assertThat(managementRecord.path("amountValue").decimalValue()).isEqualByComparingTo(expectedShougangFullFeeAmounts().get(MANAGEMENT_FEE_CODE));
+    }
+
+    @Test
     void shouldResolveRemoteVariableFromPublishedSnapshotAndFallbackToLastSnapshot() throws Exception {
         Long sceneId = requireSceneId();
         CostScene scene = sceneMapper.selectById(sceneId);
@@ -2735,6 +2878,21 @@ class CostRunControllerManualIT {
         item.put("INSURANCE_TAXABLE_AMOUNT", 12000);
         item.put("EMPLOYER_LIABILITY_AMOUNT", 1800);
         return item;
+    }
+
+    private List<Long> requireFeeIds(Long sceneId, String... feeCodes) {
+        Map<String, Long> feeIdMap = feeMapper.selectList(Wrappers.<CostFeeItem>lambdaQuery()
+                        .eq(CostFeeItem::getSceneId, sceneId)
+                        .in(CostFeeItem::getFeeCode, Arrays.asList(feeCodes)))
+                .stream()
+                .collect(Collectors.toMap(CostFeeItem::getFeeCode, CostFeeItem::getFeeId));
+        List<Long> result = new ArrayList<>();
+        for (String feeCode : feeCodes) {
+            Long feeId = feeIdMap.get(feeCode);
+            assertThat(feeId).as("missing fee %s for scene %s", feeCode, sceneId).isNotNull();
+            result.add(feeId);
+        }
+        return result;
     }
 
     private Map<String, Set<String>> expectedShougangSingleFeeTemplateFields() {
