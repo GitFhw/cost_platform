@@ -46,9 +46,12 @@ function normalizeBusinessText(source) {
   })
   return text
     .replace(/若账期属于/g, '如果 账期属于 ')
+    .replace(/如果(?=[^\s(（])/g, '如果 ')
     .replace(/(^|[\s,，(（])若(?=[^\s])/g, '$1如果 ')
     .replace(/(^|[\s,，(（])若(?=\s)/g, '$1如果')
+    .replace(/否则(?=[^\s)）])/g, '否则 ')
     .replace(/否则(?:为|取)/g, '否则 ')
+    .replace(/那么(?=[^\s(（])/g, '那么 ')
     .replace(/那么(?:为|取)/g, '那么 ')
     .replace(/(^|[\s,，])则(?=[^\s])/g, '$1那么 ')
     .replace(/(^|[\s,，])则(?=\s)/g, '$1那么')
