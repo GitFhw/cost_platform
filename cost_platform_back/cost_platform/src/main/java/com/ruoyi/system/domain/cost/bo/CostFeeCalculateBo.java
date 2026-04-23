@@ -4,6 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * Fee-scoped calculation request.
  *
@@ -26,6 +28,11 @@ public class CostFeeCalculateBo {
      * Fee id
      */
     private Long feeId;
+
+    /**
+     * Fee ids. Empty means all fees in the scene/runtime snapshot.
+     */
+    private List<Long> feeIds;
 
     /**
      * Fee code

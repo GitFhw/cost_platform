@@ -1127,10 +1127,19 @@ public class CostRunServiceImpl implements ICostRunService {
 
     @Override
     public Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, Long feeId, String feeCode, String taskType) {
+        return buildFeeInputTemplate(sceneId, versionId, Collections.emptyList(), feeId, feeCode, taskType);
+    }
+
+    @Override
+    public Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, List<Long> feeIds, Long feeId,
+                                                     String feeCode, String taskType) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false);
-        RuntimeFee fee = resolveRuntimeFee(snapshot, feeId, feeCode);
-        List<RuntimeFee> executionFees = resolveFeeExecutionChain(snapshot, fee);
-        List<RuntimeRule> rules = snapshot.rulesByFeeCode.getOrDefault(fee.feeCode, Collections.emptyList());
+        List<RuntimeFee> targetFees = resolveTargetRuntimeFees(snapshot, feeIds, feeId, feeCode);
+        boolean allFeeScope = isAllFeeScope(snapshot, targetFees);
+        List<RuntimeFee> executionFees = allFeeScope ? snapshot.fees : resolveFeeExecutionChains(snapshot, targetFees);
+        List<RuntimeRule> rules = targetFees.stream()
+                .flatMap(item -> snapshot.rulesByFeeCode.getOrDefault(item.feeCode, Collections.emptyList()).stream())
+                .collect(Collectors.toList());
         List<RuntimeRule> executionRules = executionFees.stream()
                 .flatMap(item -> snapshot.rulesByFeeCode.getOrDefault(item.feeCode, Collections.emptyList()).stream())
                 .collect(Collectors.toList());
@@ -1142,12 +1151,8 @@ public class CostRunServiceImpl implements ICostRunService {
                 .collect(Collectors.toList());
         String normalizedTaskType = normalizeTemplateTaskType(taskType);
 
-        LinkedHashMap<String, Object> feeView = new LinkedHashMap<>();
-        feeView.put("feeId", fee.feeId);
-        feeView.put("feeCode", fee.feeCode);
-        feeView.put("feeName", fee.feeName);
-        feeView.put("unitCode", fee.unitCode);
-        feeView.put("objectDimension", fee.objectDimension);
+        Map<String, Object> feeView = buildTargetFeeView(snapshot, targetFees, allFeeScope);
+        String objectDimension = firstNonBlank(stringValue(feeView.get("objectDimension")), snapshot.defaultObjectDimension);
 
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("sceneId", snapshot.sceneId);
@@ -1158,33 +1163,38 @@ public class CostRunServiceImpl implements ICostRunService {
         result.put("snapshotSource", snapshot.snapshotSource);
         result.put("taskType", normalizedTaskType);
         result.put("fee", feeView);
+        result.put("targetFeeCount", targetFees.size());
+        result.put("targetFeeCodes", targetFees.stream().map(item -> item.feeCode).collect(Collectors.toList()));
+        result.put("allFeeScope", allFeeScope);
         result.put("ruleCount", rules.size());
         result.put("executionFeeCount", executionFees.size());
         result.put("executionFeeCodes", executionFees.stream().map(item -> item.feeCode).collect(Collectors.toList()));
+        Set<String> targetFeeCodes = targetFees.stream().map(item -> item.feeCode).collect(Collectors.toCollection(LinkedHashSet::new));
         result.put("dependentFeeCodes", executionFees.stream()
                 .map(item -> item.feeCode)
-                .filter(code -> !StringUtils.equals(code, fee.feeCode))
+                .filter(code -> !targetFeeCodes.contains(code))
                 .collect(Collectors.toList()));
         result.put("fieldCount", templateContext.variables.size());
         result.put("inputFieldCount", inputVariables.size());
         result.put("message", buildFeeTemplateMessage(snapshot, rules.isEmpty()));
         result.put("fields", buildFeeTemplateFieldItems(templateContext));
         result.put("ruleSummary", templateContext.ruleSummaries);
-        result.put("inputJson", buildTemplateInputJson(inputVariables, normalizedTaskType, fee.objectDimension));
+        result.put("inputJson", buildTemplateInputJson(inputVariables, normalizedTaskType, objectDimension));
         return result;
     }
 
     @Override
     public Map<String, Object> previewBuiltInput(CostInputBuildPreviewBo bo) {
-        return buildInputPreviewResult(bo.getSceneId(), bo.getVersionId(), bo.getFeeId(), bo.getFeeCode(),
+        return buildInputPreviewResult(bo.getSceneId(), bo.getVersionId(), bo.getFeeIds(), bo.getFeeId(), bo.getFeeCode(),
                 bo.getTaskType(), bo.getRawJson(), bo.getMappingJson());
     }
 
     @Override
     public Map<String, Object> calculateFee(CostFeeCalculateBo bo) {
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false);
-        RuntimeFee fee = resolveRuntimeFee(snapshot, bo.getFeeId(), bo.getFeeCode());
-        List<RuntimeFee> executionFees = resolveFeeExecutionChain(snapshot, fee);
+        List<RuntimeFee> targetFees = resolveTargetRuntimeFees(snapshot, bo.getFeeIds(), bo.getFeeId(), bo.getFeeCode());
+        boolean allFeeScope = isAllFeeScope(snapshot, targetFees);
+        List<RuntimeFee> executionFees = allFeeScope ? snapshot.fees : resolveFeeExecutionChains(snapshot, targetFees);
         List<Map<String, Object>> inputs = parseInlineCalculationInputs(bo.getInputJson());
         String billMonth = StringUtils.isEmpty(bo.getBillMonth()) ? "" : bo.getBillMonth();
         boolean includeExplain = Boolean.TRUE.equals(bo.getIncludeExplain());
@@ -1203,27 +1213,26 @@ public class CostRunServiceImpl implements ICostRunService {
             try {
                 ExecutionResult executionResult = executeSingle(snapshot, "FEE_CALC", billMonth, input,
                         executionFees, includeExplain);
-                records.add(buildFeeCalculationRecord(input, fee, executionResult, i + 1, includeExplain,
-                        System.currentTimeMillis() - recordStartedAt));
-                FeeExecutionResult feeResult = findFeeExecutionResult(executionResult, fee.feeCode);
-                if (feeResult == null) {
-                    noMatchCount++;
-                } else {
-                    successCount++;
+                long durationMs = System.currentTimeMillis() - recordStartedAt;
+                for (RuntimeFee targetFee : targetFees) {
+                    records.add(buildFeeCalculationRecord(input, targetFee, executionResult, i + 1, includeExplain, durationMs));
+                    FeeExecutionResult feeResult = findFeeExecutionResult(executionResult, targetFee.feeCode);
+                    if (feeResult == null) {
+                        noMatchCount++;
+                    } else {
+                        successCount++;
+                    }
                 }
             } catch (Exception e) {
-                records.add(buildFeeCalculationFailureRecord(input, fee, i + 1, e,
-                        System.currentTimeMillis() - recordStartedAt, includeExplain));
-                failedCount++;
+                long durationMs = System.currentTimeMillis() - recordStartedAt;
+                for (RuntimeFee targetFee : targetFees) {
+                    records.add(buildFeeCalculationFailureRecord(input, targetFee, i + 1, e, durationMs, includeExplain));
+                    failedCount++;
+                }
             }
         }
 
-        LinkedHashMap<String, Object> feeView = new LinkedHashMap<>();
-        feeView.put("feeId", fee.feeId);
-        feeView.put("feeCode", fee.feeCode);
-        feeView.put("feeName", fee.feeName);
-        feeView.put("unitCode", fee.unitCode);
-        feeView.put("objectDimension", fee.objectDimension);
+        Map<String, Object> feeView = buildTargetFeeView(snapshot, targetFees, allFeeScope);
 
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("sceneId", snapshot.sceneId);
@@ -1234,14 +1243,19 @@ public class CostRunServiceImpl implements ICostRunService {
         result.put("snapshotSource", snapshot.snapshotSource);
         result.put("billMonth", billMonth);
         result.put("fee", feeView);
+        result.put("targetFeeCount", targetFees.size());
+        result.put("targetFeeCodes", targetFees.stream().map(item -> item.feeCode).collect(Collectors.toList()));
+        result.put("allFeeScope", allFeeScope);
         result.put("executionFeeCount", executionFees.size());
         result.put("executionFeeCodes", executionFees.stream().map(item -> item.feeCode).collect(Collectors.toList()));
+        Set<String> targetFeeCodes = targetFees.stream().map(item -> item.feeCode).collect(Collectors.toCollection(LinkedHashSet::new));
         result.put("dependentFeeCodes", executionFees.stream()
                 .map(item -> item.feeCode)
-                .filter(code -> !StringUtils.equals(code, fee.feeCode))
+                .filter(code -> !targetFeeCodes.contains(code))
                 .collect(Collectors.toList()));
         result.put("includeExplain", includeExplain);
-        result.put("recordCount", inputs.size());
+        result.put("inputCount", inputs.size());
+        result.put("recordCount", records.size());
         result.put("successCount", successCount);
         result.put("noMatchCount", noMatchCount);
         result.put("failedCount", failedCount);
@@ -1841,6 +1855,111 @@ public class CostRunServiceImpl implements ICostRunService {
         LinkedHashMap<String, RuntimeFee> orderedFees = new LinkedHashMap<>();
         collectFeeExecutionDependency(snapshot, targetFee.feeCode, orderedFees, new LinkedHashSet<>());
         return new ArrayList<>(orderedFees.values());
+    }
+
+    private List<RuntimeFee> resolveFeeExecutionChains(RuntimeSnapshot snapshot, List<RuntimeFee> targetFees) {
+        if (snapshot == null) {
+            return Collections.emptyList();
+        }
+        if (targetFees == null || targetFees.isEmpty() || isAllFeeScope(snapshot, targetFees)) {
+            return snapshot.fees == null ? Collections.emptyList() : snapshot.fees;
+        }
+        LinkedHashMap<String, RuntimeFee> orderedFees = new LinkedHashMap<>();
+        for (RuntimeFee targetFee : targetFees) {
+            if (targetFee != null) {
+                collectFeeExecutionDependency(snapshot, targetFee.feeCode, orderedFees, new LinkedHashSet<>());
+            }
+        }
+        return new ArrayList<>(orderedFees.values());
+    }
+
+    private List<RuntimeFee> resolveTargetRuntimeFees(RuntimeSnapshot snapshot, List<Long> feeIds, Long feeId, String feeCode) {
+        if (snapshot == null || snapshot.fees == null || snapshot.fees.isEmpty()) {
+            return Collections.emptyList();
+        }
+        LinkedHashSet<Long> targetIds = new LinkedHashSet<>();
+        if (feeIds != null) {
+            for (Long id : feeIds) {
+                if (id != null) {
+                    targetIds.add(id);
+                }
+            }
+        }
+        if (feeId != null) {
+            targetIds.add(feeId);
+        }
+
+        LinkedHashMap<String, RuntimeFee> result = new LinkedHashMap<>();
+        if (!targetIds.isEmpty()) {
+            Set<Long> missingIds = new LinkedHashSet<>(targetIds);
+            for (RuntimeFee fee : snapshot.fees) {
+                if (targetIds.contains(fee.feeId)) {
+                    result.put(fee.feeCode, fee);
+                    missingIds.remove(fee.feeId);
+                }
+            }
+            if (!missingIds.isEmpty()) {
+                throw new ServiceException("指定费用在当前发布版本快照中不存在：" + missingIds);
+            }
+        }
+        if (StringUtils.isNotEmpty(feeCode)) {
+            RuntimeFee fee = resolveRuntimeFee(snapshot, null, feeCode);
+            result.put(fee.feeCode, fee);
+        }
+        if (result.isEmpty()) {
+            return snapshot.fees;
+        }
+        return new ArrayList<>(result.values());
+    }
+
+    private boolean isAllFeeScope(RuntimeSnapshot snapshot, List<RuntimeFee> targetFees) {
+        return snapshot != null
+                && snapshot.fees != null
+                && targetFees != null
+                && !targetFees.isEmpty()
+                && targetFees.size() == snapshot.fees.size();
+    }
+
+    private Map<String, Object> buildTargetFeeView(RuntimeSnapshot snapshot, List<RuntimeFee> targetFees, boolean allFeeScope) {
+        LinkedHashMap<String, Object> feeView = new LinkedHashMap<>();
+        List<RuntimeFee> normalizedTargetFees = targetFees == null ? Collections.emptyList() : targetFees;
+        if (normalizedTargetFees.size() == 1) {
+            RuntimeFee fee = normalizedTargetFees.get(0);
+            feeView.put("mode", "SINGLE");
+            feeView.put("feeId", fee.feeId);
+            feeView.put("feeCode", fee.feeCode);
+            feeView.put("feeName", fee.feeName);
+            feeView.put("unitCode", fee.unitCode);
+            feeView.put("objectDimension", fee.objectDimension);
+            feeView.put("feeCount", 1);
+            feeView.put("feeCodes", Collections.singletonList(fee.feeCode));
+            return feeView;
+        }
+        feeView.put("mode", allFeeScope ? "ALL" : "MULTI");
+        feeView.put("feeId", null);
+        feeView.put("feeCode", allFeeScope ? "ALL_FEES" : "MULTI_FEES");
+        feeView.put("feeName", allFeeScope ? "全部费用" : "已选 " + normalizedTargetFees.size() + " 项费用");
+        feeView.put("unitCode", "");
+        feeView.put("objectDimension", resolveCommonObjectDimension(snapshot, normalizedTargetFees));
+        feeView.put("feeCount", normalizedTargetFees.size());
+        feeView.put("feeCodes", normalizedTargetFees.stream().map(item -> item.feeCode).collect(Collectors.toList()));
+        feeView.put("feeNames", normalizedTargetFees.stream().map(item -> item.feeName).collect(Collectors.toList()));
+        return feeView;
+    }
+
+    private String resolveCommonObjectDimension(RuntimeSnapshot snapshot, List<RuntimeFee> targetFees) {
+        LinkedHashSet<String> dimensions = new LinkedHashSet<>();
+        if (targetFees != null) {
+            for (RuntimeFee fee : targetFees) {
+                if (fee != null && StringUtils.isNotEmpty(fee.objectDimension)) {
+                    dimensions.add(fee.objectDimension);
+                }
+            }
+        }
+        if (dimensions.size() == 1) {
+            return dimensions.iterator().next();
+        }
+        return snapshot == null ? "" : firstNonBlank(snapshot.defaultObjectDimension, "");
     }
 
     private void collectFeeExecutionDependency(RuntimeSnapshot snapshot, String feeCode,
@@ -3673,16 +3792,16 @@ public class CostRunServiceImpl implements ICostRunService {
         return result;
     }
 
-    private Map<String, Object> buildInputPreviewResult(Long sceneId, Long versionId, Long feeId, String feeCode,
-                                                        String taskType, String rawJson, String mappingJson) {
+    private Map<String, Object> buildInputPreviewResult(Long sceneId, Long versionId, List<Long> feeIds, Long feeId,
+                                                        String feeCode, String taskType, String rawJson, String mappingJson) {
         List<Map<String, Object>> rawRecords = parseInlineCalculationInputs(rawJson);
-        InputBuildContext context = buildInputBuildContext(sceneId, versionId, feeId, feeCode, taskType, mappingJson);
+        InputBuildContext context = buildInputBuildContext(sceneId, versionId, feeIds, feeId, feeCode, taskType, mappingJson);
         return buildMappedInputResult(context, rawRecords, 1);
     }
 
-    private InputBuildContext buildInputBuildContext(Long sceneId, Long versionId, Long feeId, String feeCode,
-                                                     String taskType, String mappingJson) {
-        Map<String, Object> template = buildFeeInputTemplate(sceneId, versionId, feeId, feeCode, taskType);
+    private InputBuildContext buildInputBuildContext(Long sceneId, Long versionId, List<Long> feeIds, Long feeId,
+                                                     String feeCode, String taskType, String mappingJson) {
+        Map<String, Object> template = buildFeeInputTemplate(sceneId, versionId, feeIds, feeId, feeCode, taskType);
         return accessProfileInputMappingService.buildContext(template, mappingJson);
     }
 
