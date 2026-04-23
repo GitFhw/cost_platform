@@ -27,7 +27,18 @@ const CONDITION_OPERATOR_REPLACERS = [
   [/小于/g, ' < ']
 ]
 
-const BILL_MONTH_MEMBERSHIP_PATTERN = /账期属于\s*([0-9]{1,2}(?:\s*[\/、,，]\s*[0-9]{1,2})+)/g
+const CONTEXT_TOKENS = [
+  {
+    type: 'context',
+    namespace: 'C',
+    code: 'billMonth',
+    name: '账期'
+  }
+]
+
+const BILL_MONTH_MEMBERSHIP_PATTERN = /账期\s*属于\s*([0-9]{1,2}(?:\s*[\/、,，]\s*[0-9]{1,2})+)/g
+const BILL_MONTH_EXCLUSION_PATTERN = /账期\s*不属于\s*([0-9]{1,2}(?:\s*[\/、,，]\s*[0-9]{1,2})+)/g
+const GENERIC_MEMBERSHIP_PATTERN = /((?:[VCIFT]\.[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*(不属于|属于)\s*((?:'[^']*'|"[^"]*"|[^\s,，)）]+)(?:\s*[\/、,，]\s*(?:'[^']*'|"[^"]*"|[^\s,，)）]+))*)/g
 
 function createIssue(message, level = 'error', extra = {}) {
   return {
@@ -45,6 +56,7 @@ function normalizeBusinessText(source) {
     text = text.replace(pattern, replacement)
   })
   return text
+    .replace(/若账期不属于/g, '如果 账期不属于 ')
     .replace(/若账期属于/g, '如果 账期属于 ')
     .replace(/如果(?=[^\s(（])/g, '如果 ')
     .replace(/(^|[\s,，(（])若(?=[^\s])/g, '$1如果 ')
@@ -82,7 +94,13 @@ function buildVariableTokens(variableOptions = [], feeOptions = []) {
       name: String(item.feeName).trim()
     }))
     .filter(item => item.name)
-  return [...variableTokens, ...feeTokens]
+  const contextTokens = CONTEXT_TOKENS
+    .map(item => ({
+      ...item,
+      name: String(item.name || '').trim()
+    }))
+    .filter(item => item.name)
+  return [...variableTokens, ...feeTokens, ...contextTokens]
     .sort((a, b) => b.name.length - a.name.length)
 }
 
@@ -201,7 +219,19 @@ function extractUnsupportedFragments(expression) {
 }
 
 function normalizeBillMonthMembership(source) {
-  return String(source || '').replace(BILL_MONTH_MEMBERSHIP_PATTERN, (_, rawMonths) => {
+  return String(source || '')
+    .replace(BILL_MONTH_EXCLUSION_PATTERN, (_, rawMonths) => {
+      const monthTokens = String(rawMonths || '')
+        .split(/[\/、,，]/)
+        .map(item => item.trim())
+        .filter(Boolean)
+        .map(item => item.padStart(2, '0'))
+      if (!monthTokens.length) {
+        return _
+      }
+      return `!(C.billMonth matches '.*-(${[...new Set(monthTokens)].join('|')})$')`
+    })
+    .replace(BILL_MONTH_MEMBERSHIP_PATTERN, (_, rawMonths) => {
     const monthTokens = String(rawMonths || '')
       .split(/[\/、,，]/)
       .map(item => item.trim())
@@ -211,6 +241,38 @@ function normalizeBillMonthMembership(source) {
       return _
     }
     return `C.billMonth matches '.*-(${[...new Set(monthTokens)].join('|')})$'`
+  })
+}
+
+function splitMembershipValues(rawValueList) {
+  return (String(rawValueList || '').match(/'[^']*'|"[^"]*"|[^\/、,，]+/g) || [])
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function normalizeMembershipValue(rawValue) {
+  if (/^'.*'$/.test(rawValue) || /^".*"$/.test(rawValue)) {
+    return rawValue.replace(/^"|"$/g, '\'')
+  }
+  if (/^-?\d+(?:\.\d+)?$/.test(rawValue)) {
+    return rawValue
+  }
+  return `'${String(rawValue).replace(/'/g, "\\'")}'`
+}
+
+function normalizeGenericMembership(source) {
+  return String(source || '').replace(GENERIC_MEMBERSHIP_PATTERN, (_, left, operator, rawValueList) => {
+    const valueTokens = splitMembershipValues(rawValueList)
+    if (!valueTokens.length) {
+      return _
+    }
+    const comparator = operator === '不属于' ? ' != ' : ' == '
+    const connector = operator === '不属于' ? ' and ' : ' or '
+    const parts = valueTokens.map(item => `${left}${comparator}${normalizeMembershipValue(item)}`)
+    if (!parts.length) {
+      return _
+    }
+    return parts.length === 1 ? parts[0] : `(${parts.join(connector)})`
   })
 }
 
@@ -232,7 +294,9 @@ function normalizeConditionText(source) {
 function compileConditionExpression(source, variableTokens) {
   const text = normalizeConditionText(source)
   const replaced = replaceVariables(text, variableTokens)
-  const expression = replaced.text
+  const expression = normalizeGenericMembership(replaced.text)
+    .replace(/\s+/g, ' ')
+    .trim()
 
   if (!expression) {
     return {
