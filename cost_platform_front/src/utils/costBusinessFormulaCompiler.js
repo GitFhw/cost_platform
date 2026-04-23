@@ -27,6 +27,8 @@ const CONDITION_OPERATOR_REPLACERS = [
   [/小于/g, ' < ']
 ]
 
+const BILL_MONTH_MEMBERSHIP_PATTERN = /账期属于\s*([0-9]{1,2}(?:\s*[\/、,，]\s*[0-9]{1,2})+)/g
+
 function createIssue(message, level = 'error', extra = {}) {
   return {
     message,
@@ -43,6 +45,15 @@ function normalizeBusinessText(source) {
     text = text.replace(pattern, replacement)
   })
   return text
+    .replace(/若账期属于/g, '如果 账期属于 ')
+    .replace(/(^|[\s,，(（])若(?=[^\s])/g, '$1如果 ')
+    .replace(/(^|[\s,，(（])若(?=\s)/g, '$1如果')
+    .replace(/否则(?:为|取)/g, '否则 ')
+    .replace(/那么(?:为|取)/g, '那么 ')
+    .replace(/(^|[\s,，])则(?=[^\s])/g, '$1那么 ')
+    .replace(/(^|[\s,，])则(?=\s)/g, '$1那么')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function normalizePercentageLiterals(source) {
@@ -141,6 +152,15 @@ function compileLiteralOrExpression(source, variableTokens) {
     }
   }
 
+  if (/^-?\d+(?:\.\d+)?$/.test(normalized)) {
+    return {
+      expression: normalized,
+      variableRefs: [],
+      feeRefs: [],
+      issues: []
+    }
+  }
+
   if (!replaced.variableRefs.length && !replaced.feeRefs.length && !/[()%*/+\-<>=,]/.test(normalized) && !/^(round|max|min|coalesce|if)\(/.test(normalized)) {
     return {
       expression: /^'.*'$/.test(normalized) ? normalized : `'${normalized.replace(/'/g, "\\'")}'`,
@@ -177,8 +197,23 @@ function extractUnsupportedFragments(expression) {
   return [...new Set(matches)]
 }
 
+function normalizeBillMonthMembership(source) {
+  return String(source || '').replace(BILL_MONTH_MEMBERSHIP_PATTERN, (_, rawMonths) => {
+    const monthTokens = String(rawMonths || '')
+      .split(/[\/、,，]/)
+      .map(item => item.trim())
+      .filter(Boolean)
+      .map(item => item.padStart(2, '0'))
+    if (!monthTokens.length) {
+      return _
+    }
+    return `C.billMonth matches '.*-(${[...new Set(monthTokens)].join('|')})$'`
+  })
+}
+
 function normalizeConditionText(source) {
   let text = normalizeBusinessText(source)
+  text = normalizeBillMonthMembership(text)
   CONDITION_OPERATOR_REPLACERS.forEach(([pattern, replacement]) => {
     text = text.replace(pattern, replacement)
   })
@@ -208,7 +243,7 @@ function compileConditionExpression(source, variableTokens) {
     }
   }
 
-  if (!/(==|!=|>=|<=|>|<)/.test(expression)) {
+  if (!/(==|!=|>=|<=|>|<|\bmatches\b)/.test(expression)) {
     return {
       expression: '',
       variableRefs: replaced.variableRefs,
@@ -243,10 +278,36 @@ function compileConditionExpression(source, variableTokens) {
   }
 }
 
+function splitInlineIfElseSegments(normalized) {
+  const standardMatch = normalized.match(/^如果\s+(.+?)\s*(?:,)?\s*那么\s+(.+?)\s*(?:,)?\s*否则\s+(.+)$/)
+  if (standardMatch) {
+    return {
+      conditionText: standardMatch[1],
+      trueResultText: standardMatch[2],
+      falseResultText: standardMatch[3]
+    }
+  }
+  const compactMatch = normalized.match(/^如果\s+(.+?)\s*否则\s+(.+)$/)
+  if (!compactMatch) {
+    return undefined
+  }
+  const beforeElse = String(compactMatch[1] || '').trim()
+  const falseResultText = String(compactMatch[2] || '').trim()
+  const inferredMatch = beforeElse.match(/^(.*?(?:!=|>=|<=|==|>|<|不等于|大于等于|小于等于|等于|大于|小于)\s*(?:'[^']*'|"[^"]*"|[^\s]+))\s+(.+)$/)
+  if (!inferredMatch) {
+    return undefined
+  }
+  return {
+    conditionText: inferredMatch[1],
+    trueResultText: inferredMatch[2],
+    falseResultText
+  }
+}
+
 function compileIfElseFormula(source, variableTokens) {
   const normalized = normalizeBusinessText(source)
-  const match = normalized.match(/^如果\s+(.+?)\s*(?:,)?\s*那么\s+(.+?)\s*(?:,)?\s*否则\s+(.+)$/)
-  if (!match) {
+  const segments = splitInlineIfElseSegments(normalized)
+  if (!segments) {
     return {
       valid: false,
       expression: '',
@@ -260,9 +321,9 @@ function compileIfElseFormula(source, variableTokens) {
     }
   }
 
-  const conditionResult = compileConditionExpression(match[1], variableTokens)
-  const trueResult = compileLiteralOrExpression(match[2], variableTokens)
-  const falseResult = compileLiteralOrExpression(match[3], variableTokens)
+  const conditionResult = compileConditionExpression(segments.conditionText, variableTokens)
+  const trueResult = compileLiteralOrExpression(segments.trueResultText, variableTokens)
+  const falseResult = compileLiteralOrExpression(segments.falseResultText, variableTokens)
   const issues = [
     ...conditionResult.issues,
     ...trueResult.issues,
@@ -299,7 +360,8 @@ export function compileCostBusinessFormula(options = {}) {
   }
 
   const variableTokens = buildVariableTokens(options.variableOptions, options.feeOptions)
-  if (/^如果/.test(businessFormula)) {
+  const normalizedFormula = normalizeBusinessText(businessFormula)
+  if (/^如果/.test(normalizedFormula)) {
     return compileIfElseFormula(businessFormula, variableTokens)
   }
 

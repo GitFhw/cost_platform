@@ -971,6 +971,17 @@ const businessIssueItems = computed(() => {
 })
 
 const businessTokenDefinitions = computed(() => {
+  const keywordDefinitionItems = [
+    ...keywordButtons,
+    { label: '若账期属于', value: '若账期属于', desc: '账期月份集合判断口径' },
+    { label: '账期属于', value: '账期属于', desc: '把月份集合映射为账期判断' },
+    { label: '若', value: '若', desc: '条件起始关键字，等同于“如果”' },
+    { label: '则', value: '则', desc: '结果承接关键字，等同于“那么”' },
+    { label: '否则为', value: '否则为', desc: '兜底关键字，等同于“否则”' },
+    { label: '否则取', value: '否则取', desc: '兜底关键字，等同于“否则”' },
+    { label: '那么为', value: '那么为', desc: '结果关键字，等同于“那么”' },
+    { label: '那么取', value: '那么取', desc: '结果关键字，等同于“那么”' }
+  ]
   return [
     ...variableOptions.value.map(item => ({
       type: 'variable',
@@ -992,11 +1003,11 @@ const businessTokenDefinitions = computed(() => {
       value: item.label,
       description: item.desc
     })),
-    ...keywordButtons.map(item => ({
+    ...keywordDefinitionItems.map(item => ({
       type: 'keyword',
       label: item.label,
       value: item.label.trim(),
-      description: '条件与比较关键字'
+      description: item.desc || '条件与比较关键字'
     }))
   ].filter(item => item.label).sort((a, b) => String(b.label).length - String(a.label).length)
 })
@@ -1446,6 +1457,7 @@ function resolveDraftTokenTypeLabel(type) {
     fee: '费用',
     function: '函数',
     keyword: '关键字',
+    string: '文本值',
     number: '数值',
     operator: '运算符',
     risk: '待识别'
@@ -1477,6 +1489,20 @@ function tokenizeBusinessFormula(text, definitions = []) {
         label: value,
         code: definition.code,
         description: definition.description,
+        start: cursor,
+        end: cursor + value.length
+      })
+      cursor += value.length
+      continue
+    }
+    const quotedMatch = rest.match(/^(?:'([^'\\]|\\.)*'|"([^"\\]|\\.)*")/)
+    if (quotedMatch) {
+      const value = quotedMatch[0]
+      tokens.push({
+        key: `string-${sequence++}-${cursor}`,
+        type: 'string',
+        typeLabel: resolveDraftTokenTypeLabel('string'),
+        label: value,
         start: cursor,
         end: cursor + value.length
       })
@@ -2358,6 +2384,11 @@ onActivated(async () => {
 
 .formula-lab__draft-token.is-function {
   border-color: var(--el-color-primary-light-5);
+}
+
+.formula-lab__draft-token.is-string {
+  border-color: var(--el-color-info-light-5);
+  background: var(--el-color-info-light-9);
 }
 
 .formula-lab__draft-token.is-risk {

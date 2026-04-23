@@ -17,7 +17,14 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -233,7 +240,85 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
     }
 
     private String rewriteExpression(String source) {
-        return FormulaFunctionRegistry.rewrite(source);
+        return normalizeNumericLiterals(FormulaFunctionRegistry.rewrite(source));
+    }
+
+    /**
+     * 避免 SpEL 对纯整数字面量表达式做整数常量折叠，统一改写为十进制字面量参与计算。
+     */
+    private String normalizeNumericLiterals(String expression) {
+        if (StringUtils.isEmpty(expression)) {
+            return expression;
+        }
+        StringBuilder result = new StringBuilder(expression.length() + 48);
+        int length = expression.length();
+        int index = 0;
+        while (index < length) {
+            char current = expression.charAt(index);
+            if (current == '\'' || current == '"') {
+                index = copyQuotedSegment(expression, index, result, current);
+                continue;
+            }
+            if (!Character.isDigit(current) || !isNumericLiteralStart(expression, index)) {
+                result.append(current);
+                index++;
+                continue;
+            }
+            int end = findNumericLiteralEnd(expression, index);
+            String literal = expression.substring(index, end);
+            result.append(literal.contains(".") ? literal : literal + ".0");
+            index = end;
+        }
+        return result.toString();
+    }
+
+    private int copyQuotedSegment(String expression, int start, StringBuilder result, char quote) {
+        int index = start;
+        int length = expression.length();
+        result.append(expression.charAt(index));
+        index++;
+        while (index < length) {
+            char current = expression.charAt(index);
+            result.append(current);
+            index++;
+            if (current == '\\' && index < length) {
+                result.append(expression.charAt(index));
+                index++;
+                continue;
+            }
+            if (current == quote) {
+                break;
+            }
+        }
+        return index;
+    }
+
+    private boolean isNumericLiteralStart(String expression, int index) {
+        if (index <= 0) {
+            return true;
+        }
+        char previous = expression.charAt(index - 1);
+        return !Character.isLetterOrDigit(previous) && previous != '_' && previous != '.';
+    }
+
+    private int findNumericLiteralEnd(String expression, int start) {
+        int index = start;
+        int length = expression.length();
+        boolean dotSeen = false;
+        while (index < length) {
+            char current = expression.charAt(index);
+            if (Character.isDigit(current)) {
+                index++;
+                continue;
+            }
+            if (current == '.' && !dotSeen && index + 1 < length && Character.isDigit(expression.charAt(index + 1))) {
+                dotSeen = true;
+                index++;
+                continue;
+            }
+            break;
+        }
+        return index;
     }
 
     private LinkedHashSet<String> parseNamespaceScope(String namespaceScope) {
@@ -264,7 +349,7 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
         }
 
         public BigDecimal scale(Object value, Object digits) {
-            int precision = digits == null ? 2 : Integer.parseInt(String.valueOf(digits));
+            int precision = digits == null ? 2 : toBigDecimal(digits).intValue();
             return toBigDecimal(value).setScale(precision, RoundingMode.HALF_UP);
         }
 
@@ -297,6 +382,9 @@ public class CostExpressionServiceImpl implements ICostExpressionService {
             }
             if (value instanceof BigDecimal decimal) {
                 return decimal;
+            }
+            if (value instanceof BigInteger bigInteger) {
+                return new BigDecimal(bigInteger);
             }
             return new BigDecimal(String.valueOf(value));
         }
