@@ -4,6 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * Preview request for transforming third-party raw payload into standardized billing objects.
  *
@@ -17,6 +19,8 @@ public class CostInputBuildPreviewBo {
     private Long versionId;
 
     private Long feeId;
+
+    private List<Long> feeIds;
 
     private String feeCode;
 

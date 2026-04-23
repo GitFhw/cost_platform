@@ -65,6 +65,9 @@ public interface ICostRunService {
 
     Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, Long feeId, String feeCode, String taskType);
 
+    Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, List<Long> feeIds, Long feeId,
+                                              String feeCode, String taskType);
+
     Map<String, Object> previewBuiltInput(CostInputBuildPreviewBo bo);
 
     Map<String, Object> calculateFee(CostFeeCalculateBo bo);

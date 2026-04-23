@@ -4,7 +4,7 @@
       <div>
         <div class="access-page__eyebrow">数据接入</div>
         <h2>数据接入与导入工作台</h2>
-        <p>先把业务系统宽表载荷整理成标准计费对象，再决定走单费用取价还是正式核算。</p>
+        <p>先把业务系统宽表载荷整理成标准计费对象，再按目标费用范围做取价验证或正式核算。</p>
       </div>
       <div class="access-page__actions">
         <el-button icon="Files" @click="router.push(COST_MENU_ROUTES.architecture)">数据架构</el-button>
@@ -89,12 +89,12 @@
           <div>
             <div class="access-page__pane-kicker">阶段 1</div>
             <h4>费用模板准备</h4>
-            <p>选择场景、版本、目标费用和任务类型，先把当前费用主线需要的字段模板拉平出来。</p>
+            <p>选择场景、版本、目标费用和任务类型；目标费用不选时默认生成当前场景全量费用模板。</p>
           </div>
           <div class="access-page__actions">
             <el-button type="primary" icon="RefreshLeft" @click="handleBuildTemplate" v-hasPermi="['cost:simulation:list', 'cost:task:list']">生成费用模板</el-button>
-            <el-button :disabled="!templateData.fee?.feeCode" @click="scrollToStage('fee')">继续验证取价</el-button>
-            <el-button :disabled="!templateData.fee?.feeCode" @click="scrollToStage('preview')">继续预演对象</el-button>
+            <el-button :disabled="!templateReady" @click="scrollToStage('fee')">继续验证取价</el-button>
+            <el-button :disabled="!templateReady" @click="scrollToStage('preview')">继续预演对象</el-button>
             <el-button icon="Edit" @click="router.push({ path: COST_MENU_ROUTES.simulation, query: { sceneId: selectionForm.sceneId, versionId: selectionForm.versionId, billMonth: calcForm.billMonth } })">打开试算中心</el-button>
           </div>
         </div>
@@ -109,10 +109,21 @@
               <el-option v-for="item in versionOptions" :key="item.versionId" :label="`${item.versionNo} / ${item.versionStatusName || item.versionStatus}`" :value="item.versionId" />
             </el-select>
           </el-form-item>
-          <el-form-item label="目标费用" required>
-            <el-select v-model="selectionForm.feeId" clearable filterable style="width: 100%" placeholder="请选择费用" @change="handleFeeChange">
+          <el-form-item label="目标费用">
+            <el-select
+              v-model="selectionForm.feeIds"
+              clearable
+              collapse-tags
+              collapse-tags-tooltip
+              filterable
+              multiple
+              style="width: 100%"
+              placeholder="不选则生成全部费用模板；可单选或多选指定费用"
+              @change="handleFeeChange"
+            >
               <el-option v-for="item in feeOptions" :key="item.feeId" :label="`${item.feeName} / ${item.feeCode}`" :value="item.feeId" />
             </el-select>
+            <div class="access-page__form-tip">留空表示全量费用，选择 1 项为单费用，选择多项用于分费用组合压测。</div>
           </el-form-item>
           <el-form-item label="任务类型">
             <el-radio-group v-model="selectionForm.taskType">
@@ -124,14 +135,14 @@
         </el-form>
         <el-alert v-if="templateData.message" class="access-page__alert" :closable="false" :title="templateData.message" type="info" />
         <el-alert
-          v-if="templateData.fee?.feeCode"
+          v-if="templateReady"
           class="access-page__alert"
           :closable="false"
-          title="模板已准备完成，下方可以直接继续做单费用验证，或继续把原始报文整理为标准计费对象。"
+          title="模板已准备完成，下方可以直接继续做费用范围取价，或继续把原始报文整理为标准计费对象。"
           type="success"
         />
-        <div v-if="templateData.fee?.feeCode" class="access-page__summary">
-          <div class="access-page__card"><span>目标费用</span><strong>{{ templateData.fee.feeCode }}</strong><small>{{ templateData.fee.feeName }}</small></div>
+        <div v-if="templateReady" class="access-page__summary">
+          <div class="access-page__card"><span>目标费用</span><strong>{{ templateFeeTitle }}</strong><small>{{ templateFeeSubtitle }}</small></div>
           <div class="access-page__card"><span>对象维度</span><strong>{{ templateObjectDimension || '-' }}</strong><small>标准计费对象默认继承该维度</small></div>
           <div class="access-page__card"><span>输入字段数</span><strong>{{ templateData.inputFieldCount || 0 }}</strong><small>模板要求准备的字段数</small></div>
           <div class="access-page__card"><span>执行费用链</span><strong>{{ templateData.executionFeeCount || 0 }}</strong><small>{{ templateData.snapshotSource || '当前配置' }}</small></div>
@@ -154,11 +165,11 @@
         <div class="access-page__pane-head">
           <div>
             <div class="access-page__pane-kicker">阶段 2A</div>
-            <h4>单费用同步取价</h4>
-            <p>如果你手里已经有标准计费对象，可以直接在这里做小样验证，确认规则命中、金额返回和解释信息。</p>
+            <h4>费用同步取价与压测</h4>
+            <p>如果你手里已经有标准计费对象，可以按单费用、多费用或全费用做小样验证与压测。</p>
           </div>
           <div class="access-page__actions">
-            <el-button type="primary" icon="Promotion" @click="handleCalculateFee" v-hasPermi="['cost:simulation:execute']">执行单费用取价</el-button>
+            <el-button type="primary" icon="Promotion" @click="handleCalculateFee" v-hasPermi="['cost:simulation:execute']">执行费用取价</el-button>
             <el-button @click="scrollToStage('preview')">去对象预演区</el-button>
           </div>
         </div>
@@ -378,6 +389,7 @@ const previewStageRef = ref()
 const selectionForm = reactive({
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
   versionId: resolveWorkingVersionId(route.query.versionId ? Number(route.query.versionId) : undefined),
+  feeIds: route.query.feeId ? [Number(route.query.feeId)] : [],
   feeId: route.query.feeId ? Number(route.query.feeId) : undefined,
   feeCode: route.query.feeCode || '',
   taskType: route.query.taskType || 'FORMAL_BATCH'
@@ -439,9 +451,14 @@ const formattedTemplateJson = computed(() => formatJson(templateData.value.input
 const formattedBuildPreviewJson = computed(() => formatJson(buildPreview.value))
 const currentProfile = computed(() => profileOptions.value.find(item => item.profileId === selectedProfileId.value))
 const currentScene = computed(() => sceneOptions.value.find(item => item.sceneId === selectionForm.sceneId))
+const selectedFees = computed(() => {
+  const selectedIds = new Set(normalizeSelectedFeeIds())
+  return feeOptions.value.filter(item => selectedIds.has(item.feeId))
+})
+const isAllFeeScope = computed(() => normalizeSelectedFeeIds().length === 0)
+const isSingleFeeScope = computed(() => selectedFees.value.length === 1)
 const currentFee = computed(() => {
-  if (!selectionForm.feeId && !selectionForm.feeCode) return undefined
-  return feeOptions.value.find(item => item.feeId === selectionForm.feeId || item.feeCode === selectionForm.feeCode)
+  return isSingleFeeScope.value ? selectedFees.value[0] : undefined
 })
 const currentVersion = computed(() => versionOptions.value.find(item => item.versionId === selectionForm.versionId))
 const profileDialogTitle = computed(() => profileDialogMode.value === 'edit' ? '更新接入方案' : '保存接入方案')
@@ -464,8 +481,27 @@ const metricItems = computed(() => [
   { label: '费用数量', value: feeOptions.value.length, desc: '当前选中场景下可接入的费用数量' },
   { label: '对象维度', value: templateObjectDimension.value || '-', desc: '当前模板默认继承的计费对象维度' },
   { label: '模板字段', value: templateData.value.inputFieldCount || 0, desc: '当前费用模板要求准备的字段数' },
-  { label: '本次记录', value: feeResult.value.recordCount || 0, desc: '最近一次单费用取价返回的记录数' }
+  { label: '本次记录', value: feeResult.value.recordCount || 0, desc: '最近一次费用取价返回的结果行数' }
 ])
+const targetFeeTitle = computed(() => {
+  if (isAllFeeScope.value) return '全部费用'
+  if (isSingleFeeScope.value) return currentFee.value?.feeName || '单费用'
+  return `已选 ${selectedFees.value.length} 项费用`
+})
+const targetFeeDesc = computed(() => {
+  if (isAllFeeScope.value) return '未选择目标费用，将按当前场景全量费用生成模板与执行压测'
+  if (isSingleFeeScope.value) return currentFee.value?.feeCode || ''
+  return selectedFees.value.map(item => item.feeCode).join('、')
+})
+const templateReady = computed(() => Boolean(templateData.value?.fee?.feeCode || templateData.value?.targetFeeCount || templateFields.value.length))
+const templateFeeTitle = computed(() => templateData.value?.fee?.feeName || targetFeeTitle.value)
+const templateFeeSubtitle = computed(() => {
+  const fee = templateData.value?.fee || {}
+  if (Array.isArray(fee.feeCodes) && fee.feeCodes.length) {
+    return fee.feeCodes.join('、')
+  }
+  return fee.feeCode || targetFeeDesc.value
+})
 const contextItems = computed(() => [
   {
     label: '当前场景',
@@ -474,8 +510,8 @@ const contextItems = computed(() => [
   },
   {
     label: '目标费用',
-    value: currentFee.value?.feeName || selectionForm.feeCode || '未选择费用',
-    desc: currentFee.value?.feeCode || '生成模板前需要先定位费用主线'
+    value: targetFeeTitle.value,
+    desc: targetFeeDesc.value
   },
   {
     label: '执行版本',
@@ -493,15 +529,15 @@ const workflowStages = computed(() => [
     key: 'template',
     order: '01',
     label: '模板准备',
-    desc: templateData.value.fee?.feeCode
+    desc: templateReady.value
       ? `${templateData.value.inputFieldCount || 0} 个模板字段已就绪`
-      : '先锁定场景、费用与任务类型',
-    status: templateData.value.fee?.feeCode ? 'done' : selectionForm.sceneId && selectionForm.feeId ? 'ready' : 'pending'
+      : '先锁定场景、目标范围与任务类型',
+    status: templateReady.value ? 'done' : selectionForm.sceneId ? 'ready' : 'pending'
   },
   {
     key: 'fee',
     order: '02A',
-    label: '单费用验证',
+    label: '费用取价',
     desc: feeResult.value.recordCount
       ? `最近一次回算 ${feeResult.value.recordCount} 条`
       : calcForm.inputJson?.trim()
@@ -535,7 +571,9 @@ const profileSummary = computed(() => {
 })
 const feeResultSummary = computed(() => {
   if (!feeResult.value.recordCount) return ''
-  return `本次回算 ${feeResult.value.recordCount} 条，成功 ${feeResult.value.successCount || 0} 条，未命中 ${feeResult.value.noMatchCount || 0} 条，失败 ${feeResult.value.failedCount || 0} 条。`
+  const targetCount = feeResult.value.targetFeeCount || selectedFees.value.length || (isAllFeeScope.value ? feeOptions.value.length : 1)
+  const inputCount = feeResult.value.inputCount || feeResult.value.recordCount
+  return `本次回算 ${inputCount} 个对象、${targetCount} 项费用，共 ${feeResult.value.recordCount} 行结果，成功 ${feeResult.value.successCount || 0} 条，未命中 ${feeResult.value.noMatchCount || 0} 条，失败 ${feeResult.value.failedCount || 0} 条。`
 })
 
 function scrollToStage(stageKey) {
@@ -569,36 +607,67 @@ async function loadVersions(sceneId) {
   }
 }
 
-async function loadFees(sceneId) {
-  if (!sceneId) {
-    feeOptions.value = []
-    selectionForm.feeId = undefined
-    selectionForm.feeCode = ''
-    return
-  }
-  const response = await optionselectFee({ sceneId, status: '0', pageNum: 1, pageSize: 1000 })
-  feeOptions.value = response?.data || []
-  const current = feeOptions.value.find(item => item.feeId === selectionForm.feeId)
-  if (current) {
-    selectionForm.feeCode = current.feeCode
-    return
-  }
-  const byCode = feeOptions.value.find(item => item.feeCode === selectionForm.feeCode)
-  if (byCode) {
-    selectionForm.feeId = byCode.feeId
-    selectionForm.feeCode = byCode.feeCode
+function normalizeSelectedFeeIds() {
+  return Array.isArray(selectionForm.feeIds)
+    ? selectionForm.feeIds.filter(item => item !== undefined && item !== null)
+    : []
+}
+
+function syncSingleFeeFields() {
+  const feeIds = normalizeSelectedFeeIds()
+  if (feeIds.length === 1) {
+    const current = feeOptions.value.find(item => item.feeId === feeIds[0])
+    selectionForm.feeId = current?.feeId
+    selectionForm.feeCode = current?.feeCode || ''
     return
   }
   selectionForm.feeId = undefined
   selectionForm.feeCode = ''
 }
 
+function buildTargetFeeQueryParams() {
+  const feeIds = normalizeSelectedFeeIds()
+  return {
+    feeIds: feeIds.length ? feeIds.join(',') : undefined,
+    feeId: feeIds.length === 1 ? feeIds[0] : undefined,
+    feeCode: feeIds.length === 1 ? selectionForm.feeCode : undefined
+  }
+}
+
+function buildTargetFeePayload() {
+  const feeIds = normalizeSelectedFeeIds()
+  return {
+    feeIds,
+    feeId: feeIds.length === 1 ? feeIds[0] : undefined,
+    feeCode: feeIds.length === 1 ? selectionForm.feeCode : undefined
+  }
+}
+
+async function loadFees(sceneId) {
+  if (!sceneId) {
+    feeOptions.value = []
+    selectionForm.feeIds = []
+    selectionForm.feeId = undefined
+    selectionForm.feeCode = ''
+    return
+  }
+  const response = await optionselectFee({ sceneId, status: '0', pageNum: 1, pageSize: 1000 })
+  feeOptions.value = response?.data || []
+  const currentIds = normalizeSelectedFeeIds().filter(id => feeOptions.value.some(item => item.feeId === id))
+  const byCode = !currentIds.length && selectionForm.feeCode
+    ? feeOptions.value.find(item => item.feeCode === selectionForm.feeCode)
+    : undefined
+  selectionForm.feeIds = byCode ? [byCode.feeId] : currentIds
+  syncSingleFeeFields()
+}
+
 async function loadProfiles() {
-  if (!selectionForm.sceneId || !selectionForm.feeId) {
+  if (!selectionForm.sceneId) {
     profileOptions.value = []
     selectedProfileId.value = undefined
     return
   }
+  syncSingleFeeFields()
   const response = await optionselectAccessProfile({
     sceneId: selectionForm.sceneId,
     feeId: selectionForm.feeId,
@@ -634,24 +703,22 @@ async function handleSceneChange(sceneId) {
   await loadProfiles()
 }
 
-async function handleFeeChange(feeId) {
-  const current = feeOptions.value.find(item => item.feeId === feeId)
-  selectionForm.feeCode = current?.feeCode || ''
+async function handleFeeChange() {
+  syncSingleFeeFields()
   resetFeeScopedState({ resetAutoMapping: true })
   await loadProfiles()
 }
 
 async function handleBuildTemplate() {
   activeStageKey.value = 'template'
-  if (!selectionForm.sceneId || (!selectionForm.feeId && !selectionForm.feeCode)) {
-    proxy.$modal.msgWarning('请先选择场景和目标费用')
+  if (!selectionForm.sceneId) {
+    proxy.$modal.msgWarning('请先选择场景')
     return
   }
   const response = await getFeeRunInputTemplate({
     sceneId: selectionForm.sceneId,
     versionId: selectionForm.versionId,
-    feeId: selectionForm.feeId,
-    feeCode: selectionForm.feeCode,
+    ...buildTargetFeeQueryParams(),
     taskType: selectionForm.taskType
   })
   templateData.value = response.data || {}
@@ -673,8 +740,8 @@ async function handleBuildTemplate() {
 
 async function handleCalculateFee() {
   activeStageKey.value = 'fee'
-  if (!selectionForm.sceneId || (!selectionForm.feeId && !selectionForm.feeCode)) {
-    proxy.$modal.msgWarning('请先选择场景和目标费用')
+  if (!selectionForm.sceneId) {
+    proxy.$modal.msgWarning('请先选择场景')
     return
   }
   if (!calcForm.inputJson || !calcForm.inputJson.trim()) {
@@ -684,8 +751,7 @@ async function handleCalculateFee() {
   const response = await calculateFee({
     sceneId: selectionForm.sceneId,
     versionId: selectionForm.versionId,
-    feeId: selectionForm.feeId,
-    feeCode: selectionForm.feeCode,
+    ...buildTargetFeePayload(),
     billMonth: calcForm.billMonth,
     includeExplain: calcForm.includeExplain,
     inputJson: calcForm.inputJson
@@ -695,8 +761,8 @@ async function handleCalculateFee() {
 
 async function handlePreviewBuild() {
   activeStageKey.value = 'preview'
-  if (!selectionForm.sceneId || (!selectionForm.feeId && !selectionForm.feeCode)) {
-    proxy.$modal.msgWarning('请先选择场景和目标费用')
+  if (!selectionForm.sceneId) {
+    proxy.$modal.msgWarning('请先选择场景')
     return
   }
   if (!builderForm.rawJson || !builderForm.rawJson.trim()) {
@@ -706,8 +772,7 @@ async function handlePreviewBuild() {
   const response = await previewBuiltInput({
     sceneId: selectionForm.sceneId,
     versionId: selectionForm.versionId,
-    feeId: selectionForm.feeId,
-    feeCode: selectionForm.feeCode,
+    ...buildTargetFeePayload(),
     taskType: selectionForm.taskType,
     rawJson: builderForm.rawJson,
     mappingJson: builderForm.mappingJson
@@ -723,7 +788,7 @@ function handleUseBuildPreview() {
   }
   calcForm.inputJson = formatJson(buildPreviewRecords.value)
   scrollToStage('fee')
-  proxy.$modal.msgSuccess('已用预演结果覆盖单费用取价输入')
+  proxy.$modal.msgSuccess('已用预演结果覆盖费用取价输入')
 }
 
 async function handleCreateBatchFromPreview() {
@@ -745,7 +810,7 @@ async function handleCreateBatchFromPreview() {
     versionId: selectionForm.versionId,
     billMonth: calcForm.billMonth,
     inputJson: JSON.stringify(buildPreviewRecords.value),
-    remark: `${selectionForm.feeCode || 'FEE'} 标准计费对象预演批次`
+    remark: `${targetFeeTitle.value} 标准计费对象预演批次`
   })
   createdBatch.value = response?.data || {}
   const batchNo = createdBatch.value?.batch?.batchNo
@@ -769,8 +834,8 @@ function resetProfileForm() {
 }
 
 async function handleOpenProfileDialog(mode) {
-  if (!selectionForm.sceneId || !selectionForm.feeId) {
-    proxy.$modal.msgWarning('请先选择场景和目标费用')
+  if (!selectionForm.sceneId) {
+    proxy.$modal.msgWarning('请先选择场景')
     return
   }
   profileDialogMode.value = mode
@@ -800,10 +865,11 @@ async function handleOpenProfileDialog(mode) {
 }
 
 function buildProfilePayload() {
+  syncSingleFeeFields()
   return {
     profileId: profileForm.profileId,
     sceneId: selectionForm.sceneId,
-    feeId: selectionForm.feeId,
+    feeId: isSingleFeeScope.value ? selectionForm.feeId : undefined,
     versionId: profileForm.versionId,
     profileCode: profileForm.profileCode?.trim(),
     profileName: profileForm.profileName?.trim(),
@@ -850,6 +916,9 @@ async function handleProfileChange(profileId) {
   }
   const response = await getAccessProfile(profileId)
   const detail = response?.data || {}
+  selectionForm.feeIds = detail.feeId ? [detail.feeId] : []
+  selectionForm.feeId = detail.feeId
+  selectionForm.feeCode = detail.feeCode || ''
   selectionForm.versionId = detail.versionId
   selectionForm.taskType = detail.taskType || selectionForm.taskType
   if (detail.mappingJson) {
@@ -866,7 +935,7 @@ async function handleProfileChange(profileId) {
   if (detail.sampleInputJson) {
     calcForm.inputJson = formatJson(detail.sampleInputJson)
   }
-  if (selectionForm.sceneId && selectionForm.feeId) {
+  if (selectionForm.sceneId) {
     await handleBuildTemplate()
   }
 }
@@ -1020,7 +1089,7 @@ async function initializePage() {
   await loadScenes()
   if (selectionForm.sceneId) {
     await handleSceneChange(selectionForm.sceneId)
-    if (selectionForm.feeId || selectionForm.feeCode) {
+    if (selectionForm.sceneId) {
       await handleBuildTemplate()
       await loadProfiles()
     }
@@ -1133,6 +1202,13 @@ onActivated(async () => {
 .access-page__work-pane {
   display: grid;
   gap: 14px;
+}
+
+.access-page__form-tip {
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .access-page__alert,

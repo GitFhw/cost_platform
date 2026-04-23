@@ -5,10 +5,10 @@
         <div class="formula-lab__eyebrow">公式资产工作台</div>
         <h2 class="formula-lab__title">公式实验室</h2>
         <p class="formula-lab__subtitle">
-          面向业务配置人员的公式工作台，可通过变量、条件、函数和模板快速组织公式表达，统一沉淀标准化公式资产。
+          面向业务配置人员的公式工作台，优先维护中文业务公式，由系统自动编译标准表达式并支撑试算、版本和治理。
         </p>
       </div>
-      <el-tag type="success">支持按场景组织公式配置，并自动生成中文说明与标准表达式</el-tag>
+      <el-tag type="success">中文公式编排 · 结构助手 · 标准表达式只读视图</el-tag>
     </section>
 
     <section v-show="!isCompactMode" class="formula-lab__metrics">
@@ -58,11 +58,11 @@
     </el-form>
 
     <section class="formula-lab__workspace">
-      <div class="formula-lab__builder">
+      <div class="formula-lab__builder formula-lab__builder--full">
         <div class="formula-lab__panel-head">
           <div>
             <h3>公式工作台</h3>
-            <p>业务人员优先维护中文公式；结构助手用于条件分支与区间档位，系统统一编译标准表达式。</p>
+            <p>业务人员优先围绕中文业务表达编排公式，系统同步生成标准表达式并保留版本治理能力。</p>
           </div>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
         </div>
@@ -72,13 +72,15 @@
             <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
           </el-select>
           <el-segmented v-model="workbench.mode" :options="builderModes" />
+          <el-button plain icon="Grid" @click="scrollToResourceWorkbench">资源工作台</el-button>
+          <el-button plain icon="View" @click="activeWorkbenchTab = 'system'">系统视图</el-button>
           <el-button type="primary" icon="Plus" @click="handleCreate">新建公式</el-button>
           <el-button type="success" icon="Select" @click="handleSave" v-hasPermi="['cost:formula:add']">保存公式</el-button>
           <el-button type="info" icon="Promotion" @click="handleTest" v-hasPermi="['cost:formula:test']">立即试算</el-button>
         </div>
 
-        <el-row :gutter="16">
-          <el-col :span="12">
+        <div class="formula-lab__overview-grid">
+          <div class="formula-lab__meta-card">
             <el-form ref="formulaRef" :model="form" :rules="rules" label-width="96px">
               <el-form-item label="公式编码" prop="formulaCode"><el-input v-model="form.formulaCode" /></el-form-item>
               <el-form-item label="公式名称" prop="formulaName"><el-input v-model="form.formulaName" /></el-form-item>
@@ -100,23 +102,46 @@
               </el-form-item>
               <el-form-item label="业务说明"><el-input v-model="form.formulaDesc" type="textarea" :rows="2" /></el-form-item>
             </el-form>
-          </el-col>
-          <el-col :span="12">
+          </div>
+
+          <div class="formula-lab__preview-stack">
             <div class="formula-lab__preview-card">
-              <div class="formula-lab__preview-title">业务公式预览</div>
-              <div class="formula-lab__preview-text">{{ activeBusinessFormula || '请先在下方业务编排区维护中文公式，系统会自动生成业务表达。' }}</div>
+              <div class="formula-lab__preview-title">业务表达主视图</div>
+              <div class="formula-lab__preview-text formula-lab__preview-text--business">
+                {{ activeBusinessFormula || '这里优先展示中文业务表达。业务人员可以先按中文口径确认逻辑，再由系统同步生成标准表达式。' }}
+              </div>
+              <div class="formula-lab__preview-footnote">标准表达式用于实际执行与落库，中文业务表达用于编排确认、版本理解和治理审阅。</div>
             </div>
-            <div class="formula-lab__preview-card formula-lab__preview-card--code">
-              <div class="formula-lab__preview-title">标准表达式预览</div>
-              <pre class="formula-lab__code">{{ activeFormulaExpression || '系统会把中文公式或结构助手内容编译为标准表达式。' }}</pre>
+
+            <div class="formula-lab__status-grid">
+              <div v-for="item in workbenchStatusCards" :key="item.label" class="formula-lab__status-item">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <small>{{ item.desc }}</small>
+              </div>
             </div>
+
+            <div class="formula-lab__guide-grid">
+              <div class="formula-lab__guide-card">
+                <strong>条件分支</strong>
+                <p>适合做“满足条件则取 A，否则取 B”这类判断型公式，常用于规则条件口径沉淀或公式变量计算。</p>
+              </div>
+              <div class="formula-lab__guide-card">
+                <strong>区间档位 vs 规则阶梯</strong>
+                <p>单个费用的计量阶梯优先放规则中心；跨规则复用的分档逻辑再沉淀为公式资产。</p>
+              </div>
+              <div class="formula-lab__guide-card">
+                <strong>变量映射提醒</strong>
+                <p>公式优先通过中文变量名编排，运行时由变量中心来源路径映射输入 JSON，也支持 F.费用编码引用前序费用。</p>
+              </div>
+            </div>
+
             <el-alert
               v-if="formulaValidationMessages.length"
-              title="表达式预校验未通过"
+              title="公式编译或预校验未通过"
               type="warning"
               :closable="false"
               show-icon
-              class="mt12"
             >
               <template #default>
                 <div v-for="message in formulaValidationMessages" :key="message" class="formula-lab__validation-item">{{ message }}</div>
@@ -124,315 +149,381 @@
             </el-alert>
             <el-alert
               v-else-if="activeFormulaExpression"
-              title="表达式预校验通过"
-              description="括号、命名空间和场景变量引用已通过前端预校验。"
+              title="公式编译与预校验通过"
+              description="括号、命名空间和当前场景变量引用已经通过前端预校验。"
               type="success"
               :closable="false"
               show-icon
-              class="mt12"
             />
-          </el-col>
-        </el-row>
-
-        <div v-if="workbench.mode === 'BUSINESS'" class="formula-lab__business">
-          <div class="formula-lab__editor-card">
-            <div class="formula-lab__section-title">
-              <span>中文公式编辑区</span>
-              <el-button link type="primary" @click="scrollToResourceWorkbench">定位资源工作台</el-button>
-            </div>
-            <el-form label-width="96px">
-              <el-form-item label="中文公式">
-                <el-input
-                  ref="businessFormulaInputRef"
-                  v-model="form.businessFormula"
-                  type="textarea"
-                  :rows="5"
-                  placeholder="例如：四舍五入((21700 / 6) × 队女工人数 × (女工实际出勤 / 最大值(女工应出勤, 1)), 2)"
-                  @click="captureBusinessCursor"
-                  @keyup="captureBusinessCursor"
-                  @mouseup="captureBusinessCursor"
-                />
-              </el-form-item>
-            </el-form>
-            <div class="formula-lab__note-card">
-              <strong>业务侧只维护中文公式</strong>
-              <span>系统会自动把中文变量名、中文费用名、中文函数和条件结构编译成标准表达式，并用于保存、试算和后续治理。</span>
-            </div>
-          </div>
-
-          <div class="formula-lab__draft-card">
-            <div class="formula-lab__section-title">
-              <span>可视化公式草稿</span>
-              <div class="formula-lab__draft-actions">
-                <el-button link type="primary" @click="focusBusinessEditor">继续输入</el-button>
-                <el-button link type="warning" @click="focusFirstRiskToken" :disabled="!businessRiskTokens.length">定位风险片段</el-button>
-                <el-button link type="info" @click="removeLastBusinessToken" :disabled="!businessDraftTokens.length">回退一段</el-button>
-                <el-button link type="danger" @click="clearBusinessFormula" :disabled="!activeBusinessFormula">清空草稿</el-button>
-              </div>
-            </div>
-            <div v-if="businessDraftTokens.length" class="formula-lab__draft-list">
-              <button
-                v-for="token in businessDraftTokens"
-                :key="token.key"
-                type="button"
-                class="formula-lab__draft-token"
-                :class="[`is-${token.type}`, { 'is-active': selectedDraftKey === token.key }]"
-                @click="focusBusinessToken(token)"
-              >
-                <span>{{ token.label }}</span>
-                <em>{{ token.typeLabel }}</em>
-                <i @click.stop="removeBusinessToken(token)">×</i>
-              </button>
-            </div>
-            <el-empty v-else :image-size="72" description="先输入中文公式或点选变量、费用、函数、运算符，这里会自动拆成业务块。" />
-          </div>
-
-          <div class="formula-lab__quick-grid">
-            <div class="formula-lab__quick-card">
-              <div class="formula-lab__tool-title">运算符与数字速插</div>
-              <div class="formula-lab__chip-grid">
-                <button v-for="item in operatorButtons" :key="`operator-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
-                <button v-for="item in numberButtons" :key="`number-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
-              </div>
-            </div>
-
-            <div class="formula-lab__quick-card">
-              <div class="formula-lab__tool-title">条件比较速插</div>
-              <div class="formula-lab__chip-grid">
-                <button v-for="item in keywordButtons" :key="`keyword-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
-              </div>
-            </div>
-
-            <div class="formula-lab__quick-card">
-              <div class="formula-lab__tool-title">常用函数速插</div>
-              <div class="formula-lab__chip-grid">
-                <button v-for="item in functionButtons" :key="`function-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
-              </div>
-            </div>
-
-            <div class="formula-lab__quick-card">
-              <div class="formula-lab__tool-title">场景变量速插</div>
-              <div class="formula-lab__chip-grid">
-                <button v-for="item in highFrequencyVariableOptions" :key="`variable-${item.variableCode}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.variableName || item.variableCode)">{{ item.variableName || item.variableCode }}</button>
-              </div>
-            </div>
-
-            <div class="formula-lab__quick-card">
-              <div class="formula-lab__tool-title">上下文费用速插</div>
-              <div class="formula-lab__chip-grid">
-                <button v-for="item in highFrequencyFeeOptions" :key="`fee-${item.feeCode}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.feeName || item.feeCode)">{{ item.feeName || item.feeCode }}</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="formula-lab__test-card">
-            <div class="formula-lab__section-title">
-              <span>试算上下文</span>
-              <el-button link type="primary" @click="handleGenerateSample">按引用生成示例</el-button>
-            </div>
-            <JsonEditor v-model="testInputJson" title="试算上下文 JSON" :rows="6" placeholder="请输入测试 JSON，上下文建议按 V/C/I/F/T 命名空间组织。" />
-            <div class="formula-lab__test-result">
-              <div><strong>试算结果：</strong>{{ testResultDisplay }}</div>
-            </div>
           </div>
         </div>
 
-        <div v-else class="formula-lab__guided">
-          <div class="formula-lab__pattern-bar">
-            <el-radio-group v-model="workbench.pattern">
-              <el-radio-button label="IF_ELSE">条件分支</el-radio-button>
-              <el-radio-button label="RANGE_LOOKUP">区间档位</el-radio-button>
-            </el-radio-group>
-          </div>
+        <el-tabs v-model="activeWorkbenchTab" class="formula-lab__workbench-tabs">
+          <el-tab-pane label="业务编排" name="builder">
+            <div v-if="workbench.mode === 'BUSINESS'" class="formula-lab__composer-grid">
+              <div class="formula-lab__composer-main">
+                <div class="formula-lab__composer-card">
+                  <div class="formula-lab__section-title">
+                    <span>中文公式编辑区</span>
+                    <el-button link type="primary" @click="scrollToResourceWorkbench">定位资源工作台</el-button>
+                  </div>
+                  <el-form label-width="96px">
+                    <el-form-item label="中文公式">
+                      <el-input
+                        ref="businessFormulaInputRef"
+                        v-model="form.businessFormula"
+                        type="textarea"
+                        :rows="7"
+                        placeholder="例如：四舍五入((21700 / 6) × 队女工人数 × (女工实际出勤 / 最大值(女工应出勤, 1)), 2)"
+                        @click="captureBusinessCursor"
+                        @keyup="captureBusinessCursor"
+                        @mouseup="captureBusinessCursor"
+                      />
+                    </el-form-item>
+                  </el-form>
+                  <el-alert
+                    title="业务侧只维护中文公式"
+                    type="info"
+                    :closable="false"
+                    show-icon
+                    description="系统会自动把中文变量名、中文费用名、中文函数和条件结构编译成标准表达式，并用于保存、试算和后续治理。"
+                  />
+                </div>
 
-          <div v-if="workbench.pattern === 'IF_ELSE'">
-            <div class="formula-lab__section-title">
-              <span>条件配置</span>
-              <el-button type="primary" plain icon="Plus" @click="handleAddCondition">新增条件</el-button>
-            </div>
-            <el-table :data="workbench.conditions" size="small" border>
-              <el-table-column label="变量" min-width="220">
-                <template #default="scope">
-                  <el-select
-                    v-model="scope.row.variableCode"
-                    filterable
-                    :placeholder="resolveVariablePlaceholder()"
-                    @change="value => handleConditionVariableChange(scope.row, value)"
-                  >
-                    <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableName} / ${item.variableCode}`" :value="item.variableCode" />
-                  </el-select>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作符" width="140">
-                <template #default="scope">
-                  <el-select v-model="scope.row.operatorCode" placeholder="请选择操作符">
-                    <el-option v-for="item in conditionOperators" :key="item.value" :label="item.label" :value="item.value" />
-                  </el-select>
-                </template>
-              </el-table-column>
-              <el-table-column label="比较值" min-width="200">
-                <template #default="scope">
-                  <el-input v-model="scope.row.compareValue" placeholder="如：煤炭 / 白班 / 100" />
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="90" align="center">
-                <template #default="scope">
-                  <el-button link type="danger" icon="Delete" @click="handleRemoveCondition(scope.$index)">删除</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
+                <div class="formula-lab__composer-card">
+                  <div class="formula-lab__section-title">
+                    <span>可视化公式草稿</span>
+                    <div class="formula-lab__draft-actions">
+                      <el-tag v-if="businessRiskTokens.length" type="warning" effect="light">待识别 {{ businessRiskTokens.length }}</el-tag>
+                      <el-button link type="primary" @click="continueBusinessInput">继续输入</el-button>
+                      <el-button link type="warning" @click="focusFirstRiskToken" :disabled="!businessRiskTokens.length">定位风险片段</el-button>
+                      <el-button link type="info" @click="removeLastBusinessToken" :disabled="!businessDraftTokens.length">回退一段</el-button>
+                      <el-button link type="danger" @click="clearBusinessFormula" :disabled="!activeBusinessFormula">清空草稿</el-button>
+                    </div>
+                  </div>
+                  <div class="formula-lab__insert-toolbar">
+                    <div class="formula-lab__insert-target">
+                      <span>当前锚点</span>
+                      <strong>{{ selectedDraftToken ? selectedDraftToken.label : '光标位置' }}</strong>
+                      <small>{{ selectedDraftToken ? '点击资源时可选择替换或插入到该片段前后' : '点击下方草稿片段可切换为片段锚点' }}</small>
+                    </div>
+                    <el-radio-group v-model="businessInsertMode" size="small">
+                      <el-radio-button label="CURSOR">光标插入</el-radio-button>
+                      <el-radio-button label="REPLACE" :disabled="!selectedDraftToken">替换片段</el-radio-button>
+                      <el-radio-button label="BEFORE" :disabled="!selectedDraftToken">插入到前面</el-radio-button>
+                      <el-radio-button label="AFTER" :disabled="!selectedDraftToken">插入到后面</el-radio-button>
+                    </el-radio-group>
+                    <div class="formula-lab__insert-hint">{{ businessInsertHint }}</div>
+                  </div>
+                  <div v-if="businessDraftTokens.length" class="formula-lab__draft-list">
+                    <button
+                      v-for="token in businessDraftTokens"
+                      :key="token.key"
+                      type="button"
+                      class="formula-lab__draft-token"
+                      :class="[`is-${token.type}`, { 'is-active': selectedDraftKey === token.key }]"
+                      @click="focusBusinessToken(token)"
+                    >
+                      <span>{{ token.label }}</span>
+                      <em>{{ token.typeLabel }}</em>
+                      <i @click.stop="removeBusinessToken(token)">×</i>
+                    </button>
+                  </div>
+                  <el-empty v-else :image-size="64" description="先输入中文公式或点选变量、费用、函数、运算符，这里会自动拼成业务块。" />
+                </div>
 
-            <div class="formula-lab__result-grid">
-              <div>
-                <div class="formula-lab__field-label">命中结果</div>
-                <el-input v-model="workbench.trueResultValue" placeholder="如：2 或 V.煤炭单价" />
-              </div>
-              <div>
-                <div class="formula-lab__field-label">未命中结果</div>
-                <el-input v-model="workbench.falseResultValue" placeholder="如：1 或 0" />
-              </div>
-            </div>
-          </div>
+                <div class="formula-lab__composer-card formula-lab__quick-card">
+                  <div class="formula-lab__quick-section">
+                    <div class="formula-lab__quick-title">运算符与数字速插</div>
+                    <div class="formula-lab__chip-grid">
+                      <button v-for="item in operatorButtons" :key="`operator-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
+                      <button v-for="item in numberButtons" :key="`number-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
+                    </div>
+                  </div>
+                  <div class="formula-lab__quick-section">
+                    <div class="formula-lab__quick-title">条件比较词速插</div>
+                    <div class="formula-lab__chip-grid">
+                      <button v-for="item in keywordButtons" :key="`keyword-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
+                    </div>
+                  </div>
+                  <div class="formula-lab__quick-section">
+                    <div class="formula-lab__quick-title">常用函数速插</div>
+                    <div class="formula-lab__chip-grid">
+                      <button v-for="item in functionButtons" :key="`function-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
+                    </div>
+                  </div>
+                  <div class="formula-lab__quick-section">
+                    <div class="formula-lab__quick-title">常用变量速插</div>
+                    <div v-if="highFrequencyVariableOptions.length" class="formula-lab__chip-grid formula-lab__chip-grid--scroll">
+                      <button v-for="item in highFrequencyVariableOptions" :key="`variable-${item.variableCode}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.variableName || item.variableCode)">{{ item.variableName || item.variableCode }}</button>
+                    </div>
+                    <el-empty v-else :image-size="52" description="当前场景还没有可用变量" />
+                  </div>
+                  <div class="formula-lab__quick-section">
+                    <div class="formula-lab__quick-title">上下文费用速插</div>
+                    <div v-if="highFrequencyFeeOptions.length" class="formula-lab__chip-grid formula-lab__chip-grid--scroll">
+                      <button v-for="item in highFrequencyFeeOptions" :key="`fee-${item.feeCode}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.feeName || item.feeCode)">{{ item.feeName || item.feeCode }}</button>
+                    </div>
+                    <el-empty v-else :image-size="52" description="当前场景还没有可引用费用" />
+                  </div>
+                </div>
 
-          <div v-else>
-            <div class="formula-lab__result-grid">
-              <div>
-                <div class="formula-lab__field-label">区间依据变量</div>
-                <el-select v-model="workbench.rangeVariableCode" filterable :placeholder="resolveVariablePlaceholder('请选择区间变量')">
-                    <el-option v-for="item in numericVariableOptions" :key="item.variableCode" :label="`${item.variableName} / ${item.variableCode}`" :value="item.variableCode" />
-                </el-select>
+                <div ref="resourceWorkbenchRef" class="formula-lab__composer-card formula-lab__resource-workbench">
+                  <div class="formula-lab__section-title">
+                    <span>资源工作台</span>
+                    <el-input v-model="resourceKeyword" clearable placeholder="搜索变量名、费用名、来源路径、模板说明或公式编码" style="width: 320px" />
+                  </div>
+                  <div class="formula-lab__resource-tip">
+                    高频变量、上下文费用、函数和运算符已经放在上方，这里负责完整资源库、平台模板、场景模板和已有公式。
+                  </div>
+                  <el-tabs v-model="activeResourceTab" class="formula-lab__resource-tabs">
+                    <el-tab-pane label="中文资源" name="business">
+                      <ExpressionResourcePanel :sections="businessResourceSections" @append="handleAppendResourceToken" />
+                    </el-tab-pane>
+                    <el-tab-pane label="平台模板" name="platform">
+                      <div v-if="filteredPlatformTemplates.length" class="formula-lab__list formula-lab__list--tall">
+                        <button v-for="item in filteredPlatformTemplates" :key="item.code" type="button" class="formula-lab__list-item" @click="applyTemplate(item)">
+                          <strong>{{ item.name }}</strong>
+                          <span>{{ item.desc }}</span>
+                        </button>
+                      </div>
+                      <el-empty v-else :image-size="72" description="当前筛选条件下没有匹配的平台模板。" />
+                    </el-tab-pane>
+                    <el-tab-pane label="场景模板" name="template">
+                      <div v-if="filteredTemplateOptionList.length" class="formula-lab__list formula-lab__list--tall">
+                        <button v-for="item in filteredTemplateOptionList" :key="item.formulaId" type="button" class="formula-lab__list-item" @click="applyStoredTemplate(item)">
+                          <strong>{{ item.formulaName }}</strong>
+                          <span>{{ item.formulaCode }} · V{{ item.currentVersionNo || 1 }}</span>
+                        </button>
+                      </div>
+                      <el-empty v-else :image-size="72" description="当前筛选条件下没有匹配的场景模板。" />
+                    </el-tab-pane>
+                    <el-tab-pane label="已有公式" name="formula">
+                      <div v-if="filteredFormulaOptionList.length" class="formula-lab__list formula-lab__list--tall">
+                        <button v-for="item in filteredFormulaOptionList" :key="item.formulaCode" type="button" class="formula-lab__list-item" @click="handleLoadFormula(item)">
+                          <strong>{{ item.formulaName }}</strong>
+                          <span>{{ item.formulaCode }}</span>
+                        </button>
+                      </div>
+                      <el-empty v-else :image-size="72" description="当前筛选条件下没有匹配的已有公式。" />
+                    </el-tab-pane>
+                  </el-tabs>
+                </div>
               </div>
-              <div>
-                <div class="formula-lab__field-label">兜底结果</div>
-                <el-input v-model="workbench.defaultResultValue" placeholder="未命中任一档位时返回" />
-              </div>
-            </div>
-            <div class="formula-lab__section-title">
-              <span>区间档位</span>
-              <el-button type="primary" plain icon="Plus" @click="handleAddRange">新增档位</el-button>
-            </div>
-            <el-table :data="workbench.ranges" size="small" border>
-              <el-table-column label="起始值" min-width="120"><template #default="scope"><el-input v-model="scope.row.startValue" /></template></el-table-column>
-              <el-table-column label="结束值" min-width="120"><template #default="scope"><el-input v-model="scope.row.endValue" /></template></el-table-column>
-              <el-table-column label="结果值" min-width="160"><template #default="scope"><el-input v-model="scope.row.resultValue" /></template></el-table-column>
-              <el-table-column label="操作" width="90" align="center"><template #default="scope"><el-button link type="danger" icon="Delete" @click="handleRemoveRange(scope.$index)">删除</el-button></template></el-table-column>
-            </el-table>
-          </div>
 
-          <div class="formula-lab__test-card">
-            <div class="formula-lab__section-title"><span>试算上下文</span><el-button link type="primary" @click="handleGenerateSample">按引用生成示例</el-button></div>
-            <JsonEditor v-model="testInputJson" title="试算上下文 JSON" :rows="6" placeholder="请输入测试 JSON，上下文建议按 V/C/I/F/T 命名空间组织。" />
-            <div class="formula-lab__test-result">
-              <div><strong>试算结果：</strong>{{ testResultDisplay }}</div>
+              <div class="formula-lab__composer-side">
+                <div class="formula-lab__assist-card">
+                  <div class="formula-lab__assist-title">业务编排建议</div>
+                  <p>先写业务人员能读懂的中文公式，再由系统编译标准表达式。复杂分档建议切到结构助手，不建议在这里手写长段区间逻辑。</p>
+                </div>
+                <div class="formula-lab__assist-card">
+                  <div class="formula-lab__assist-title">定位式校验</div>
+                  <div v-if="businessIssueItems.length" class="formula-lab__issue-list">
+                    <div v-for="(item, index) in businessIssueItems" :key="item.key" class="formula-lab__issue-item">
+                      <strong>中文编排问题 {{ index + 1 }}</strong>
+                      <p>{{ item.message }}</p>
+                      <span v-if="item.fragment">定位片段：{{ item.fragment }}</span>
+                      <span v-if="item.suggestion">建议：{{ item.suggestion }}</span>
+                      <div v-if="getRiskSuggestions(item.fragment).length" class="formula-lab__issue-actions">
+                        <el-button
+                          v-for="suggestion in getRiskSuggestions(item.fragment)"
+                          :key="`${item.key}-${suggestion.value}`"
+                          link
+                          type="primary"
+                          @click="replaceRiskFragment(item.fragment, suggestion.value)"
+                        >
+                          替换为 {{ suggestion.label }}
+                        </el-button>
+                      </div>
+                    </div>
+                  </div>
+                  <el-alert
+                    v-else
+                    title="当前中文公式可进入试算"
+                    description="中文公式已识别完成，系统表达式已生成。"
+                    type="success"
+                    :closable="false"
+                    show-icon
+                  />
+                </div>
+                <div class="formula-lab__assist-card">
+                  <div class="formula-lab__assist-title">引用映射清单</div>
+                  <div v-if="referenceDetails.length" class="formula-lab__reference-list">
+                    <div v-for="item in referenceDetails" :key="item.key" class="formula-lab__reference-item">
+                      <strong>{{ item.label }}</strong>
+                      <span>{{ item.type === 'variable' ? `V.${item.code}` : `F.${item.code}` }}</span>
+                      <small>{{ item.description }}</small>
+                    </div>
+                  </div>
+                  <el-empty v-else :image-size="60" description="编辑区里还没有识别到变量或上下文费用引用" />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+
+            <div v-else class="formula-lab__guided">
+              <div class="formula-lab__pattern-head">
+                <div>
+                  <h4>{{ workbench.pattern === 'RANGE_LOOKUP' ? '区间档位适合沉淀可复用的分档公式' : '条件分支适合业务判断型公式' }}</h4>
+                  <p>{{ workbench.pattern === 'RANGE_LOOKUP' ? '当同一套分档逻辑会被多个规则、变量或试算场景复用时，优先把它沉淀成公式资产。' : '用中文变量名组织 if/else 口径，适合把判断逻辑沉淀为公式资产。' }}</p>
+                </div>
+                <el-radio-group v-model="workbench.pattern">
+                  <el-radio-button label="IF_ELSE">条件分支</el-radio-button>
+                  <el-radio-button label="RANGE_LOOKUP">区间档位</el-radio-button>
+                </el-radio-group>
+              </div>
+
+              <div class="formula-lab__composer-grid">
+                <div class="formula-lab__composer-main">
+                  <div class="formula-lab__composer-card">
+                    <div v-if="workbench.pattern === 'IF_ELSE'">
+                      <div class="formula-lab__section-title">
+                        <span>条件配置</span>
+                        <el-button type="primary" plain icon="Plus" @click="handleAddCondition">新增条件</el-button>
+                      </div>
+                      <el-table :data="workbench.conditions" size="small" border>
+                        <el-table-column label="变量" min-width="220">
+                          <template #default="scope">
+                            <el-select
+                              v-model="scope.row.variableCode"
+                              filterable
+                              :placeholder="resolveVariablePlaceholder()"
+                              @change="value => handleConditionVariableChange(scope.row, value)"
+                            >
+                              <el-option v-for="item in variableOptions" :key="item.variableCode" :label="`${item.variableName} / ${item.variableCode}`" :value="item.variableCode" />
+                            </el-select>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作符" width="140">
+                          <template #default="scope">
+                            <el-select v-model="scope.row.operatorCode" placeholder="请选择操作符">
+                              <el-option v-for="item in conditionOperators" :key="item.value" :label="item.label" :value="item.value" />
+                            </el-select>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="比较值" min-width="200">
+                          <template #default="scope">
+                            <el-input v-model="scope.row.compareValue" placeholder="如：煤炭 / 白班 / 100" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="90" align="center">
+                          <template #default="scope">
+                            <el-button link type="danger" icon="Delete" @click="handleRemoveCondition(scope.$index)">删除</el-button>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+
+                      <div class="formula-lab__result-grid">
+                        <div>
+                          <div class="formula-lab__field-label">命中结果</div>
+                          <el-input v-model="workbench.trueResultValue" placeholder="如：2 或 队女工人数" />
+                        </div>
+                        <div>
+                          <div class="formula-lab__field-label">未命中结果</div>
+                          <el-input v-model="workbench.falseResultValue" placeholder="如：1 或 0" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div v-else>
+                      <div class="formula-lab__result-grid">
+                        <div>
+                          <div class="formula-lab__field-label">区间依据变量</div>
+                          <el-select v-model="workbench.rangeVariableCode" filterable :placeholder="resolveVariablePlaceholder('请选择区间变量')">
+                            <el-option v-for="item in numericVariableOptions" :key="item.variableCode" :label="`${item.variableName} / ${item.variableCode}`" :value="item.variableCode" />
+                          </el-select>
+                        </div>
+                        <div>
+                          <div class="formula-lab__field-label">兜底结果</div>
+                          <el-input v-model="workbench.defaultResultValue" placeholder="未命中任何档位时返回值，如 0 或 默认费率" />
+                        </div>
+                      </div>
+                      <div class="formula-lab__section-title">
+                        <span>区间档位</span>
+                        <el-button type="primary" plain icon="Plus" @click="handleAddRange">新增档位</el-button>
+                      </div>
+                      <el-table :data="workbench.ranges" size="small" border>
+                        <el-table-column label="起始值" min-width="120"><template #default="scope"><el-input v-model="scope.row.startValue" /></template></el-table-column>
+                        <el-table-column label="截止值" min-width="120"><template #default="scope"><el-input v-model="scope.row.endValue" /></template></el-table-column>
+                        <el-table-column label="结果值" min-width="180"><template #default="scope"><el-input v-model="scope.row.resultValue" /></template></el-table-column>
+                        <el-table-column label="操作" width="90" align="center"><template #default="scope"><el-button link type="danger" icon="Delete" @click="handleRemoveRange(scope.$index)">删除</el-button></template></el-table-column>
+                      </el-table>
+                    </div>
+                  </div>
+                </div>
+                <div class="formula-lab__composer-side">
+                  <div class="formula-lab__assist-card">
+                    <div class="formula-lab__assist-title">结构助手建议</div>
+                    <p>结构助手适合条件、分档和模板化逻辑。若只是某一个费用规则的计量阶梯，优先在规则中心维护阶梯。</p>
+                  </div>
+                  <div class="formula-lab__assist-card">
+                    <div class="formula-lab__assist-title">当前引用变量与费用</div>
+                    <div v-if="referenceDetails.length" class="formula-lab__reference-list">
+                      <div v-for="item in referenceDetails" :key="item.key" class="formula-lab__reference-item">
+                        <strong>{{ item.label }}</strong>
+                        <span>{{ item.type === 'variable' ? `V.${item.code}` : `F.${item.code}` }}</span>
+                        <small>{{ item.description }}</small>
+                      </div>
+                    </div>
+                    <el-empty v-else :image-size="60" description="当前公式还没有形成变量或上下文费用引用" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="试算验证" name="testing">
+            <div class="formula-lab__composer-grid">
+              <div class="formula-lab__composer-main">
+                <div class="formula-lab__composer-card">
+                  <div class="formula-lab__section-title">
+                    <span>试算上下文</span>
+                    <el-button link type="primary" @click="handleGenerateSample">按引用生成示例</el-button>
+                  </div>
+                  <JsonEditor v-model="testInputJson" title="试算上下文 JSON" :rows="12" placeholder="请输入测试 JSON。建议保留 I 原始对象、V 变量上下文和 F 上下文费用；按引用生成示例时系统会自动补齐这些结构。" />
+                </div>
+              </div>
+              <div class="formula-lab__composer-side">
+                <div class="formula-lab__assist-card">
+                  <div class="formula-lab__assist-title">试算结果</div>
+                  <div class="formula-lab__test-result"><strong>当前结果：</strong>{{ testResultDisplay }}</div>
+                </div>
+                <div class="formula-lab__assist-card">
+                  <div class="formula-lab__assist-title">试算输入建议</div>
+                  <p>按引用生成示例时，系统会同时生成 I 原始业务对象、V 标准变量上下文、F 上下文费用和 C/T 运行扩展对象。</p>
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="系统视图" name="system">
+            <div class="formula-lab__composer-grid">
+              <div class="formula-lab__composer-main">
+                <div class="formula-lab__preview-card formula-lab__preview-card--code formula-lab__system-card">
+                  <div class="formula-lab__preview-title">系统生成的标准表达式</div>
+                  <pre class="formula-lab__code">{{ activeFormulaExpression || '业务人员维护中文公式后，系统会在这里显示编译出的标准表达式。' }}</pre>
+                </div>
+              </div>
+              <div class="formula-lab__composer-side">
+                <div class="formula-lab__assist-card">
+                  <div class="formula-lab__assist-title">系统视图说明</div>
+                  <p>这里用于查看执行与落库所使用的标准表达式、变量映射和编译结果，不作为业务侧默认编辑入口。</p>
+                </div>
+                <div class="formula-lab__assist-card">
+                  <div class="formula-lab__assist-title">当前引用变量与费用</div>
+                  <div v-if="referenceDetails.length" class="formula-lab__reference-list">
+                    <div v-for="item in referenceDetails" :key="item.key" class="formula-lab__reference-item">
+                      <strong>{{ item.label }}</strong>
+                      <span>{{ item.type === 'variable' ? `V.${item.code}` : `F.${item.code}` }}</span>
+                      <small>{{ item.description }}</small>
+                    </div>
+                  </div>
+                  <el-empty v-else :image-size="60" description="当前公式还没有形成变量或上下文费用引用" />
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
       </div>
-
-      <aside ref="resourceWorkbenchRef" class="formula-lab__toolbox">
-        <div class="formula-lab__panel-head">
-          <div>
-            <h3>资源工作台</h3>
-            <p>同页完成中文公式排障、变量/费用映射核对和资源点选，不再来回跳转。</p>
-          </div>
-        </div>
-        <div class="formula-lab__tool-section">
-          <div class="formula-lab__tool-title">业务编排建议</div>
-          <div class="formula-lab__note-list">
-            <div class="formula-lab__note-item">
-              <strong>先写中文，再由系统翻译</strong>
-              <span>优先维护业务人员能读懂的中文公式，复杂分档建议切到结构助手，不建议直接手写长段编码表达式。</span>
-            </div>
-          </div>
-        </div>
-        <div class="formula-lab__tool-section">
-          <div class="formula-lab__tool-title">定位式校验</div>
-          <div v-if="workbench.mode === 'BUSINESS' && businessIssueItems.length" class="formula-lab__issue-list">
-            <div v-for="(item, index) in businessIssueItems" :key="item.key" class="formula-lab__issue-item">
-              <strong>中文编排问题 {{ index + 1 }}</strong>
-              <p>{{ item.message }}</p>
-              <span v-if="item.fragment">定位片段：{{ item.fragment }}</span>
-              <span v-if="item.suggestion">建议：{{ item.suggestion }}</span>
-              <div v-if="getRiskSuggestions(item.fragment).length" class="formula-lab__issue-actions">
-                <el-button
-                  v-for="suggestion in getRiskSuggestions(item.fragment)"
-                  :key="`${item.key}-${suggestion.value}`"
-                  link
-                  type="primary"
-                  @click="replaceRiskFragment(item.fragment, suggestion.value)"
-                >
-                  替换为 {{ suggestion.label }}
-                </el-button>
-              </div>
-            </div>
-          </div>
-          <el-alert
-            v-else-if="formulaValidationMessages.length"
-            title="标准表达式校验未通过"
-            type="warning"
-            :closable="false"
-            show-icon
-          >
-            <template #default>
-              <div v-for="message in formulaValidationMessages" :key="message" class="formula-lab__validation-item">{{ message }}</div>
-            </template>
-          </el-alert>
-          <el-alert
-            v-else
-            title="当前公式可用于保存与试算"
-            description="中文公式编译与标准表达式预校验已通过。"
-            type="success"
-            :closable="false"
-            show-icon
-          />
-        </div>
-        <div class="formula-lab__tool-section">
-          <div class="formula-lab__tool-title">引用映射清单</div>
-          <div v-if="referenceDetails.length" class="formula-lab__reference-list">
-            <div v-for="item in referenceDetails" :key="item.key" class="formula-lab__reference-item">
-              <strong>{{ item.label }}</strong>
-              <span>{{ item.type === 'variable' ? `V.${item.code}` : `F.${item.code}` }}</span>
-              <small>{{ item.description }}</small>
-            </div>
-          </div>
-          <el-empty v-else :image-size="72" description="编辑区里还没有识别到变量或上下文费用引用。" />
-        </div>
-        <div class="formula-lab__tool-section">
-          <div class="formula-lab__section-title">
-            <span>资源工作台</span>
-            <el-input v-model="resourceKeyword" clearable placeholder="搜索变量、费用、函数" style="width: 220px" />
-          </div>
-          <ExpressionResourcePanel :sections="businessResourceSections" @append="handleAppendResourceToken" />
-        </div>
-        <div class="formula-lab__tool-section">
-          <div class="formula-lab__tool-title">平台模板</div>
-          <div class="formula-lab__list">
-            <button v-for="item in platformTemplates" :key="item.code" type="button" class="formula-lab__list-item" @click="applyTemplate(item)">
-              <strong>{{ item.name }}</strong>
-              <span>{{ item.desc }}</span>
-            </button>
-          </div>
-        </div>
-        <div class="formula-lab__tool-section">
-          <div class="formula-lab__tool-title">模板库</div>
-          <div v-if="templateOptionList.length" class="formula-lab__list">
-            <button v-for="item in templateOptionList" :key="item.formulaId" type="button" class="formula-lab__list-item" @click="applyStoredTemplate(item)">
-              <strong>{{ item.formulaName }}</strong>
-              <span>{{ item.formulaCode }} · V{{ item.currentVersionNo || 1 }}</span>
-            </button>
-          </div>
-          <el-empty v-else :image-size="72" description="当前场景还没有沉淀模板资产，可先把常用公式保存为模板。" />
-        </div>
-        <div class="formula-lab__tool-section">
-          <div class="formula-lab__tool-title">已有公式</div>
-          <div class="formula-lab__list">
-            <button v-for="item in formulaOptionList" :key="item.formulaCode" type="button" class="formula-lab__list-item" @click="handleLoadFormula(item)">
-              <strong>{{ item.formulaName }}</strong>
-              <span>{{ item.formulaCode }}</span>
-            </button>
-          </div>
-        </div>
-      </aside>
     </section>
 
     <section class="formula-lab__ledger">
@@ -521,6 +612,7 @@
   </div>
 </template>
 
+
 <script setup name="CostFormula">
 import { ElMessageBox } from 'element-plus'
 import ExpressionResourcePanel from '@/components/cost/ExpressionResourcePanel.vue'
@@ -576,10 +668,13 @@ const formulaList = ref([])
 const testInputJson = ref('')
 const testResult = ref(undefined)
 const resourceKeyword = ref('')
+const activeWorkbenchTab = ref('builder')
+const activeResourceTab = ref('business')
 const businessFormulaInputRef = ref()
 const resourceWorkbenchRef = ref()
 const businessCursor = reactive({ start: 0, end: 0 })
 const selectedDraftKey = ref('')
+const businessInsertMode = ref('CURSOR')
 
 const statistics = reactive({
   formulaCount: 0,
@@ -649,7 +744,7 @@ const rules = {
 }
 
 const builderModes = [
-  { label: '业务编排', value: 'BUSINESS' },
+  { label: '业务公式', value: 'BUSINESS' },
   { label: '结构助手', value: 'GUIDED' }
 ]
 
@@ -756,6 +851,37 @@ const metricItems = computed(() => [
   { label: '变量引用', value: statistics.variableRefCount, desc: '已被变量中心引用的次数' },
   { label: '规则引用', value: statistics.ruleRefCount, desc: '已被规则中心引用的次数' }
 ])
+
+const workbenchStatusCards = computed(() => {
+  const compileStatus = formulaValidationMessages.value.length
+    ? '待修正'
+    : activeFormulaExpression.value
+      ? '已就绪'
+      : '待编排'
+  const testStatus = typeof testResult.value === 'undefined' ? '未试算' : '已回算'
+  return [
+    {
+      label: '当前模式',
+      value: workbench.mode === 'GUIDED' ? '结构助手' : '业务公式',
+      desc: workbench.mode === 'GUIDED' ? '适合条件、分档和模板化逻辑' : '以中文业务公式为主编辑对象'
+    },
+    {
+      label: '编译状态',
+      value: compileStatus,
+      desc: formulaValidationMessages.value[0] || '已形成可保存、可试算的标准表达式'
+    },
+    {
+      label: '识别引用',
+      value: `${referenceDetails.value.length} 项`,
+      desc: referenceDetails.value.length ? '系统已识别变量映射与上下文费用引用' : '当前中文公式还未识别到变量或费用引用'
+    },
+    {
+      label: '试算进度',
+      value: testStatus,
+      desc: testStatus === '已回算' ? '可切到试算验证页查看本次结果' : '保存前建议先走一次试算验证'
+    }
+  ]
+})
 
 const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) => {
   acc[item.variableCode] = item
@@ -877,6 +1003,20 @@ const businessTokenDefinitions = computed(() => {
 
 const businessDraftTokens = computed(() => tokenizeBusinessFormula(activeBusinessFormula.value, businessTokenDefinitions.value))
 const businessRiskTokens = computed(() => businessDraftTokens.value.filter(item => item.type === 'risk'))
+const selectedDraftToken = computed(() => businessDraftTokens.value.find(item => item.key === selectedDraftKey.value))
+const businessInsertHint = computed(() => {
+  if (!selectedDraftToken.value) {
+    return '资源、函数、运算符会插入到中文公式当前光标位置；选中文本时会自动替换选区。'
+  }
+  const label = selectedDraftToken.value.label
+  const actionMap = {
+    CURSOR: '仍按当前光标插入，不使用片段锚点。',
+    REPLACE: `下一次点选资源会替换“${label}”。`,
+    BEFORE: `下一次点选资源会插入到“${label}”前面。`,
+    AFTER: `下一次点选资源会插入到“${label}”后面。`
+  }
+  return actionMap[businessInsertMode.value] || actionMap.CURSOR
+})
 
 const businessResourceSections = computed(() => {
   const keyword = resourceKeyword.value.trim().toLowerCase()
@@ -927,6 +1067,40 @@ const businessResourceSections = computed(() => {
       items: namespaceTokens
     }
   ]
+})
+
+const normalizedResourceKeyword = computed(() => String(resourceKeyword.value || '').trim().toLowerCase())
+
+const filteredPlatformTemplates = computed(() => {
+  if (!normalizedResourceKeyword.value) {
+    return platformTemplates
+  }
+  return platformTemplates.filter(item => matchResourceKeyword([item.name, item.desc, item.code]))
+})
+
+const filteredTemplateOptionList = computed(() => {
+  if (!normalizedResourceKeyword.value) {
+    return templateOptionList.value
+  }
+  return templateOptionList.value.filter(item => matchResourceKeyword([
+    item.formulaName,
+    item.formulaCode,
+    item.businessFormula,
+    item.formulaDesc
+  ]))
+})
+
+const filteredFormulaOptionList = computed(() => {
+  const list = formulaOptionList.value.filter(item => item.formulaCode !== form.formulaCode)
+  if (!normalizedResourceKeyword.value) {
+    return list
+  }
+  return list.filter(item => matchResourceKeyword([
+    item.formulaName,
+    item.formulaCode,
+    item.businessFormula,
+    item.formulaDesc
+  ]))
 })
 
 const numericVariableOptions = computed(() => {
@@ -1039,6 +1213,7 @@ function resetFormModel() {
   testResult.value = undefined
   resourceKeyword.value = ''
   selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
   resetWorkbench()
   proxy.resetForm('formulaRef')
 }
@@ -1186,13 +1361,32 @@ function setBusinessFormulaText(text, start = text.length, end = start) {
 function appendBusinessToken(token) {
   workbench.mode = 'BUSINESS'
   workbench.templateCode = undefined
-  captureBusinessCursor()
   const source = String(form.businessFormula || '')
-  const start = businessCursor.start ?? source.length
-  const end = businessCursor.end ?? start
-  const nextText = `${source.slice(0, start)}${token}${source.slice(end)}`
-  const cursor = start + token.length
+  const insertText = String(token ?? '')
+  if (!insertText) {
+    return
+  }
+  const target = selectedDraftToken.value
+  let start = businessCursor.start ?? source.length
+  let end = businessCursor.end ?? start
+  if (target && businessInsertMode.value === 'REPLACE') {
+    start = target.start
+    end = target.end
+  } else if (target && businessInsertMode.value === 'BEFORE') {
+    start = target.start
+    end = target.start
+  } else if (target && businessInsertMode.value === 'AFTER') {
+    start = target.end
+    end = target.end
+  } else {
+    captureBusinessCursor()
+    start = businessCursor.start ?? source.length
+    end = businessCursor.end ?? start
+  }
+  const nextText = `${source.slice(0, start)}${insertText}${source.slice(end)}`
+  const cursor = start + insertText.length
   selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
   setBusinessFormulaText(nextText, cursor, cursor)
 }
 
@@ -1200,6 +1394,7 @@ function removeBusinessToken(token) {
   const source = String(form.businessFormula || '')
   const nextText = `${source.slice(0, token.start)}${source.slice(token.end)}`
   selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
   setBusinessFormulaText(nextText, token.start, token.start)
 }
 
@@ -1212,11 +1407,21 @@ function removeLastBusinessToken() {
 
 function clearBusinessFormula() {
   selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
   setBusinessFormulaText('', 0, 0)
+}
+
+function continueBusinessInput() {
+  selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
+  focusBusinessEditor()
 }
 
 function focusBusinessToken(token) {
   selectedDraftKey.value = token.key
+  if (businessInsertMode.value === 'CURSOR') {
+    businessInsertMode.value = 'REPLACE'
+  }
   setBusinessFormulaText(String(form.businessFormula || ''), token.start, token.end)
 }
 
@@ -1227,8 +1432,12 @@ function focusFirstRiskToken() {
 }
 
 function scrollToResourceWorkbench() {
-  const target = resourceWorkbenchRef.value?.$el || resourceWorkbenchRef.value
-  target?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  activeWorkbenchTab.value = 'builder'
+  activeResourceTab.value = 'business'
+  nextTick(() => {
+    const target = resourceWorkbenchRef.value?.$el || resourceWorkbenchRef.value
+    target?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 function resolveDraftTokenTypeLabel(type) {
@@ -1367,6 +1576,7 @@ function replaceRiskFragment(fragment, replacement) {
   const nextText = `${source.slice(0, target.start)}${replacement}${source.slice(target.end)}`
   const cursor = target.start + replacement.length
   selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
   setBusinessFormulaText(nextText, cursor, cursor)
 }
 
@@ -1389,10 +1599,14 @@ function assignNestedValue(target, path, value) {
 }
 
 function handleAppendResourceToken(payload) {
+  if (!payload?.value) {
+    return
+  }
   appendBusinessToken(payload.value)
 }
 
 function applyTemplate(template) {
+  activeWorkbenchTab.value = 'builder'
   workbench.templateCode = template.code
   if (template.pattern === 'BUSINESS') {
     workbench.mode = 'BUSINESS'
@@ -1413,6 +1627,7 @@ function applyTemplate(template) {
 }
 
 function applyStoredTemplate(template) {
+  activeWorkbenchTab.value = 'builder'
   form.assetType = 'FORMULA'
   restoreWorkbench({ ...template, templateCode: template.templateCode || template.formulaCode })
   if (workbench.mode === 'BUSINESS') {
@@ -1483,6 +1698,7 @@ async function handleSave() {
 }
 
 async function handleTest() {
+  activeWorkbenchTab.value = 'testing'
   const payload = buildPayload()
   if (!payload.formulaExpr) {
     proxy.$modal.msgError('当前没有可测试的公式表达式')
@@ -1502,6 +1718,7 @@ async function handleTest() {
 }
 
 async function handleCreate() {
+  activeWorkbenchTab.value = 'builder'
   resetFormModel()
   if (form.sceneId) {
     queryParams.sceneId = form.sceneId
@@ -1510,6 +1727,7 @@ async function handleCreate() {
 }
 
 async function handleEdit(row) {
+  activeWorkbenchTab.value = 'builder'
   const response = await getFormula(row.formulaId)
   Object.assign(form, response.data || {})
   queryParams.sceneId = form.sceneId
@@ -1517,6 +1735,7 @@ async function handleEdit(row) {
   testResult.value = response.data?.sampleResultJson ? safeJsonParse(response.data.sampleResultJson) : undefined
   resourceKeyword.value = ''
   selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
   await loadSceneAssets(form.sceneId)
   restoreWorkbench(response.data)
 }
@@ -1547,11 +1766,13 @@ async function handleOpenVersions(row) {
 }
 
 async function handleLoadVersion(row) {
+  activeWorkbenchTab.value = 'builder'
   const response = await getFormulaVersion(row.versionId)
   Object.assign(form, response.data || {})
   queryParams.sceneId = form.sceneId
   resourceKeyword.value = ''
   selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
   await loadSceneAssets(form.sceneId)
   restoreWorkbench(response.data)
   testInputJson.value = form.testCaseJson || ''
@@ -1591,6 +1812,7 @@ function handleSelectionChange(selection) {
 }
 
 async function handleGenerateSample() {
+  activeWorkbenchTab.value = 'testing'
   if (!form.sceneId) {
     proxy.$modal.msgWarning('请先选择场景，再按引用生成示例')
     return
@@ -1634,6 +1856,7 @@ async function handleWorkbenchSceneChange(sceneId) {
   queryParams.sceneId = workingSceneId
   resourceKeyword.value = ''
   selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
   await loadSceneAssets(workingSceneId)
 }
 
@@ -1643,6 +1866,7 @@ async function handleQuerySceneChange(sceneId) {
   form.sceneId = workingSceneId
   resourceKeyword.value = ''
   selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
   await loadSceneAssets(workingSceneId)
 }
 
@@ -1672,6 +1896,12 @@ function safeJsonParse(text) {
   } catch (error) {
     return text
   }
+}
+
+function matchResourceKeyword(fields = []) {
+  return fields
+    .filter(Boolean)
+    .some(text => String(text).toLowerCase().includes(normalizedResourceKeyword.value))
 }
 
 function buildWorkbenchPayload() {
@@ -1776,8 +2006,23 @@ onActivated(async () => {
 .formula-lab {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
   color: var(--el-text-color-primary);
+}
+
+.formula-lab__hero,
+.formula-lab__metric-card,
+.formula-lab__builder,
+.formula-lab__ledger,
+.formula-lab__meta-card,
+.formula-lab__preview-card,
+.formula-lab__status-item,
+.formula-lab__guide-card,
+.formula-lab__composer-card,
+.formula-lab__assist-card {
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-light);
+  box-shadow: var(--el-box-shadow-lighter);
 }
 
 .formula-lab__hero {
@@ -1785,23 +2030,21 @@ onActivated(async () => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 28px 32px;
-  border-radius: 24px;
-  background: var(--el-bg-color-overlay);
-  border: 1px solid var(--el-border-color-light);
+  padding: 22px 24px;
+  border-radius: 12px;
 }
 
 .formula-lab__eyebrow {
+  margin-bottom: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--el-color-warning);
-  margin-bottom: 8px;
+  color: var(--el-color-primary);
 }
 
 .formula-lab__title {
   margin: 0 0 10px;
-  font-size: 40px;
-  line-height: 1.1;
+  font-size: 30px;
+  line-height: 1.2;
   color: var(--el-text-color-primary);
 }
 
@@ -1815,24 +2058,15 @@ onActivated(async () => {
 .formula-lab__metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.formula-lab__metric-card,
-.formula-lab__builder,
-.formula-lab__toolbox,
-.formula-lab__ledger {
-  border-radius: 24px;
-  background: var(--el-bg-color-overlay);
-  border: 1px solid var(--el-border-color-light);
-  box-shadow: var(--el-box-shadow-light);
+  gap: 12px;
 }
 
 .formula-lab__metric-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 20px 22px;
+  padding: 16px 18px;
+  border-radius: 10px;
 }
 
 .formula-lab__metric-card span,
@@ -1841,21 +2075,24 @@ onActivated(async () => {
 }
 
 .formula-lab__metric-card strong {
-  font-size: 36px;
+  font-size: 28px;
   line-height: 1;
   color: var(--el-color-primary);
 }
 
 .formula-lab__workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
-  gap: 20px;
+  display: block;
 }
 
 .formula-lab__builder,
-.formula-lab__toolbox,
 .formula-lab__ledger {
-  padding: 24px;
+  padding: 20px;
+  border-radius: 12px;
+}
+
+.formula-lab__builder--full {
+  display: grid;
+  gap: 18px;
 }
 
 .formula-lab__panel-head {
@@ -1863,135 +2100,221 @@ onActivated(async () => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 20px;
 }
 
 .formula-lab__panel-head h3 {
   margin: 0 0 6px;
-  font-size: 24px;
+  font-size: 20px;
   color: var(--el-text-color-primary);
 }
 
-.formula-lab__panel-head p {
-  margin: 0;
-  color: var(--el-text-color-regular);
-}
-
-.formula-lab__drawer-head {
-  margin-bottom: 16px;
-}
-
-.formula-lab__drawer-head strong {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--el-text-color-primary);
-}
-
+.formula-lab__panel-head p,
 .formula-lab__drawer-head p {
   margin: 0;
   color: var(--el-text-color-regular);
-}
-
-.formula-lab__toolbar,
-.formula-lab__pattern-bar,
-.formula-lab__result-grid,
-.formula-lab__test-result {
-  display: flex;
-  gap: 12px;
+  line-height: 1.7;
 }
 
 .formula-lab__toolbar {
+  display: flex;
   flex-wrap: wrap;
-  margin-bottom: 20px;
+  gap: 10px;
+  padding-bottom: 2px;
 }
 
+.formula-lab__overview-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.35fr);
+  gap: 16px;
+}
+
+.formula-lab__meta-card,
 .formula-lab__preview-card,
-.formula-lab__test-card {
-  margin-bottom: 16px;
-  padding: 18px 20px;
-  border-radius: 18px;
-  background: var(--el-fill-color-lighter);
-  border: 1px solid var(--el-border-color-lighter);
+.formula-lab__composer-card,
+.formula-lab__assist-card {
+  padding: 16px 18px;
+  border-radius: 10px;
 }
 
-.formula-lab__preview-card--code {
-  background: var(--el-fill-color-dark);
-  border-color: var(--el-fill-color-darker);
+.formula-lab__preview-stack {
+  display: grid;
+  gap: 12px;
 }
 
-.formula-lab__preview-title {
+.formula-lab__preview-title,
+.formula-lab__assist-title {
   margin-bottom: 10px;
   font-size: 14px;
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-}
-
-.formula-lab__preview-card--code .formula-lab__preview-title {
-  color: var(--el-color-white);
+  font-weight: 700;
+  color: var(--el-text-color-primary);
 }
 
 .formula-lab__preview-text {
-  min-height: 54px;
+  min-height: 58px;
   color: var(--el-text-color-primary);
   line-height: 1.8;
 }
 
-.formula-lab__code {
-  margin: 0;
-  min-height: 132px;
-  color: var(--el-color-white);
-  font-family: 'JetBrains Mono', 'Consolas', monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
+.formula-lab__preview-text--business {
+  min-height: 78px;
 }
 
-.formula-lab__validation-item {
-  line-height: 1.7;
-}
-
-.formula-lab__business,
-.formula-lab__guided {
-  margin-bottom: 18px;
-}
-
-.formula-lab__editor-card,
-.formula-lab__draft-card,
-.formula-lab__quick-card {
-  margin-bottom: 16px;
-  padding: 18px 20px;
-  border-radius: 18px;
-  background: var(--el-fill-color-lighter);
-  border: 1px solid var(--el-border-color-lighter);
-}
-
-.formula-lab__note-card {
-  display: grid;
-  gap: 6px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: var(--el-bg-color-overlay);
-  border: 1px dashed var(--el-border-color);
-}
-
-.formula-lab__note-card strong {
-  color: var(--el-text-color-primary);
-}
-
-.formula-lab__note-card span {
+.formula-lab__preview-footnote,
+.formula-lab__assist-card p,
+.formula-lab__guide-card p,
+.formula-lab__reference-item small,
+.formula-lab__reference-item span,
+.formula-lab__issue-item span,
+.formula-lab__issue-item p {
   color: var(--el-text-color-regular);
   line-height: 1.7;
 }
 
-.formula-lab__draft-actions {
+.formula-lab__status-grid,
+.formula-lab__guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.formula-lab__guide-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.formula-lab__status-item,
+.formula-lab__guide-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 10px;
+}
+
+.formula-lab__status-item span,
+.formula-lab__status-item small {
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+
+.formula-lab__status-item strong {
+  color: var(--el-text-color-primary);
+  font-size: 18px;
+}
+
+.formula-lab__workbench-tabs :deep(.el-tabs__header) {
+  margin-bottom: 12px;
+}
+
+.formula-lab__workbench-tabs :deep(.el-tabs__content) {
+  overflow: visible;
+}
+
+.formula-lab__composer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.formula-lab__composer-main,
+.formula-lab__composer-side {
+  min-width: 0;
+}
+
+.formula-lab__composer-main {
+  display: grid;
+  gap: 14px;
+}
+
+.formula-lab__composer-side {
+  position: sticky;
+  top: 12px;
+  display: grid;
+  gap: 12px;
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.formula-lab__composer-side::-webkit-scrollbar,
+.formula-lab__draft-list::-webkit-scrollbar,
+.formula-lab__list::-webkit-scrollbar,
+.formula-lab__chip-grid--scroll::-webkit-scrollbar,
+.formula-lab__resource-tabs :deep(.expression-resource-panel)::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.formula-lab__composer-side::-webkit-scrollbar-thumb,
+.formula-lab__draft-list::-webkit-scrollbar-thumb,
+.formula-lab__list::-webkit-scrollbar-thumb,
+.formula-lab__chip-grid--scroll::-webkit-scrollbar-thumb,
+.formula-lab__resource-tabs :deep(.expression-resource-panel)::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--el-border-color-darker);
+}
+
+.formula-lab__section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.formula-lab__draft-actions,
+.formula-lab__issue-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px 12px;
+}
+
+.formula-lab__insert-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-light);
+}
+
+.formula-lab__insert-target {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.formula-lab__insert-target span,
+.formula-lab__insert-target small,
+.formula-lab__insert-hint {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.formula-lab__insert-target strong {
+  overflow: hidden;
+  color: var(--el-text-color-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formula-lab__insert-hint {
+  grid-column: 1 / -1;
+  line-height: 1.6;
 }
 
 .formula-lab__draft-list {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  max-height: 168px;
+  overflow: auto;
+  padding: 2px 4px 2px 0;
 }
 
 .formula-lab__draft-token {
@@ -1999,19 +2322,19 @@ onActivated(async () => {
   align-items: center;
   gap: 8px;
   max-width: 100%;
-  padding: 8px 12px;
+  padding: 7px 11px;
   border-radius: 999px;
   border: 1px solid var(--el-border-color);
-  background: var(--el-bg-color-overlay);
+  background: var(--el-bg-color);
   color: var(--el-text-color-regular);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .formula-lab__draft-token:hover,
 .formula-lab__draft-token.is-active {
   border-color: var(--el-color-primary);
-  box-shadow: 0 0 0 2px rgb(64 158 255 / 12%);
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-9);
 }
 
 .formula-lab__draft-token em {
@@ -2043,128 +2366,51 @@ onActivated(async () => {
   background: var(--el-color-danger-light-9);
 }
 
-.formula-lab__quick-grid {
+.formula-lab__quick-card {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
-.formula-lab__note-list,
-.formula-lab__issue-list,
-.formula-lab__reference-list {
-  display: grid;
-  gap: 12px;
+.formula-lab__quick-section {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-.formula-lab__note-item,
-.formula-lab__issue-item,
-.formula-lab__reference-item {
-  display: grid;
-  gap: 6px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  background: var(--el-bg-color-overlay);
-  border: 1px solid var(--el-border-color);
+.formula-lab__quick-section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
-.formula-lab__note-item strong,
-.formula-lab__issue-item strong,
-.formula-lab__reference-item strong {
+.formula-lab__quick-title {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--el-text-color-primary);
-}
-
-.formula-lab__note-item span,
-.formula-lab__issue-item p,
-.formula-lab__issue-item span,
-.formula-lab__reference-item span,
-.formula-lab__reference-item small {
-  margin: 0;
-  color: var(--el-text-color-regular);
-  line-height: 1.6;
-}
-
-.formula-lab__reference-item small {
-  color: var(--el-text-color-secondary);
-}
-
-.formula-lab__issue-item {
-  border-color: var(--el-color-warning-light-5);
-}
-
-.formula-lab__issue-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-}
-
-.formula-lab__section-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.formula-lab__result-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 14px;
-}
-
-.formula-lab__field-label,
-.formula-lab__tool-title {
-  margin-bottom: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-}
-
-.formula-lab__test-card {
-  margin-bottom: 0;
-}
-
-.formula-lab__test-result {
-  margin-top: 14px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: var(--el-bg-color-overlay);
-  border: 1px dashed var(--el-border-color);
-  color: var(--el-text-color-regular);
-  white-space: pre-wrap;
-}
-
-.formula-lab__toolbox {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.formula-lab__tool-section {
-  padding: 16px 18px;
-  border-radius: 18px;
-  background: var(--el-fill-color-lighter);
-  border: 1px solid var(--el-border-color-lighter);
 }
 
 .formula-lab__chip-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
+}
+
+.formula-lab__chip-grid--scroll {
+  max-height: 132px;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .formula-lab__chip,
 .formula-lab__list-item {
   appearance: none;
   border: 1px solid var(--el-border-color);
-  background: var(--el-bg-color-overlay);
+  background: var(--el-bg-color);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .formula-lab__chip {
-  padding: 8px 12px;
+  padding: 7px 11px;
   border-radius: 999px;
   color: var(--el-text-color-regular);
 }
@@ -2173,7 +2419,31 @@ onActivated(async () => {
 .formula-lab__list-item:hover {
   border-color: var(--el-color-primary);
   color: var(--el-color-primary);
-  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-9);
+}
+
+.formula-lab__resource-workbench {
+  scroll-margin-top: 12px;
+}
+
+.formula-lab__resource-tip {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px dashed var(--el-border-color);
+  background: var(--el-fill-color-lighter);
+  color: var(--el-text-color-regular);
+  line-height: 1.7;
+}
+
+.formula-lab__resource-tabs :deep(.el-tabs__header) {
+  margin-bottom: 8px;
+}
+
+.formula-lab__resource-tabs :deep(.expression-resource-panel) {
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .formula-lab__list {
@@ -2184,18 +2454,25 @@ onActivated(async () => {
   overflow: auto;
 }
 
+.formula-lab__list--tall {
+  max-height: 420px;
+}
+
 .formula-lab__list-item {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
   width: 100%;
-  padding: 12px 14px;
-  border-radius: 16px;
+  padding: 11px 13px;
+  border-radius: 8px;
   text-align: left;
 }
 
-.formula-lab__list-item strong {
+.formula-lab__list-item strong,
+.formula-lab__reference-item strong,
+.formula-lab__issue-item strong,
+.formula-lab__guide-card strong {
   color: var(--el-text-color-primary);
 }
 
@@ -2204,12 +2481,127 @@ onActivated(async () => {
   line-height: 1.6;
 }
 
+.formula-lab__issue-list,
+.formula-lab__reference-list {
+  display: grid;
+  gap: 10px;
+  max-height: 300px;
+  overflow: auto;
+}
+
+.formula-lab__issue-item,
+.formula-lab__reference-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px 13px;
+  border-radius: 8px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.formula-lab__issue-item {
+  border-color: var(--el-color-warning-light-5);
+}
+
+.formula-lab__pattern-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.formula-lab__pattern-head h4 {
+  margin: 0 0 8px;
+  color: var(--el-text-color-primary);
+  font-size: 16px;
+}
+
+.formula-lab__pattern-head p {
+  margin: 0;
+  color: var(--el-text-color-regular);
+  line-height: 1.7;
+}
+
+.formula-lab__result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.formula-lab__field-label {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+
+.formula-lab__test-result {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
+  border: 1px dashed var(--el-border-color);
+  color: var(--el-text-color-regular);
+  white-space: pre-wrap;
+}
+
+.formula-lab__preview-card--code {
+  background: var(--el-fill-color-darker);
+  border-color: var(--el-border-color-darker);
+}
+
+.formula-lab__preview-card--code .formula-lab__preview-title {
+  color: var(--el-text-color-primary);
+}
+
+.formula-lab__code {
+  margin: 0;
+  min-height: 260px;
+  color: var(--el-text-color-primary);
+  font-family: Consolas, "Courier New", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.formula-lab__validation-item {
+  line-height: 1.7;
+}
+
+.formula-lab__drawer-head {
+  margin-bottom: 16px;
+}
+
+.formula-lab__drawer-head strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--el-text-color-primary);
+}
+
 .formula-lab :deep(.el-empty__description p) {
   color: var(--el-text-color-secondary);
 }
 
 .formula-lab :deep(.el-alert) {
-  border-radius: 16px;
+  border-radius: 8px;
+}
+
+.formula-lab :deep(.json-editor) {
+  background: var(--el-bg-color);
+}
+
+.formula-lab :deep(.json-editor__toolbar),
+.formula-lab :deep(.json-editor__body) {
+  background: var(--el-bg-color);
+  border-color: var(--el-border-color);
+}
+
+.formula-lab :deep(.json-editor__placeholder) {
+  color: var(--el-text-color-placeholder);
 }
 
 .mt12 {
@@ -2218,34 +2610,44 @@ onActivated(async () => {
 
 @media (max-width: 1280px) {
   .formula-lab__metrics,
-  .formula-lab__workspace {
+  .formula-lab__overview-grid,
+  .formula-lab__composer-grid,
+  .formula-lab__guide-grid {
     grid-template-columns: 1fr;
+  }
+
+  .formula-lab__composer-side {
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 }
 
 @media (max-width: 768px) {
-  .formula-lab__hero {
+  .formula-lab__hero,
+  .formula-lab__panel-head,
+  .formula-lab__pattern-head {
     flex-direction: column;
-    padding: 22px 20px;
   }
 
   .formula-lab__title {
-    font-size: 32px;
+    font-size: 26px;
   }
 
   .formula-lab__builder,
-  .formula-lab__toolbox,
   .formula-lab__ledger {
-    padding: 18px;
+    padding: 16px;
   }
 
-  .formula-lab__result-grid {
+  .formula-lab__status-grid,
+  .formula-lab__result-grid,
+  .formula-lab__insert-toolbar {
     grid-template-columns: 1fr;
   }
 
-  .formula-lab__draft-actions {
-    width: 100%;
-    justify-content: flex-start;
+  .formula-lab__section-title {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

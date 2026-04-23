@@ -5,6 +5,7 @@ import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
+import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostCalcInputBatch;
 import com.ruoyi.system.domain.cost.CostCalcTask;
@@ -18,6 +19,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -302,10 +305,11 @@ public class CostRunController extends BaseController {
     @GetMapping("/input-template/fee")
     public AjaxResult feeInputTemplate(@RequestParam("sceneId") Long sceneId,
                                        @RequestParam(value = "versionId", required = false) Long versionId,
+                                       @RequestParam(value = "feeIds", required = false) String feeIds,
                                        @RequestParam(value = "feeId", required = false) Long feeId,
                                        @RequestParam(value = "feeCode", required = false) String feeCode,
                                        @RequestParam(value = "taskType", required = false) String taskType) {
-        return success(runService.buildFeeInputTemplate(sceneId, versionId, feeId, feeCode, taskType));
+        return success(runService.buildFeeInputTemplate(sceneId, versionId, parseLongIdList(feeIds), feeId, feeCode, taskType));
     }
 
     /**
@@ -316,5 +320,19 @@ public class CostRunController extends BaseController {
     @PostMapping("/fee/calculate")
     public AjaxResult calculateFee(@Validated @RequestBody CostFeeCalculateBo bo) {
         return success(runService.calculateFee(bo));
+    }
+
+    private List<Long> parseLongIdList(String ids) {
+        if (StringUtils.isEmpty(ids)) {
+            return Collections.emptyList();
+        }
+        List<Long> result = new ArrayList<>();
+        for (String item : ids.split(",")) {
+            String value = StringUtils.trim(item);
+            if (StringUtils.isNotEmpty(value)) {
+                result.add(Long.valueOf(value));
+            }
+        }
+        return result;
     }
 }
