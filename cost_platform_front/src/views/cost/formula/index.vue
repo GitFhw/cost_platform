@@ -241,6 +241,20 @@
                     </div>
                   </div>
                   <div class="formula-lab__quick-section">
+                    <div class="formula-lab__quick-title">条件骨架速插</div>
+                    <div class="formula-lab__chip-grid">
+                      <button
+                        v-for="item in businessTemplateButtons"
+                        :key="`template-${item.label}`"
+                        type="button"
+                        class="formula-lab__chip"
+                        @click="applyBusinessTemplate(item)"
+                      >
+                        {{ item.label }}
+                      </button>
+                    </div>
+                  </div>
+                  <div class="formula-lab__quick-section">
                     <div class="formula-lab__quick-title">条件比较词速插</div>
                     <div class="formula-lab__chip-grid">
                       <button v-for="item in keywordButtons" :key="`keyword-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
@@ -250,6 +264,20 @@
                     <div class="formula-lab__quick-title">常用函数速插</div>
                     <div class="formula-lab__chip-grid">
                       <button v-for="item in functionButtons" :key="`function-${item.label}`" type="button" class="formula-lab__chip" @click="appendBusinessToken(item.value)">{{ item.label }}</button>
+                    </div>
+                  </div>
+                  <div class="formula-lab__quick-section">
+                    <div class="formula-lab__quick-title">上下文字段速插</div>
+                    <div class="formula-lab__chip-grid">
+                      <button
+                        v-for="item in contextFieldButtons"
+                        :key="`context-${item.label}`"
+                        type="button"
+                        class="formula-lab__chip"
+                        @click="appendBusinessToken(item.value)"
+                      >
+                        {{ item.label }}
+                      </button>
                     </div>
                   </div>
                   <div class="formula-lab__quick-section">
@@ -781,12 +809,41 @@ const keywordButtons = [
   { label: '否则', value: ' 否则 ' },
   { label: '且', value: ' 且 ' },
   { label: '或', value: ' 或 ' },
+  { label: '属于', value: ' 属于 ' },
+  { label: '不属于', value: ' 不属于 ' },
   { label: '等于', value: ' 等于 ' },
   { label: '不等于', value: ' 不等于 ' },
   { label: '大于', value: ' 大于 ' },
   { label: '大于等于', value: ' 大于等于 ' },
   { label: '小于', value: ' 小于 ' },
   { label: '小于等于', value: ' 小于等于 ' }
+]
+
+const businessTemplateButtons = [
+  {
+    label: '条件骨架',
+    value: '如果 条件 那么 结果 否则 结果',
+    placeholder: '条件',
+    desc: '适合先搭出如果/那么/否则结构，再逐段替换条件和结果。'
+  },
+  {
+    label: '属于判断',
+    value: '如果 字段 属于 取值1/取值2 那么 结果 否则 结果',
+    placeholder: '字段',
+    desc: '适合货种、动作、班次等集合判断场景。'
+  },
+  {
+    label: '不属于判断',
+    value: '如果 字段 不属于 取值1/取值2 那么 结果 否则 结果',
+    placeholder: '字段',
+    desc: '适合排除类条件口径。'
+  },
+  {
+    label: '账期判断',
+    value: '如果 账期属于 12/01/02/03 那么 1 否则 0',
+    placeholder: '12/01/02/03',
+    desc: '适合按账期月份集合做条件判断。'
+  }
 ]
 
 const numberButtons = [
@@ -810,6 +867,10 @@ const namespaceTokens = [
   { label: 'C.上下文', value: 'C.', type: 'warning', desc: '场景/版本/账期等运行信息' },
   { label: 'F.费用结果', value: 'F.', type: 'warning', desc: '前序费用结果与试算费用对象' },
   { label: 'T.临时值', value: 'T.', type: 'warning', desc: '预留临时变量空间' }
+]
+
+const contextFieldButtons = [
+  { label: '账期', value: '账期', desc: '映射为运行上下文 C.billMonth' }
 ]
 
 const platformTemplates = [
@@ -973,7 +1034,10 @@ const businessIssueItems = computed(() => {
 const businessTokenDefinitions = computed(() => {
   const keywordDefinitionItems = [
     ...keywordButtons,
+    ...contextFieldButtons,
+    { label: '若账期不属于', value: '若账期不属于', desc: '账期月份排除判断口径' },
     { label: '若账期属于', value: '若账期属于', desc: '账期月份集合判断口径' },
+    { label: '账期不属于', value: '账期不属于', desc: '把月份集合映射为账期排除判断' },
     { label: '账期属于', value: '账期属于', desc: '把月份集合映射为账期判断' },
     { label: '若', value: '若', desc: '条件起始关键字，等同于“如果”' },
     { label: '则', value: '则', desc: '结果承接关键字，等同于“那么”' },
@@ -1048,6 +1112,25 @@ const businessResourceSections = computed(() => {
       title: '条件关键字',
       display: 'tag',
       items: filterItems(keywordButtons.map(item => ({ ...item, type: 'warning' })))
+    },
+    {
+      key: 'template',
+      title: '条件模板',
+      tip: '先插入业务骨架，再替换条件、取值和结果，适合业务人员按口径逐段确认。',
+      display: 'list',
+      items: filterItems(businessTemplateButtons.map(item => ({
+        label: item.label,
+        value: item.value,
+        desc: item.desc,
+        mode: 'template',
+        placeholder: item.placeholder
+      })))
+    },
+    {
+      key: 'context',
+      title: '上下文字段',
+      display: 'tag',
+      items: filterItems(contextFieldButtons.map(item => ({ ...item, type: 'info' })))
     },
     {
       key: 'variable',
@@ -1369,14 +1452,8 @@ function setBusinessFormulaText(text, start = text.length, end = start) {
   focusBusinessEditor(start, end)
 }
 
-function appendBusinessToken(token) {
-  workbench.mode = 'BUSINESS'
-  workbench.templateCode = undefined
+function resolveBusinessInsertRange() {
   const source = String(form.businessFormula || '')
-  const insertText = String(token ?? '')
-  if (!insertText) {
-    return
-  }
   const target = selectedDraftToken.value
   let start = businessCursor.start ?? source.length
   let end = businessCursor.end ?? start
@@ -1394,11 +1471,40 @@ function appendBusinessToken(token) {
     start = businessCursor.start ?? source.length
     end = businessCursor.end ?? start
   }
+  return { source, start, end }
+}
+
+function appendBusinessToken(token) {
+  workbench.mode = 'BUSINESS'
+  workbench.templateCode = undefined
+  const insertText = String(token ?? '')
+  if (!insertText) {
+    return
+  }
+  const { source, start, end } = resolveBusinessInsertRange()
   const nextText = `${source.slice(0, start)}${insertText}${source.slice(end)}`
   const cursor = start + insertText.length
   selectedDraftKey.value = ''
   businessInsertMode.value = 'CURSOR'
   setBusinessFormulaText(nextText, cursor, cursor)
+}
+
+function applyBusinessTemplate(template) {
+  workbench.mode = 'BUSINESS'
+  workbench.templateCode = undefined
+  const templateText = String(template?.value || '')
+  if (!templateText) {
+    return
+  }
+  const { source, start, end } = resolveBusinessInsertRange()
+  const nextText = `${source.slice(0, start)}${templateText}${source.slice(end)}`
+  const placeholderText = String(template?.placeholder || '')
+  const placeholderIndex = placeholderText ? templateText.indexOf(placeholderText) : -1
+  const selectionStart = placeholderIndex >= 0 ? start + placeholderIndex : start + templateText.length
+  const selectionEnd = placeholderIndex >= 0 ? selectionStart + placeholderText.length : selectionStart
+  selectedDraftKey.value = ''
+  businessInsertMode.value = 'CURSOR'
+  setBusinessFormulaText(nextText, selectionStart, selectionEnd)
 }
 
 function removeBusinessToken(token) {
@@ -1626,6 +1732,10 @@ function assignNestedValue(target, path, value) {
 
 function handleAppendResourceToken(payload) {
   if (!payload?.value) {
+    return
+  }
+  if (payload?.item?.mode === 'template') {
+    applyBusinessTemplate(payload.item)
     return
   }
   appendBusinessToken(payload.value)
