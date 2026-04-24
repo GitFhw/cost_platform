@@ -56,12 +56,17 @@ function normalizeBusinessText(source) {
     text = text.replace(pattern, replacement)
   })
   return text
+    .replace(/否则\s+如果/g, '否则如果 ')
+    .replace(/否则如果(?=[^\s(（])/g, '否则如果 ')
+    .replace(/并且/g, ' 且 ')
+    .replace(/或者/g, ' 或 ')
     .replace(/若账期不属于/g, '如果 账期不属于 ')
     .replace(/若账期属于/g, '如果 账期属于 ')
     .replace(/如果(?=[^\s(（])/g, '如果 ')
     .replace(/(^|[\s,，(（])若(?=[^\s])/g, '$1如果 ')
     .replace(/(^|[\s,，(（])若(?=\s)/g, '$1如果')
-    .replace(/否则(?=[^\s)）])/g, '否则 ')
+    .replace(/否则(?!如果)(?=[^\s)）])/g, '否则 ')
+    .replace(/否则\s+如果/g, '否则如果 ')
     .replace(/否则(?:为|取)/g, '否则 ')
     .replace(/那么(?=[^\s(（])/g, '那么 ')
     .replace(/那么(?:为|取)/g, '那么 ')
@@ -283,18 +288,39 @@ function normalizeConditionText(source) {
     text = text.replace(pattern, replacement)
   })
   text = normalizePercentageLiterals(text)
-    .replace(/\b且\b/g, ' and ')
-    .replace(/\b或\b/g, ' or ')
+    .replace(/且/g, ' and ')
+    .replace(/或/g, ' or ')
     .replace(/(?<![><!=])=(?!=)/g, ' == ')
     .replace(/\s+/g, ' ')
     .trim()
   return text
 }
 
+function normalizeConditionLiteralValues(source) {
+  return String(source || '').replace(
+    /(==|!=|>=|<=|>|<)\s*('[^']*'|"[^"]*"|-?\d+(?:\.\d+)?|(?:[VCIFT]\.[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)?|true|false|null|[^\s()]+)(?=\s+(?:and|or)\s+|$|\))/g,
+    (_, operator, rawValue) => {
+      if (/^'.*'$/.test(rawValue) || /^".*"$/.test(rawValue)) {
+        return `${operator} ${rawValue.replace(/^"|"$/g, '\'')}`
+      }
+      if (/^-?\d+(?:\.\d+)?$/.test(rawValue)) {
+        return `${operator} ${rawValue}`
+      }
+      if (/^(?:[VCIFT]\.[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(rawValue)) {
+        return `${operator} ${rawValue}`
+      }
+      if (/^(?:true|false|null)$/.test(rawValue)) {
+        return `${operator} ${rawValue}`
+      }
+      return `${operator} '${String(rawValue).replace(/'/g, "\\'")}'`
+    }
+  )
+}
+
 function compileConditionExpression(source, variableTokens) {
   const text = normalizeConditionText(source)
   const replaced = replaceVariables(text, variableTokens)
-  const expression = normalizeGenericMembership(replaced.text)
+  const expression = normalizeConditionLiteralValues(normalizeGenericMembership(replaced.text))
     .replace(/\s+/g, ' ')
     .trim()
 
@@ -345,14 +371,148 @@ function compileConditionExpression(source, variableTokens) {
   }
 }
 
-function splitInlineIfElseSegments(normalized) {
-  const standardMatch = normalized.match(/^如果\s+(.+?)\s*(?:,)?\s*那么\s+(.+?)\s*(?:,)?\s*否则\s+(.+)$/)
-  if (standardMatch) {
-    return {
-      conditionText: standardMatch[1],
-      trueResultText: standardMatch[2],
-      falseResultText: standardMatch[3]
+function findTopLevelKeyword(source, keyword, startIndex = 0) {
+  let depth = 0
+  let quote = ''
+  for (let index = startIndex; index < source.length; index += 1) {
+    const char = source[index]
+    if (quote) {
+      if (char === quote && source[index - 1] !== '\\') {
+        quote = ''
+      }
+      continue
     }
+    if (char === '\'' || char === '"') {
+      quote = char
+      continue
+    }
+    if (char === '(' || char === '（') {
+      depth += 1
+      continue
+    }
+    if (char === ')' || char === '）') {
+      depth = Math.max(0, depth - 1)
+      continue
+    }
+    if (depth === 0 && source.startsWith(keyword, index)) {
+      return index
+    }
+  }
+  return -1
+}
+
+function trimFormulaSegment(source) {
+  return String(source || '')
+    .trim()
+    .replace(/^[,，;；]\s*/, '')
+    .replace(/\s*[,，;；]$/, '')
+    .trim()
+}
+
+function findNextIfBranchSeparator(source, startIndex = 0) {
+  let depth = 0
+  let quote = ''
+  for (let index = startIndex; index < source.length; index += 1) {
+    const char = source[index]
+    if (quote) {
+      if (char === quote && source[index - 1] !== '\\') {
+        quote = ''
+      }
+      continue
+    }
+    if (char === '\'' || char === '"') {
+      quote = char
+      continue
+    }
+    if (char === '(' || char === '（') {
+      depth += 1
+      continue
+    }
+    if (char === ')' || char === '）') {
+      depth = Math.max(0, depth - 1)
+      continue
+    }
+    if (depth !== 0) {
+      continue
+    }
+    if (source.startsWith('否则如果', index)) {
+      return {
+        type: 'ELSE_IF',
+        index,
+        nextIndex: index + '否则如果'.length
+      }
+    }
+    if (source.startsWith('否则', index)) {
+      return {
+        type: 'ELSE',
+        index,
+        nextIndex: index + '否则'.length
+      }
+    }
+    if (char === ',' || char === '，' || char === ';' || char === '；') {
+      const remainder = source.slice(index + 1)
+      const leadingWhitespaceLength = remainder.match(/^\s*/)?.[0]?.length || 0
+      const nextIndex = index + 1 + leadingWhitespaceLength
+      if (source.startsWith('如果', nextIndex)) {
+        return {
+          type: 'NEXT_IF',
+          index,
+          nextIndex: nextIndex + '如果'.length
+        }
+      }
+    }
+  }
+  return undefined
+}
+
+function splitInlineIfElseSegments(normalized) {
+  if (!normalized.startsWith('如果')) {
+    return undefined
+  }
+  if (findTopLevelKeyword(normalized, '那么') >= 0) {
+    const branches = []
+    let cursor = '如果'.length
+    while (cursor <= normalized.length) {
+      cursor += normalized.slice(cursor).match(/^\s*/)?.[0]?.length || 0
+      const thenIndex = findTopLevelKeyword(normalized, '那么', cursor)
+      if (thenIndex < 0) {
+        return undefined
+      }
+      const conditionText = trimFormulaSegment(normalized.slice(cursor, thenIndex))
+      if (!conditionText) {
+        return undefined
+      }
+      cursor = thenIndex + '那么'.length
+      cursor += normalized.slice(cursor).match(/^\s*/)?.[0]?.length || 0
+      const separator = findNextIfBranchSeparator(normalized, cursor)
+      if (!separator) {
+        const trueResultText = trimFormulaSegment(normalized.slice(cursor))
+        if (!trueResultText) {
+          return undefined
+        }
+        branches.push({ conditionText, trueResultText })
+        return {
+          branches,
+          falseResultText: '0',
+          implicitDefault: true
+        }
+      }
+      const trueResultText = trimFormulaSegment(normalized.slice(cursor, separator.index))
+      if (!trueResultText) {
+        return undefined
+      }
+      branches.push({ conditionText, trueResultText })
+      if (separator.type === 'ELSE') {
+        const falseResultText = trimFormulaSegment(normalized.slice(separator.nextIndex))
+        return {
+          branches,
+          falseResultText: falseResultText || '0',
+          implicitDefault: !falseResultText
+        }
+      }
+      cursor = separator.nextIndex
+    }
+    return undefined
   }
   const compactMatch = normalized.match(/^如果\s+(.+?)\s*否则\s+(.+)$/)
   if (!compactMatch) {
@@ -365,9 +525,12 @@ function splitInlineIfElseSegments(normalized) {
     return undefined
   }
   return {
-    conditionText: inferredMatch[1],
-    trueResultText: inferredMatch[2],
-    falseResultText
+    branches: [{
+      conditionText: inferredMatch[1],
+      trueResultText: inferredMatch[2]
+    }],
+    falseResultText,
+    implicitDefault: false
   }
 }
 
@@ -378,37 +541,53 @@ function compileIfElseFormula(source, variableTokens) {
     return {
       valid: false,
       expression: '',
-      issues: [createIssue('条件公式请使用“如果 ... 那么 ... 否则 ...”结构。', 'error', {
+      issues: [createIssue('条件公式请使用“如果 ... 那么 ... 否则 ...”或“如果 ... 那么 ... 否则如果 ... 那么 ...”结构。', 'error', {
         code: 'INVALID_IF_ELSE',
         fragment: source,
-        suggestion: '例如：如果 女工应出勤 小于等于 0，那么 0，否则 四舍五入(金额, 2)。'
+        suggestion: '例如：如果 女工应出勤 小于等于 0，那么 0，否则 四舍五入(金额, 2)；或 如果 班次 等于 白班，那么 1，否则如果 班次 等于 夜班，那么 2，否则 0。'
       })],
       variableRefs: [],
       feeRefs: []
     }
   }
 
-  const conditionResult = compileConditionExpression(segments.conditionText, variableTokens)
-  const trueResult = compileLiteralOrExpression(segments.trueResultText, variableTokens)
-  const falseResult = compileLiteralOrExpression(segments.falseResultText, variableTokens)
+  const compiledBranches = segments.branches.map(item => ({
+    conditionResult: compileConditionExpression(item.conditionText, variableTokens),
+    trueResult: compileLiteralOrExpression(item.trueResultText, variableTokens)
+  }))
+  const falseResult = compileLiteralOrExpression(segments.falseResultText || '0', variableTokens)
   const issues = [
-    ...conditionResult.issues,
-    ...trueResult.issues,
+    ...compiledBranches.flatMap(item => [
+      ...item.conditionResult.issues,
+      ...item.trueResult.issues
+    ]),
     ...falseResult.issues
   ]
 
+  let expression = ''
+  if (!issues.length) {
+    expression = falseResult.expression
+    for (let index = compiledBranches.length - 1; index >= 0; index -= 1) {
+      expression = `if(${compiledBranches[index].conditionResult.expression}, ${compiledBranches[index].trueResult.expression}, ${expression})`
+    }
+  }
+
   return {
     valid: issues.length === 0,
-    expression: issues.length ? '' : `if(${conditionResult.expression}, ${trueResult.expression}, ${falseResult.expression})`,
+    expression,
     issues,
     variableRefs: [...new Set([
-      ...(conditionResult.variableRefs || []),
-      ...(trueResult.variableRefs || []),
+      ...compiledBranches.flatMap(item => [
+        ...(item.conditionResult.variableRefs || []),
+        ...(item.trueResult.variableRefs || [])
+      ]),
       ...(falseResult.variableRefs || [])
     ])],
     feeRefs: [...new Set([
-      ...(conditionResult.feeRefs || []),
-      ...(trueResult.feeRefs || []),
+      ...compiledBranches.flatMap(item => [
+        ...(item.conditionResult.feeRefs || []),
+        ...(item.trueResult.feeRefs || [])
+      ]),
       ...(falseResult.feeRefs || [])
     ])]
   }

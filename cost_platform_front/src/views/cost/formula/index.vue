@@ -807,8 +807,11 @@ const keywordButtons = [
   { label: '如果', value: '如果 ' },
   { label: '那么', value: ' 那么 ' },
   { label: '否则', value: ' 否则 ' },
+  { label: '否则如果', value: ' 否则如果 ' },
   { label: '且', value: ' 且 ' },
+  { label: '并且', value: ' 并且 ' },
   { label: '或', value: ' 或 ' },
+  { label: '或者', value: ' 或者 ' },
   { label: '属于', value: ' 属于 ' },
   { label: '不属于', value: ' 不属于 ' },
   { label: '等于', value: ' 等于 ' },
@@ -825,6 +828,12 @@ const businessTemplateButtons = [
     value: '如果 条件 那么 结果 否则 结果',
     placeholder: '条件',
     desc: '适合先搭出如果/那么/否则结构，再逐段替换条件和结果。'
+  },
+  {
+    label: '双分支判断',
+    value: '如果 条件一 那么 结果一 否则如果 条件二 那么 结果二 否则 结果',
+    placeholder: '条件一',
+    desc: '适合班次、货种、作业类型等多条件组合取值场景。'
   },
   {
     label: '属于判断',
@@ -1035,6 +1044,9 @@ const businessTokenDefinitions = computed(() => {
   const keywordDefinitionItems = [
     ...keywordButtons,
     ...contextFieldButtons,
+    { label: '否则如果', value: '否则如果', desc: '多分支条件承接关键字，适合第二段及后续分支。' },
+    { label: '并且', value: '并且', desc: '条件并列关键字，等同于“且”。' },
+    { label: '或者', value: '或者', desc: '条件任选关键字，等同于“或”。' },
     { label: '若账期不属于', value: '若账期不属于', desc: '账期月份排除判断口径' },
     { label: '若账期属于', value: '若账期属于', desc: '账期月份集合判断口径' },
     { label: '账期不属于', value: '账期不属于', desc: '把月份集合映射为账期排除判断' },
