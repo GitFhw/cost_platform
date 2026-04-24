@@ -188,7 +188,7 @@
             <el-switch v-model="calcForm.includeExplain" />
           </el-form-item>
           <el-form-item label="输入 JSON" required>
-            <JsonEditor v-model="calcForm.inputJson" title="输入 JSON" :rows="10" :max-length="30000" :allow-empty="false" placeholder="请输入标准计费对象数组，建议至少包含 objectDimension、objectCode、objectName。" />
+            <JsonEditor v-model="calcForm.inputJson" title="输入 JSON" :rows="10" :max-length="1000000" :truncate-on-overflow="false" :allow-empty="false" placeholder="请输入标准计费对象数组，建议至少包含 objectDimension、objectCode、objectName。" />
           </el-form-item>
         </el-form>
         <el-alert v-if="feeResult.recordCount" class="access-page__alert" :closable="false" :title="feeResultSummary" :type="feeResult.failedCount ? 'warning' : 'success'" />
@@ -229,9 +229,9 @@
           </div>
         </div>
         <div class="access-page__editor-stack">
-          <JsonEditor v-if="currentProfile?.sourceType === 'HTTP_API'" v-model="builderForm.requestPayloadJson" title="请求载荷 JSON" :rows="7" :max-length="30000" placeholder="用于调用业务 HTTP 接口的请求载荷；留空则回退为方案内保存的样例请求。" />
-          <JsonEditor v-model="builderForm.rawJson" title="原始 JSON" :rows="9" :max-length="30000" :allow-empty="false" placeholder="支持 JSON 对象或对象数组。" />
-          <JsonEditor v-model="builderForm.mappingJson" title="字段映射 JSON" :rows="7" :max-length="20000" placeholder='可选，例如 {"bizNo":"source.bizNo","objectDimension":"source.teamType","objectCode":"source.teamCode","objectName":"source.teamName","attendance.female.headcount":"source.attendance.female.headcount","oddWork.quantity":"source.odd.hours"}。' />
+          <JsonEditor v-if="currentProfile?.sourceType === 'HTTP_API'" v-model="builderForm.requestPayloadJson" title="请求载荷 JSON" :rows="7" :max-length="300000" :truncate-on-overflow="false" placeholder="用于调用业务 HTTP 接口的请求载荷；留空则回退为方案内保存的样例请求。" />
+          <JsonEditor v-model="builderForm.rawJson" title="原始 JSON" :rows="9" :max-length="1000000" :truncate-on-overflow="false" :allow-empty="false" placeholder="支持 JSON 对象或对象数组。" />
+          <JsonEditor v-model="builderForm.mappingJson" title="字段映射 JSON" :rows="7" :max-length="50000" :truncate-on-overflow="false" placeholder='可选，例如 {"bizNo":"source.bizNo","objectDimension":"source.teamType","objectCode":"source.teamCode","objectName":"source.teamName","attendance.female.headcount":"source.attendance.female.headcount","oddWork.quantity":"source.odd.hours"}。' />
         </div>
         <el-alert v-if="buildPreview.message" class="access-page__alert" :closable="false" :title="buildPreview.message" type="success" />
         <el-alert v-if="buildPreview.fetchMeta" class="access-page__alert" :closable="false" :title="buildPreviewFetchTitle" :description="buildPreviewFetchDescription" type="warning" />

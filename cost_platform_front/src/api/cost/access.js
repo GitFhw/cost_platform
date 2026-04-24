@@ -1,5 +1,7 @@
 import request from '@/utils/request'
 
+const HEAVY_REQUEST_TIMEOUT = 5 * 60 * 1000
+
 export function listAccessProfile(query) {
   return request({
     url: '/cost/access/profile/list',
@@ -50,7 +52,8 @@ export function previewAccessProfileFetch(profileId, data) {
   return request({
     url: '/cost/access/profile/' + profileId + '/preview-fetch',
     method: 'post',
-    data
+    data,
+    timeout: HEAVY_REQUEST_TIMEOUT
   })
 }
 
@@ -58,6 +61,7 @@ export function createInputBatchByAccessProfile(profileId, data) {
   return request({
     url: '/cost/access/profile/' + profileId + '/input-batch',
     method: 'post',
-    data
+    data,
+    timeout: HEAVY_REQUEST_TIMEOUT
   })
 }

@@ -1,5 +1,7 @@
 import request from '@/utils/request'
 
+const HEAVY_REQUEST_TIMEOUT = 5 * 60 * 1000
+
 export function getSimulationStats(query) {
   return request({
     url: '/cost/run/simulation/stats',
@@ -75,7 +77,8 @@ export function createTaskInputBatch(data) {
   return request({
     url: '/cost/run/task/input-batch',
     method: 'post',
-    data
+    data,
+    timeout: HEAVY_REQUEST_TIMEOUT
   })
 }
 
@@ -181,7 +184,8 @@ export function previewBuiltInput(data) {
   return request({
     url: '/cost/run/input-build/preview',
     method: 'post',
-    data
+    data,
+    timeout: HEAVY_REQUEST_TIMEOUT
   })
 }
 
@@ -189,6 +193,7 @@ export function calculateFee(data) {
   return request({
     url: '/cost/run/fee/calculate',
     method: 'post',
-    data
+    data,
+    timeout: HEAVY_REQUEST_TIMEOUT
   })
 }
