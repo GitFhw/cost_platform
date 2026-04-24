@@ -94,6 +94,10 @@ const props = defineProps({
     type: Number,
     default: undefined
   },
+  truncateOnOverflow: {
+    type: Boolean,
+    default: true
+  },
   placeholder: {
     type: String,
     default: '请输入 JSON'
@@ -297,7 +301,13 @@ function handleEditorChange() {
     return
   }
   innerValue.value = currentText
-  resetStatus()
+  if (props.maxLength && currentText.length > props.maxLength) {
+    statusType.value = 'warning'
+    statusText.value = '超出建议长度'
+    statusMessage.value = `当前内容已超过 ${props.maxLength} 字，未自动截断，请确认浏览器与接口处理能力。`
+  } else {
+    resetStatus()
+  }
   clearAnnotations()
   emit('update:modelValue', currentText)
 }
@@ -428,11 +438,13 @@ function limitText(value, notify = true) {
     return text
   }
   if (notify) {
-    statusType.value = 'danger'
-    statusText.value = '超出长度'
-    statusMessage.value = `内容长度不能超过 ${props.maxLength} 字。`
+    statusType.value = props.truncateOnOverflow ? 'danger' : 'warning'
+    statusText.value = props.truncateOnOverflow ? '超出长度' : '超出建议长度'
+    statusMessage.value = props.truncateOnOverflow
+      ? `内容长度不能超过 ${props.maxLength} 字。`
+      : `当前内容已超过 ${props.maxLength} 字，未自动截断，请确认浏览器与接口处理能力。`
   }
-  return text.slice(0, props.maxLength)
+  return props.truncateOnOverflow ? text.slice(0, props.maxLength) : text
 }
 
 function resetStatus() {
@@ -619,6 +631,10 @@ function resolveHeight() {
 
 .json-editor__message.is-danger {
   color: var(--el-color-danger);
+}
+
+.json-editor__message.is-warning {
+  color: var(--el-color-warning);
 }
 
 .json-editor__message.is-info {
