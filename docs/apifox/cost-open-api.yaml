@@ -1,0 +1,482 @@
+﻿openapi: 3.0.3
+info:
+  title: 核算治理开放接口
+  version: 1.0.0
+  description: |
+    面向第三方系统的企业级核算治理开放接口。
+    推荐联调顺序：申请 token -> 查询场景 -> 查询版本 -> 查询费用 -> 生成模板 -> 执行核算。
+servers:
+  - url: http://localhost:8080
+    description: 本地环境
+security:
+  - bearerAuth: []
+tags:
+  - name: 鉴权
+  - name: 场景
+  - name: 模板
+  - name: 核算
+paths:
+  /cost/open/auth/token:
+    post:
+      tags: [鉴权]
+      summary: 申请访问令牌
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenApplyRequest'
+            example:
+              appCode: DEMO_OPEN_APP
+              appSecret: demo-open-secret
+      responses:
+        '200':
+          description: 申请成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AjaxTokenResponse'
+  /cost/open/scenes:
+    get:
+      tags: [场景]
+      summary: 查询可访问场景
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AjaxSceneListResponse'
+  /cost/open/scenes/{sceneId}/versions:
+    get:
+      tags: [场景]
+      summary: 查询场景版本口径
+      parameters:
+        - name: sceneId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AjaxSceneVersionsResponse'
+  /cost/open/scenes/{sceneId}/fees:
+    get:
+      tags: [场景]
+      summary: 查询场景运行费用
+      parameters:
+        - name: sceneId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: versionId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: snapshotMode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ACTIVE, DRAFT]
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AjaxRuntimeFeesResponse'
+  /cost/open/fee-template:
+    get:
+      tags: [模板]
+      summary: 生成费用接入模板
+      parameters:
+        - name: sceneId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: versionId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: snapshotMode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ACTIVE, DRAFT]
+        - name: feeId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: feeIds
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 多费用主键列表，逗号分隔，例如 12,13
+        - name: feeCode
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: taskType
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 模板生成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AjaxFeeTemplateResponse'
+  /cost/open/fee/calculate:
+    post:
+      tags: [核算]
+      summary: 执行单费用/多费用/全费用核算
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeeCalculateRequest'
+            examples:
+              multiFee:
+                summary: 多费用示例
+                value:
+                  sceneId: 1
+                  versionId: 2
+                  snapshotMode: ACTIVE
+                  feeIds: [12, 13]
+                  includeExplain: false
+                  inputJson: '[{"bizNo":"SIM-001","cover":{"action":"moor","cargoType":"块矿","workloadTon":1},"shift":{"name":"白班"}}]'
+      responses:
+        '200':
+          description: 核算成功或业务校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AjaxCalculateResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    AjaxBase:
+      type: object
+      properties:
+        code:
+          type: integer
+        msg:
+          type: string
+    TokenApplyRequest:
+      type: object
+      required: [appCode, appSecret]
+      properties:
+        appCode:
+          type: string
+        appSecret:
+          type: string
+    OpenAppSummary:
+      type: object
+      properties:
+        appCode:
+          type: string
+        appName:
+          type: string
+        sceneScopeType:
+          type: string
+          enum: [ALL, LIST]
+        draftSnapshotAllowed:
+          type: boolean
+        authorizedSceneIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+    AjaxTokenResponse:
+      allOf:
+        - $ref: '#/components/schemas/AjaxBase'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                appCode:
+                  type: string
+                appName:
+                  type: string
+                tokenType:
+                  type: string
+                accessToken:
+                  type: string
+                expiresInSeconds:
+                  type: integer
+                issuedAt:
+                  type: string
+                expiresAt:
+                  type: string
+                draftSnapshotAllowed:
+                  type: boolean
+                sceneScopeType:
+                  type: string
+                authorizedSceneIds:
+                  type: array
+                  items:
+                    type: integer
+                    format: int64
+    SceneItem:
+      type: object
+      properties:
+        sceneId:
+          type: integer
+          format: int64
+        sceneCode:
+          type: string
+        sceneName:
+          type: string
+        businessDomain:
+          type: string
+        defaultObjectDimension:
+          type: string
+        activeVersionId:
+          type: integer
+          format: int64
+        activeVersionNo:
+          type: string
+        status:
+          type: string
+    AjaxSceneListResponse:
+      allOf:
+        - $ref: '#/components/schemas/AjaxBase'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                openApp:
+                  $ref: '#/components/schemas/OpenAppSummary'
+                sceneCount:
+                  type: integer
+                scenes:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/SceneItem'
+    AjaxSceneVersionsResponse:
+      allOf:
+        - $ref: '#/components/schemas/AjaxBase'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                openApp:
+                  $ref: '#/components/schemas/OpenAppSummary'
+                scene:
+                  $ref: '#/components/schemas/SceneItem'
+                defaultSnapshotMode:
+                  type: string
+                supportedSnapshotModes:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      label:
+                        type: string
+                      description:
+                        type: string
+                publishedVersions:
+                  type: array
+                  items:
+                    type: object
+    AjaxRuntimeFeesResponse:
+      allOf:
+        - $ref: '#/components/schemas/AjaxBase'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                openApp:
+                  $ref: '#/components/schemas/OpenAppSummary'
+                scene:
+                  $ref: '#/components/schemas/SceneItem'
+                requestedVersionId:
+                  type: integer
+                  format: int64
+                snapshotMode:
+                  type: string
+                feeCount:
+                  type: integer
+                fees:
+                  type: array
+                  items:
+                    type: object
+    TemplateField:
+      type: object
+      properties:
+        variableCode:
+          type: string
+        variableName:
+          type: string
+        sourceType:
+          type: string
+        dataType:
+          type: string
+        sourceSystem:
+          type: string
+        path:
+          type: string
+        pathLabel:
+          type: string
+        required:
+          type: boolean
+        defaultValue:
+          nullable: true
+        exampleValue:
+          nullable: true
+        includedInTemplate:
+          type: boolean
+        templateRoles:
+          nullable: true
+        sourceRuleCodes:
+          nullable: true
+        dependsOn:
+          nullable: true
+    AjaxFeeTemplateResponse:
+      allOf:
+        - $ref: '#/components/schemas/AjaxBase'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                openApp:
+                  $ref: '#/components/schemas/OpenAppSummary'
+                snapshotMode:
+                  type: string
+                snapshotSource:
+                  type: string
+                sceneId:
+                  type: integer
+                  format: int64
+                sceneCode:
+                  type: string
+                sceneName:
+                  type: string
+                versionId:
+                  type: integer
+                  format: int64
+                versionNo:
+                  type: string
+                fee:
+                  type: object
+                inputContractFieldCount:
+                  type: integer
+                requiredFieldCount:
+                  type: integer
+                inputContractFields:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TemplateField'
+                integrationAdvice:
+                  type: array
+                  items:
+                    type: string
+    FeeCalculateRequest:
+      type: object
+      required: [sceneId, inputJson]
+      properties:
+        sceneId:
+          type: integer
+          format: int64
+        versionId:
+          type: integer
+          format: int64
+        snapshotMode:
+          type: string
+          enum: [ACTIVE, DRAFT]
+        feeId:
+          type: integer
+          format: int64
+        feeIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+        feeCode:
+          type: string
+        billMonth:
+          type: string
+        includeExplain:
+          type: boolean
+        inputJson:
+          type: string
+          description: JSON 对象或对象数组字符串
+    ValidationMessage:
+      type: object
+      properties:
+        recordIndex:
+          type: integer
+        bizNo:
+          type: string
+        variableCode:
+          type: string
+        variableName:
+          type: string
+        path:
+          type: string
+        message:
+          type: string
+    AjaxCalculateResponse:
+      allOf:
+        - $ref: '#/components/schemas/AjaxBase'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                openApp:
+                  $ref: '#/components/schemas/OpenAppSummary'
+                validationPassed:
+                  type: boolean
+                missingFieldCount:
+                  type: integer
+                validationMessages:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ValidationMessage'
+                snapshotMode:
+                  type: string
+                snapshotSource:
+                  type: string
+                targetFeeCount:
+                  type: integer
+                successCount:
+                  type: integer
+                records:
+                  type: array
+                  items:
+                    type: object
