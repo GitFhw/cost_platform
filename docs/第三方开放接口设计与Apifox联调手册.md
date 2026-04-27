@@ -1,470 +1,396 @@
-# 第三方开放接口设计与 Apifox 联调手册
+# 核算治理开放接口设计与 Apifox 联调手册
 
-## 1. 文档定位
+## 1. 目标说明
 
-本文档用于说明企业级成本核算平台第一版第三方开放接口的设计口径、调用顺序、请求参数、响应结构与联调建议，适合第三方系统、实施顾问与接口测试人员直接在 Apifox 中建模调用。
+本手册用于说明企业级成本核算平台对第三方系统开放的接口口径、鉴权模式、时效设计与 Apifox 联调方式。
 
-本版开放接口遵循以下原则：
+当前开放接口采用 **应用级鉴权 + 短时访问令牌** 模式，不建议第三方在每次业务调用时直接传递长期 `appSecret`。
 
-- 接入中心是内部联调与模板准备工作台
-- 开放接口是面向第三方系统的标准调用合同
-- 二者共用同一套核算内核、运行快照与模板口径
-- 第三方既可以按已发布生效版本调用，也可以按未发布草稿配置提前联调
+推荐流程如下：
 
-## 2. 鉴权说明
+1. 第三方先使用 `appCode + appSecret` 申请访问令牌。
+2. 平台返回短时有效的 `accessToken`。
+3. 第三方在后续业务接口中通过 `Authorization: Bearer <accessToken>` 调用。
+4. 当 `accessToken` 过期后，第三方重新申请令牌。
+5. 如果开放应用本身超过平台配置的有效期，则即使重新申请令牌也会被拒绝，需要平台管理员续期后再调用。
 
-第一版开放接口暂复用平台现有 `Bearer Token` 鉴权，不单独引入 `AppKey / AppSecret`。
+---
 
-Apifox 调用时请在全局请求头带上：
+## 2. 应用权限维护设计
+
+后续平台应提供独立的“开放应用管理”功能，用于维护第三方接入方的权限。当前后端能力已经按照该模型设计。
+
+### 2.1 开放应用核心字段
+
+| 字段 | 含义 |
+|---|---|
+| `appCode` | 第三方应用编码，作为公开标识 |
+| `appName` | 第三方应用名称 |
+| `appSecretHash` | 应用密钥摘要值，平台不直接明文存储密钥 |
+| `sceneScopeType` | 场景授权范围，支持 `ALL` 或 `LIST` |
+| `sceneIdsJson` | 当范围为 `LIST` 时，可访问场景主键列表 |
+| `allowDraftSnapshot` | 是否允许联调草稿配置 |
+| `tokenTtlSeconds` | 访问令牌有效期，单位秒 |
+| `effectiveStartTime` | 应用生效时间 |
+| `effectiveEndTime` | 应用失效时间 |
+| `status` | 应用状态，正常/停用 |
+
+### 2.2 权限控制规则
+
+1. 应用停用后，不允许申请令牌。
+2. 应用未到生效时间前，不允许申请令牌。
+3. 应用过了失效时间后，不允许申请令牌。
+4. 应用只允许访问已授权场景。
+5. 未开通草稿权限的应用，只允许使用已发布生效版本，不允许联调 `DRAFT` 快照。
+
+### 2.3 时效性设计
+
+平台侧有两层时效控制：
+
+1. **应用有效期**
+   - 由平台管理员维护。
+   - 控制第三方系统在什么时间段内具备总体调用资格。
+
+2. **访问令牌有效期**
+   - 由 `tokenTtlSeconds` 控制。
+   - 例如 7200 秒表示令牌 2 小时后失效。
+   - 失效后第三方需重新调用令牌申请接口。
+
+这意味着：
+- `accessToken` 过期：第三方自己重新申请即可。
+- `应用有效期` 过期：第三方重新申请也会失败，需管理员续期。
+
+---
+
+## 3. 鉴权流程
+
+### 3.1 申请访问令牌
+
+**接口**
+
+`POST /cost/open/auth/token`
+
+**请求体**
+
+```json
+{
+  "appCode": "DEMO_OPEN_APP",
+  "appSecret": "demo-open-secret"
+}
+```
+
+**成功返回示例**
+
+```json
+{
+  "code": 200,
+  "msg": "开放接口访问令牌申请成功",
+  "data": {
+    "appCode": "DEMO_OPEN_APP",
+    "appName": "开放联调演示应用",
+    "tokenType": "Bearer",
+    "accessToken": "coa_xxxxxxxxxxxxxxxxxxxx",
+    "expiresInSeconds": 7200,
+    "issuedAt": "2026-04-27 12:00:00",
+    "expiresAt": "2026-04-27 14:00:00",
+    "draftSnapshotAllowed": true,
+    "sceneScopeType": "ALL",
+    "authorizedSceneIds": []
+  }
+}
+```
+
+**失败场景示例**
+
+- `appCode` 或 `appSecret` 错误
+- 应用已停用
+- 应用尚未生效
+- 应用已过期
+
+---
+
+## 4. 业务调用时的请求头
+
+申请到令牌后，所有开放接口均通过如下请求头调用：
 
 ```http
-Authorization: Bearer {token}
-Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 ```
 
-建议后续第二版再升级为独立应用级鉴权。
-
-## 3. 快照口径说明
-
-开放接口新增 `snapshotMode` 参数，用于控制当 `versionId` 未指定时走哪套配置：
-
-| snapshotMode | 含义 | 使用场景 |
-|---|---|---|
-| `ACTIVE` | 按当前场景生效版本执行 | 正式联调、生产调用 |
-| `DRAFT` | 按当前场景草稿配置执行 | 发布前联调、业务预演 |
-
-规则如下：
-
-- 如果传了 `versionId`，优先按该发布版本执行
-- 如果没传 `versionId`：
-  - `snapshotMode=ACTIVE`，按场景当前生效版本执行
-  - `snapshotMode=DRAFT`，按场景当前草稿配置执行
-
-## 4. 推荐调用顺序
-
-第三方系统推荐按下面顺序接入：
-
-1. 查询可接入场景
-2. 查询场景发布版本与可用快照模式
-3. 查询指定场景在指定快照下可核算费用
-4. 查询某个或某些费用的输入模板
-5. 按模板准备输入 JSON
-6. 调用单费用或多费用核算接口
-7. 如果报错，根据返回的中文字段校验提示补齐数据后重试
-
-## 5. 开放接口清单
-
-### 5.1 查询可接入场景
-
-- 方法：`GET`
-- 地址：`/cost/open/scenes`
-
-#### 响应示例
+如果未携带令牌或令牌失效，平台会返回类似结果：
 
 ```json
 {
-  "code": 200,
-  "msg": "操作成功",
+  "code": 401,
+  "msg": "开放接口访问令牌已失效，请重新申请 accessToken",
   "data": {
-    "sceneCount": 2,
-    "scenes": [
-      {
-        "sceneId": 1,
-        "sceneCode": "SHOUGANG-ORE-HR-001",
-        "sceneName": "首钢矿石人力费用",
-        "businessDomain": "材料成本",
-        "defaultObjectDimension": "协力单位",
-        "activeVersionId": 12,
-        "activeVersionNo": "V2026.04.002",
-        "status": "0"
-      }
-    ]
+    "tokenType": "Bearer",
+    "tokenApplyPath": "/cost/open/auth/token"
   }
 }
 ```
 
-### 5.2 查询场景版本与快照模式
+---
 
-- 方法：`GET`
-- 地址：`/cost/open/scenes/{sceneId}/versions`
+## 5. 开放接口列表
 
-#### 路径参数
+### 5.1 查询可访问场景
 
-| 参数 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `sceneId` | Long | 是 | 场景主键 |
+**接口**
 
-#### 响应示例
+`GET /cost/open/scenes`
 
-```json
-{
-  "code": 200,
-  "msg": "操作成功",
-  "data": {
-    "scene": {
-      "sceneId": 1,
-      "sceneCode": "SHOUGANG-ORE-HR-001",
-      "sceneName": "首钢矿石人力费用",
-      "businessDomain": "材料成本",
-      "defaultObjectDimension": "协力单位",
-      "activeVersionId": 12,
-      "activeVersionNo": "V2026.04.002",
-      "status": "0"
-    },
-    "defaultSnapshotMode": "ACTIVE",
-    "supportedSnapshotModes": [
-      {
-        "code": "ACTIVE",
-        "label": "生效版本",
-        "description": "未指定 versionId 时，按场景当前生效版本执行。"
-      },
-      {
-        "code": "DRAFT",
-        "label": "草稿配置",
-        "description": "未指定 versionId 时，按场景当前草稿配置执行，适合联调未发布口径。"
-      }
-    ],
-    "publishedVersions": [
-      {
-        "versionId": 12,
-        "versionNo": "V2026.04.002",
-        "versionStatus": "ACTIVE",
-        "publishedTime": "2026-04-24 10:18:22"
-      }
-    ]
-  }
-}
-```
+**用途**
 
-### 5.3 查询指定快照下可核算费用
+返回当前开放应用可访问的场景列表。
 
-- 方法：`GET`
-- 地址：`/cost/open/scenes/{sceneId}/fees`
+---
 
-#### 路径参数
+### 5.2 查询场景版本口径
 
-| 参数 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `sceneId` | Long | 是 | 场景主键 |
+**接口**
 
-#### 查询参数
+`GET /cost/open/scenes/{sceneId}/versions`
 
-| 参数 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `versionId` | Long | 否 | 指定发布版本主键 |
-| `snapshotMode` | String | 否 | `ACTIVE` 或 `DRAFT`，默认 `ACTIVE` |
+**用途**
 
-#### 响应示例
+返回：
+- 当前场景信息
+- 默认快照模式
+- 支持的快照模式
+- 已发布版本列表
 
-```json
-{
-  "code": 200,
-  "msg": "操作成功",
-  "data": {
-    "scene": {
-      "sceneId": 1,
-      "sceneCode": "SHOUGANG-ORE-HR-001",
-      "sceneName": "首钢矿石人力费用"
-    },
-    "requestedVersionId": 12,
-    "snapshotMode": "ACTIVE",
-    "feeCount": 14,
-    "fees": [
-      {
-        "sceneId": 1,
-        "sceneCode": "SHOUGANG-ORE-HR-001",
-        "sceneName": "首钢矿石人力费用",
-        "versionId": 12,
-        "versionNo": "V2026.04.002",
-        "snapshotSource": "PUBLISHED",
-        "feeId": 101,
-        "feeCode": "SG_FEMALE_SHIFT_LABOR",
-        "feeName": "女工固定类劳务费",
-        "unitCode": "元",
-        "objectDimension": "协力单位",
-        "sortNo": 20,
-        "ruleCount": 1,
-        "executionVariableCount": 3
-      }
-    ]
-  }
-}
-```
+---
 
-### 5.4 查询费用输入模板
+### 5.3 查询场景运行费用
 
-- 方法：`GET`
-- 地址：`/cost/open/fee-template`
+**接口**
 
-#### 查询参数
+`GET /cost/open/scenes/{sceneId}/fees?versionId=xxx&snapshotMode=ACTIVE`
 
-| 参数 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `sceneId` | Long | 是 | 场景主键 |
-| `versionId` | Long | 否 | 发布版本主键 |
-| `snapshotMode` | String | 否 | `ACTIVE` 或 `DRAFT` |
-| `feeIds` | String | 否 | 多个费用主键，逗号分隔 |
-| `feeId` | Long | 否 | 单个费用主键 |
-| `feeCode` | String | 否 | 单个费用编码 |
-| `taskType` | String | 否 | 单笔或批量模板，可选 `FORMAL_SINGLE`、`FORMAL_BATCH`、`SIMULATION_SINGLE`、`SIMULATION_BATCH` |
+**用途**
 
-#### 说明
+查询当前版本/快照下可执行的费用列表。
 
-- `feeIds`、`feeId`、`feeCode` 三者可任选其一
-- 如果三者都不传，则按当前场景全费用执行链生成模板
-- 多费用时会自动补齐依赖费用链，不需要第三方自行分析前置费用
+---
 
-#### 响应重点字段
+### 5.4 生成费用接入模板
 
-| 字段 | 说明 |
+**接口**
+
+`GET /cost/open/fee-template`
+
+**主要参数**
+
+| 参数 | 说明 |
 |---|---|
-| `snapshotSource` | 当前模板来自 `PUBLISHED` 还是 `DRAFT` |
-| `fee` | 当前目标费用视图 |
-| `targetFeeCodes` | 目标费用编码列表 |
-| `executionFeeCodes` | 实际执行费用编码列表，已自动补齐依赖费用 |
-| `dependentFeeCodes` | 依赖费用编码列表 |
-| `inputJson` | 系统自动生成的示例输入 JSON |
-| `inputContractFields` | 适合第三方消费的字段合同清单 |
-| `requiredFieldCount` | 真正需要第三方显式传值的字段数；如果变量配置了默认值或兜底策略，则可能出现在模板里但不是必填 |
+| `sceneId` | 场景主键，必填 |
+| `versionId` | 版本主键，可选 |
+| `snapshotMode` | `ACTIVE` 或 `DRAFT` |
+| `feeId` | 单费用主键，可选 |
+| `feeIds` | 多费用主键列表，逗号分隔，可选 |
+| `feeCode` | 费用编码，可选 |
+| `taskType` | 任务类型，可选 |
 
-#### 响应示例
+**用途**
 
-以下示例使用“苫盖零工劳务费”说明一个存在明确必填字段的费用模板：
+用于告诉第三方：
+- 当前费用口径需要哪些变量
+- 每个变量对应什么中文名称
+- 来源路径是什么
+- 是否必填
+- 是否有默认值
+- 示例值是什么
 
-```json
-{
-  "code": 200,
-  "msg": "操作成功",
-  "data": {
-    "sceneId": 1,
-    "sceneCode": "SHOUGANG-ORE-HR-001",
-    "sceneName": "首钢矿石人力费用",
-    "versionId": null,
-    "versionNo": "草稿版本",
-    "snapshotSource": "DRAFT",
-    "snapshotMode": "DRAFT",
-    "taskType": "FORMAL_SINGLE",
-    "fee": {
-      "feeCode": "SG_COVER_ODD_JOB_LABOR",
-      "feeName": "苫盖零工劳务费"
-    },
-    "targetFeeCount": 1,
-    "executionFeeCount": 1,
-    "inputContractFieldCount": 3,
-    "requiredFieldCount": 3,
-    "inputContractFields": [
-      {
-        "variableCode": "COVER_ACTION",
-        "variableName": "苫盖动作",
-        "sourceType": "INPUT",
-        "dataType": "STRING",
-        "path": "coverWork.action",
-        "pathLabel": "coverWork.action",
-        "required": true,
-        "defaultValue": null,
-        "exampleValue": "COVER",
-        "includedInTemplate": true,
-        "templateRoles": ["CONDITION"]
-      }
-    ],
-    "inputJson": "{...}",
-    "integrationAdvice": [
-      "当前模板来自草稿配置，适合联调未发布规则；正式接入上线前建议再按生效版本回归一次。",
-      "当前模板已按目标费用及其依赖费用执行链收敛，只需要准备相关字段。"
-    ]
-  }
-}
-```
+这一步是第三方联调的核心入口。
 
-### 5.5 单费用或多费用核算
+---
 
-- 方法：`POST`
-- 地址：`/cost/open/fee/calculate`
+### 5.5 单费用 / 多费用核算
 
-#### 请求体
+**接口**
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `sceneId` | Long | 是 | 场景主键 |
-| `versionId` | Long | 否 | 发布版本主键 |
-| `snapshotMode` | String | 否 | `ACTIVE` 或 `DRAFT` |
-| `feeId` | Long | 否 | 单个费用主键 |
-| `feeIds` | Array<Long> | 否 | 多个费用主键 |
-| `feeCode` | String | 否 | 单个费用编码 |
-| `billMonth` | String | 否 | 账期，格式 `yyyy-MM` |
-| `includeExplain` | Boolean | 否 | 是否返回轻量解释信息 |
-| `inputJson` | String | 是 | JSON 对象或 JSON 对象数组的字符串 |
+`POST /cost/open/fee/calculate`
 
-#### 单费用请求示例
+**请求体示例**
 
 ```json
 {
   "sceneId": 1,
-  "snapshotMode": "DRAFT",
-  "feeCode": "SG_FEMALE_SHIFT_LABOR",
-  "includeExplain": true,
-  "inputJson": "{\"bizNo\":\"OPEN-001\",\"femaleTeam\":{\"headcount\":6,\"actualAttendance\":6,\"requiredAttendance\":6}}"
+  "versionId": 2,
+  "snapshotMode": "ACTIVE",
+  "feeIds": [12, 13],
+  "inputJson": "[{\"bizNo\":\"SIM-001\",\"oddWork\":{\"quantity\":1},\"cover\":{\"action\":\"moor\"}}]"
 }
 ```
 
-#### 多费用请求示例
+**说明**
 
-```json
-{
-  "sceneId": 1,
-  "versionId": 12,
-  "feeIds": [101, 102],
-  "includeExplain": false,
-  "inputJson": "[{\"bizNo\":\"OPEN-001\",\"femaleTeam\":{\"headcount\":6,\"actualAttendance\":6,\"requiredAttendance\":6},\"coverWork\":{\"action\":\"COVER\",\"cargoType\":\"COAL\",\"workloadTon\":1000}}]"
-}
-```
+- 支持单对象
+- 支持对象数组
+- 支持单费用、多费用、全费用
+- 多费用时系统会自动补齐依赖费用链
 
-#### 成功响应示例
+---
 
-```json
-{
-  "code": 200,
-  "msg": "操作成功",
-  "data": {
-    "sceneId": 1,
-    "sceneCode": "SHOUGANG-ORE-HR-001",
-    "sceneName": "首钢矿石人力费用",
-    "versionId": 12,
-    "versionNo": "V2026.04.002",
-    "snapshotSource": "PUBLISHED",
-    "snapshotMode": "ACTIVE",
-    "fee": {
-      "scope": "MULTI",
-      "feeCodes": ["SG_FEMALE_SHIFT_LABOR", "SG_COVER_ODD_JOB_LABOR"]
-    },
-    "targetFeeCount": 2,
-    "executionFeeCount": 2,
-    "includeExplain": false,
-    "inputCount": 1,
-    "recordCount": 2,
-    "successCount": 2,
-    "noMatchCount": 0,
-    "failedCount": 0,
-    "durationMs": 12,
-    "validationPassed": true,
-    "records": [
-      {
-        "recordIndex": 1,
-        "bizNo": "OPEN-001",
-        "feeCode": "SG_FEMALE_SHIFT_LABOR",
-        "feeName": "女工固定类劳务费",
-        "status": "SUCCESS",
-        "ruleCode": "SG_FEMALE_SHIFT_FORMULA_01",
-        "amountValue": 7233.33
-      }
-    ]
-  }
-}
-```
+## 6. 输入校验设计
 
-#### 缺字段错误响应示例
+开放接口不是直接“算错就结束”，而是先做模板口径校验。
+
+当第三方少传了必填字段时，返回会明确指出：
+- 哪一条记录有问题
+- 哪个变量缺失
+- 中文变量名是什么
+- 要走哪个来源路径补齐
+
+**示例返回**
 
 ```json
 {
   "code": 500,
-  "msg": "输入数据缺少模板要求字段，请先补齐后再核算",
+  "msg": "输入数据缺少模板要求字段，请补齐后再重新取价",
   "data": {
-    "sceneId": 1,
-    "sceneCode": "SHOUGANG-ORE-HR-001",
-    "sceneName": "首钢矿石人力费用",
-    "versionNo": "草稿版本",
-    "snapshotSource": "DRAFT",
-    "snapshotMode": "DRAFT",
     "validationPassed": false,
     "missingFieldCount": 2,
     "validationMessages": [
       {
         "recordIndex": 1,
-        "bizNo": "OPEN-VAL-001",
-        "variableCode": "FEMALE_ACTUAL_ATTENDANCE",
-        "variableName": "女工实际出勤",
-        "path": "femaleTeam.actualAttendance",
-        "message": "缺少必需字段 女工实际出勤，请按来源路径补齐：femaleTeam.actualAttendance"
+        "bizNo": "SIM-001",
+        "variableCode": "COVER_ACTION",
+        "variableName": "苦盖动作",
+        "path": "cover.action",
+        "message": "缺少必填字段 苦盖动作，请按来源路径补齐：cover.action"
       }
     ]
   }
 }
 ```
 
-## 6. Apifox 建议配置
+这类提示信息就是给第三方联调时定位问题用的，避免只返回“参数错误”而没有业务语义。
 
-### 6.1 环境变量
+---
 
-建议在 Apifox 配置以下环境变量：
+## 7. 快照模式说明
 
-- `{{host}}`：接口域名，例如 `http://127.0.0.1:8080`
-- `{{token}}`：登录后 Bearer Token
-- `{{sceneId}}`：联调场景主键
-- `{{versionId}}`：发布版本主键
+### 7.1 ACTIVE
 
-### 6.2 全局请求头
+- 表示按已发布生效版本执行。
+- 适合正式接入与生产调用。
+
+### 7.2 DRAFT
+
+- 表示按草稿配置执行。
+- 适合第三方联调、预验证、开发阶段核对。
+- 只有被授予 `allowDraftSnapshot = true` 的开放应用才允许调用。
+
+如果第三方没有草稿联调权限，却传了 `snapshotMode=DRAFT`，会收到 `403` 级业务错误提示。
+
+---
+
+## 8. 推荐给第三方的调用顺序
+
+建议第三方系统严格按以下顺序接入：
+
+1. 申请访问令牌
+2. 查询可访问场景
+3. 查询场景可用版本
+4. 查询场景费用列表
+5. 生成目标费用模板
+6. 按模板准备 JSON 数据
+7. 调用费用核算接口
+8. 根据返回结果修正字段或正式接入
+
+这样能显著减少第三方拍脑袋组 JSON 的试错成本。
+
+---
+
+## 9. Apifox 联调建议
+
+### 9.1 环境变量建议
+
+在 Apifox 中配置如下环境变量：
+
+| 变量名 | 示例值 |
+|---|---|
+| `baseUrl` | `http://localhost:8080` |
+| `appCode` | `DEMO_OPEN_APP` |
+| `appSecret` | `demo-open-secret` |
+| `accessToken` | 通过令牌接口动态写入 |
+| `sceneId` | `1` |
+| `versionId` | `1` |
+
+### 9.2 令牌接口调试
+
+先创建一个“申请访问令牌”接口，请求成功后将 `data.accessToken` 写入环境变量 `accessToken`。
+
+### 9.3 后续接口统一请求头
+
+在 Apifox 全局鉴权或单接口请求头中配置：
 
 ```http
-Authorization: Bearer {{token}}
-Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 ```
 
-### 6.3 调用分组建议
+### 9.4 令牌过期处理
 
-Apifox 中建议按下列分组建接口：
+如果接口返回：
+- `开放接口访问令牌已失效`
+- `缺少开放接口访问令牌`
 
-1. 开放场景
-2. 开放版本
-3. 开放费用
-4. 开放模板
-5. 开放核算
+则说明应重新调用 `/cost/open/auth/token` 获取新令牌。
 
-## 7. 联调建议
+---
 
-- 第三方不要手工猜字段，请先调用费用模板接口，再按 `inputContractFields` 组织请求
-- 如果业务尚未发布，请统一使用 `snapshotMode=DRAFT`
-- 如果准备上线，请改用 `versionId` 或 `snapshotMode=ACTIVE` 再回归
-- 多费用核算时，只关心目标费用即可，平台会自动补齐依赖费用执行链
-- 字段缺失时优先看 `validationMessages`，里面已经带了中文名称和来源路径
+## 10. 演示应用账号
 
-## 8. 当前压测基线
+当前初始化 SQL 中已提供两套演示应用：
 
-以下为当前环境手工压测基线，可作为第三方联调预期参考：
+### 10.1 开放联调演示应用
 
-### 8.1 全费用同步取价
+- `appCode`: `DEMO_OPEN_APP`
+- `appSecret`: `demo-open-secret`
+- 权限：允许 `ACTIVE` + `DRAFT`
 
-- 输入记录数：1000
-- 目标费用数：14
-- 实际执行费用数：14
-- 总耗时：1723ms
-- 吞吐：580.38 records/s
+### 10.2 开放生产演示应用
 
-### 8.2 单费用同步取价
+- `appCode`: `DEMO_PUBLISHED_APP`
+- `appSecret`: `demo-published-secret`
+- 权限：仅允许 `ACTIVE`
 
-- 输入记录数：1000
-- 目标费用数：1
-- 实际执行费用数：1
-- 总耗时：417ms
-- 吞吐：2398.08 records/s
+---
 
-### 8.3 多费用同步取价
+## 11. 企业级建议
 
-- 输入记录数：1000
-- 目标费用数：2
-- 实际执行费用数：11
-- 总耗时：2058ms
-- 吞吐：485.91 records/s
+从企业级产品角度，建议后续继续完善以下能力：
 
-说明：
+1. 开放应用管理页面
+   - 应用新增、停用、续期、重置密钥、场景授权、草稿权限维护
 
-- 多费用场景中执行费用数大于目标费用数，是因为平台自动补齐了依赖费用链
-- 这是企业级核算产品的预期行为，有助于保证第三方请求结果完整、稳定、可解释
+2. 调用审计台账
+   - 记录第三方应用的模板拉取、核算调用、错误分布与高频费用口径
 
-## 9. 后续规划
+3. 密钥轮换机制
+   - 支持管理员重置 `appSecret`
+   - 旧密钥失效，新密钥重新分发
 
-后续建议继续演进：
+4. 调用频控与告警
+   - 防止单应用异常高频压测拖垮服务
 
-1. 第二版开放接口鉴权升级为 `AppKey / AppSecret / 签名`
-2. 增加开放接口调用日志与限流能力
-3. 增加按场景导出标准字段字典与对象结构示意
-4. 提供 OpenAPI/Swagger JSON，便于 Apifox 一键导入
+5. 文档自动化
+   - 后续可把开放接口整理为在线 Swagger / OpenAPI 文档，便于 Apifox 一键导入
+
+---
+
+## 12. 结论
+
+当前开放接口设计推荐采用：
+
+- **应用级长期身份**：`appCode + appSecret`
+- **接口级短期访问凭证**：`accessToken`
+- **平台时效控制**：应用有效期 + 令牌有效期双层限制
+
+这套方式兼顾了：
+- 企业级安全性
+- 第三方实际可用性
+- 联调效率
+- 后续治理扩展能力
