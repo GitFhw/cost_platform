@@ -61,12 +61,20 @@ public interface ICostRunService {
 
     List<Map<String, Object>> selectVersionOptions(Long sceneId);
 
+    List<Map<String, Object>> selectRuntimeFeeOptions(Long sceneId, Long versionId, String snapshotMode);
+
     Map<String, Object> buildInputTemplate(Long sceneId, Long versionId, String taskType);
 
     Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, Long feeId, String feeCode, String taskType);
 
+    Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, Long feeId, String feeCode,
+                                              String taskType, String snapshotMode);
+
     Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, List<Long> feeIds, Long feeId,
                                               String feeCode, String taskType);
+
+    Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, List<Long> feeIds, Long feeId,
+                                              String feeCode, String taskType, String snapshotMode);
 
     Map<String, Object> previewBuiltInput(CostInputBuildPreviewBo bo);
 

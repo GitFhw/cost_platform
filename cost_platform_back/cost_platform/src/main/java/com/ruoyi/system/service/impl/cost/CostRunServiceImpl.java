@@ -75,6 +75,8 @@ public class CostRunServiceImpl implements ICostRunService {
     private static final String PARTITION_STAGE_SINGLE_PERSIST = "SINGLE_PERSIST";
     private static final String OP_EXPR = "EXPR";
     private static final String INTERVAL_LCRO = "LEFT_CLOSED_RIGHT_OPEN";
+    private static final String SNAPSHOT_MODE_ACTIVE = "ACTIVE";
+    private static final String SNAPSHOT_MODE_DRAFT = "DRAFT";
     private static final String RUNTIME_CACHE_PREFIX = "cost:runtime:snapshot:";
     private static final DateTimeFormatter NO_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final DecimalFormat PARTITION_FORMAT = new DecimalFormat("000");
@@ -1107,6 +1109,31 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     @Override
+    public List<Map<String, Object>> selectRuntimeFeeOptions(Long sceneId, Long versionId, String snapshotMode) {
+        RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false,
+            preferDraftSnapshotWhenVersionMissing(snapshotMode));
+        return snapshot.fees.stream().map(fee -> {
+            LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+            item.put("sceneId", snapshot.sceneId);
+            item.put("sceneCode", snapshot.sceneCode);
+            item.put("sceneName", snapshot.sceneName);
+            item.put("versionId", snapshot.versionId);
+            item.put("versionNo", snapshot.versionNo);
+            item.put("snapshotSource", snapshot.snapshotSource);
+            item.put("feeId", fee.feeId);
+            item.put("feeCode", fee.feeCode);
+            item.put("feeName", fee.feeName);
+            item.put("unitCode", fee.unitCode);
+            item.put("objectDimension", fee.objectDimension);
+            item.put("sortNo", fee.sortNo);
+            item.put("ruleCount", snapshot.rulesByFeeCode.getOrDefault(fee.feeCode, Collections.emptyList()).size());
+            item.put("executionVariableCount", snapshot.executionVariablesByFeeCode
+                .getOrDefault(fee.feeCode, Collections.emptyList()).size());
+            return item;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
     public Map<String, Object> buildInputTemplate(Long sceneId, Long versionId, String taskType) {
         String normalizedTaskType = normalizeTemplateTaskType(taskType);
         RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false, isSimulationTaskType(normalizedTaskType));
@@ -1127,13 +1154,27 @@ public class CostRunServiceImpl implements ICostRunService {
 
     @Override
     public Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, Long feeId, String feeCode, String taskType) {
-        return buildFeeInputTemplate(sceneId, versionId, Collections.emptyList(), feeId, feeCode, taskType);
+        return buildFeeInputTemplate(sceneId, versionId, Collections.emptyList(), feeId, feeCode, taskType, null);
+    }
+
+    @Override
+    public Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, Long feeId, String feeCode,
+                                                     String taskType, String snapshotMode) {
+        return buildFeeInputTemplate(sceneId, versionId, Collections.emptyList(), feeId, feeCode, taskType,
+            snapshotMode);
     }
 
     @Override
     public Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, List<Long> feeIds, Long feeId,
                                                      String feeCode, String taskType) {
-        RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false);
+        return buildFeeInputTemplate(sceneId, versionId, feeIds, feeId, feeCode, taskType, null);
+    }
+
+    @Override
+    public Map<String, Object> buildFeeInputTemplate(Long sceneId, Long versionId, List<Long> feeIds, Long feeId,
+                                                     String feeCode, String taskType, String snapshotMode) {
+        RuntimeSnapshot snapshot = loadRuntimeSnapshot(sceneId, versionId, false,
+            preferDraftSnapshotWhenVersionMissing(snapshotMode));
         List<RuntimeFee> targetFees = resolveTargetRuntimeFees(snapshot, feeIds, feeId, feeCode);
         boolean allFeeScope = isAllFeeScope(snapshot, targetFees);
         List<RuntimeFee> executionFees = allFeeScope ? snapshot.fees : resolveFeeExecutionChains(snapshot, targetFees);
@@ -1191,7 +1232,8 @@ public class CostRunServiceImpl implements ICostRunService {
 
     @Override
     public Map<String, Object> calculateFee(CostFeeCalculateBo bo) {
-        RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false);
+        RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), false,
+            preferDraftSnapshotWhenVersionMissing(bo.getSnapshotMode()));
         List<RuntimeFee> targetFees = resolveTargetRuntimeFees(snapshot, bo.getFeeIds(), bo.getFeeId(), bo.getFeeCode());
         boolean allFeeScope = isAllFeeScope(snapshot, targetFees);
         List<RuntimeFee> executionFees = allFeeScope ? snapshot.fees : resolveFeeExecutionChains(snapshot, targetFees);
@@ -2081,6 +2123,18 @@ public class CostRunServiceImpl implements ICostRunService {
             return TASK_TYPE_FORMAL_SINGLE;
         }
         return taskType.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeSnapshotMode(String snapshotMode) {
+        if (StringUtils.isEmpty(snapshotMode)) {
+            return SNAPSHOT_MODE_ACTIVE;
+        }
+        return SNAPSHOT_MODE_DRAFT.equalsIgnoreCase(snapshotMode.trim())
+            ? SNAPSHOT_MODE_DRAFT : SNAPSHOT_MODE_ACTIVE;
+    }
+
+    private boolean preferDraftSnapshotWhenVersionMissing(String snapshotMode) {
+        return SNAPSHOT_MODE_DRAFT.equals(normalizeSnapshotMode(snapshotMode));
     }
 
     private RuntimeSnapshot loadRuntimeSnapshot(Long sceneId, Long versionId, boolean requireFormalVersion) {

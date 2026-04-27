@@ -308,8 +308,10 @@ public class CostRunController extends BaseController {
                                        @RequestParam(value = "feeIds", required = false) String feeIds,
                                        @RequestParam(value = "feeId", required = false) Long feeId,
                                        @RequestParam(value = "feeCode", required = false) String feeCode,
-                                       @RequestParam(value = "taskType", required = false) String taskType) {
-        return success(runService.buildFeeInputTemplate(sceneId, versionId, parseLongIdList(feeIds), feeId, feeCode, taskType));
+                                       @RequestParam(value = "taskType", required = false) String taskType,
+                                       @RequestParam(value = "snapshotMode", required = false) String snapshotMode) {
+        return success(runService.buildFeeInputTemplate(sceneId, versionId, parseLongIdList(feeIds), feeId, feeCode,
+            taskType, snapshotMode));
     }
 
     /**
