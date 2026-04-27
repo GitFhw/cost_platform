@@ -11,6 +11,7 @@
       </div>
       <div class="open-app-page__hero-actions">
         <el-button icon="Connection" @click="router.push(COST_MENU_ROUTES.access)">打开接入中心</el-button>
+        <el-button icon="Document" @click="activeDetailTab = 'manual'">查看调用手册</el-button>
         <el-button type="primary" icon="Plus" @click="handleOpenDialog('add')" v-hasPermi="['cost:openApp:add']">新建开放应用</el-button>
       </div>
     </section>
@@ -139,36 +140,47 @@
           <div class="open-app-page__section-head">
             <div>
               <h3>配置中心</h3>
-              <p>查看当前应用的场景授权、令牌口径、草稿联调边界和对外联调提示。</p>
+              <p>查看当前应用的场景授权、令牌口径、草稿联调边界和对外调用契约。</p>
             </div>
             <div v-if="currentApp" class="open-app-page__detail-actions">
-              <el-button text icon="CopyDocument" @click="copyText(currentApp.appCode, '应用编码已复制')">复制 AppId</el-button>
+              <el-button text icon="CopyDocument" @click="copyText(currentApp.appCode, '应用编码已复制')">复制 AppCode</el-button>
               <el-button text icon="Key" @click="handleResetSecret" v-hasPermi="['cost:openApp:resetSecret']">重置密钥</el-button>
             </div>
           </div>
 
-          <template v-if="currentApp">
-            <div class="open-app-page__detail-summary">
-              <div v-for="item in currentSummaryItems" :key="item.label" class="open-app-page__summary-card">
-                <span>{{ item.label }}</span>
-                <strong>{{ item.value }}</strong>
-                <small>{{ item.desc }}</small>
-              </div>
+          <div v-if="currentApp" class="open-app-page__detail-summary">
+            <div v-for="item in currentSummaryItems" :key="item.label" class="open-app-page__summary-card">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.desc }}</small>
             </div>
+          </div>
 
-            <el-tabs class="open-app-page__detail-tabs">
-              <el-tab-pane label="基本信息">
-                <el-descriptions :column="1" border>
-                  <el-descriptions-item label="应用编码">{{ currentApp.appCode }}</el-descriptions-item>
-                  <el-descriptions-item label="应用名称">{{ currentApp.appName }}</el-descriptions-item>
-                  <el-descriptions-item label="鉴权方式">AppId + AppSecret 换取 Bearer Token</el-descriptions-item>
-                  <el-descriptions-item label="令牌时长">{{ formatTokenTtl(currentApp.tokenTtlSeconds) }}（{{ currentApp.tokenTtlSeconds }} 秒）</el-descriptions-item>
-                  <el-descriptions-item label="创建人">{{ currentApp.createBy || '-' }}</el-descriptions-item>
-                  <el-descriptions-item label="更新时间">{{ currentApp.updateTime || currentApp.createTime || '-' }}</el-descriptions-item>
-                  <el-descriptions-item label="备注">{{ currentApp.remark || '未填写' }}</el-descriptions-item>
-                </el-descriptions>
-              </el-tab-pane>
-              <el-tab-pane label="授权范围">
+          <el-alert
+            v-else
+            class="open-app-page__selection-tip"
+            :closable="false"
+            type="info"
+            show-icon
+            title="当前尚未选中开放应用"
+            description="你可以先在左侧台账里选中一个应用查看授权边界，也可以先阅读下方的调用手册和开放接口契约。"
+          />
+
+          <el-tabs v-model="activeDetailTab" class="open-app-page__detail-tabs">
+            <el-tab-pane label="基本信息" name="base">
+              <el-descriptions v-if="currentApp" :column="1" border>
+                <el-descriptions-item label="应用编码">{{ currentApp.appCode }}</el-descriptions-item>
+                <el-descriptions-item label="应用名称">{{ currentApp.appName }}</el-descriptions-item>
+                <el-descriptions-item label="鉴权方式">AppCode + AppSecret 换取 Bearer Token</el-descriptions-item>
+                <el-descriptions-item label="令牌时长">{{ formatTokenTtl(currentApp.tokenTtlSeconds) }}（{{ currentApp.tokenTtlSeconds }} 秒）</el-descriptions-item>
+                <el-descriptions-item label="创建人">{{ currentApp.createBy || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="更新时间">{{ currentApp.updateTime || currentApp.createTime || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="备注">{{ currentApp.remark || '未填写' }}</el-descriptions-item>
+              </el-descriptions>
+              <el-empty v-else :image-size="56" description="请选择开放应用后查看基础配置。" />
+            </el-tab-pane>
+            <el-tab-pane label="授权范围" name="scope">
+              <template v-if="currentApp">
                 <el-alert
                   :closable="false"
                   show-icon
@@ -189,37 +201,127 @@
                   </el-tag>
                   <el-empty v-if="!currentSceneNames.length && currentApp.sceneScopeType !== 'ALL'" :image-size="56" description="当前没有配置可访问场景" />
                 </div>
-              </el-tab-pane>
-              <el-tab-pane label="联调约束">
-                <div class="open-app-page__advice-list">
-                  <el-alert
-                    :closable="false"
-                    show-icon
-                    :type="currentApp.allowDraftSnapshot ? 'success' : 'warning'"
-                    :title="currentApp.allowDraftSnapshot ? '已允许草稿联调' : '当前只允许使用生效版本'"
-                    :description="currentApp.allowDraftSnapshot
-                      ? '第三方可以在接口请求中显式切到草稿快照做联调，但仍建议正式接入时使用已发布生效版本。'
-                      : '第三方调用时只能基于当前生效版本口径。若需联调草稿规则，请先由管理员开通草稿权限。'"
-                  />
-                  <el-alert
-                    :closable="false"
-                    show-icon
-                    type="info"
-                    title="时效策略"
-                    :description="buildEffectiveDescription(currentApp)"
-                  />
-                  <el-alert
-                    :closable="false"
-                    show-icon
-                    type="info"
-                    title="对外调用流程"
-                    description="1) 用 appCode + appSecret 申请 token；2) 查询可访问场景与费用模板；3) 用 Bearer Token 调用单费用或多费用核算接口；4) token 过期后重新申请。"
-                  />
+              </template>
+              <el-empty v-else :image-size="56" description="请选择开放应用后查看场景授权边界。" />
+            </el-tab-pane>
+            <el-tab-pane label="联调约束" name="governance">
+              <div v-if="currentApp" class="open-app-page__advice-list">
+                <el-alert
+                  :closable="false"
+                  show-icon
+                  :type="currentApp.allowDraftSnapshot ? 'success' : 'warning'"
+                  :title="currentApp.allowDraftSnapshot ? '已允许草稿联调' : '当前只允许使用生效版本'"
+                  :description="currentApp.allowDraftSnapshot
+                    ? '第三方可以在接口请求中显式切到草稿快照做联调，但仍建议正式接入时使用已发布生效版本。'
+                    : '第三方调用时只能基于当前生效版本口径。若需联调草稿规则，请先由管理员开通草稿权限。'"
+                />
+                <el-alert
+                  :closable="false"
+                  show-icon
+                  type="info"
+                  title="时效策略"
+                  :description="buildEffectiveDescription(currentApp)"
+                />
+                <el-alert
+                  :closable="false"
+                  show-icon
+                  type="info"
+                  title="对外调用流程"
+                  description="1) 用 appCode + appSecret 申请 token；2) 查询可访问场景与费用模板；3) 用 Bearer Token 调用单费用或多费用核算接口；4) token 过期后重新申请。"
+                />
+              </div>
+              <el-empty v-else :image-size="56" description="请选择开放应用后查看联调和时效约束。" />
+            </el-tab-pane>
+            <el-tab-pane label="调用手册" name="manual">
+              <div class="open-app-page__manual-grid">
+                <div class="open-app-page__manual-card">
+                  <div class="open-app-page__manual-head">
+                    <strong>接入总原则</strong>
+                    <el-tag size="small" type="success">企业级推荐</el-tag>
+                  </div>
+                  <ul class="open-app-page__manual-list">
+                    <li>开放接口统一采用应用级身份鉴权，不再让第三方共享后台账号。</li>
+                    <li>正式联调先查模板、再组 JSON、再做取价，不建议第三方直接猜测字段。</li>
+                    <li>生产调用优先使用已发布生效版本，草稿快照仅用于联调验证。</li>
+                    <li>若开放应用或 token 超过有效期，第三方必须重新换取访问资格。</li>
+                  </ul>
                 </div>
-              </el-tab-pane>
-            </el-tabs>
-          </template>
-          <el-empty v-else :image-size="72" description="先在左侧台账中选中一个开放应用，这里会展示对应的配置中心摘要。" />
+
+                <div class="open-app-page__manual-card">
+                  <div class="open-app-page__manual-head">
+                    <strong>鉴权与时效</strong>
+                    <el-button text icon="CopyDocument" @click="copyText('/cost/open/auth/token', '令牌申请接口已复制')">复制令牌接口</el-button>
+                  </div>
+                  <div class="open-app-page__contract-pills">
+                    <span class="open-app-page__contract-pill">鉴权模式：Bearer Token</span>
+                    <span class="open-app-page__contract-pill">申请口径：AppCode + AppSecret</span>
+                    <span class="open-app-page__contract-pill">推荐时长：2 小时 / 7200 秒</span>
+                    <span class="open-app-page__contract-pill">过期后：重新申请 token</span>
+                  </div>
+                  <pre class="open-app-page__code-block">{{ authRequestExample }}</pre>
+                </div>
+
+                <div class="open-app-page__manual-card open-app-page__manual-card--wide">
+                  <div class="open-app-page__manual-head">
+                    <strong>典型接入顺序</strong>
+                  </div>
+                  <div class="open-app-page__step-grid">
+                    <div v-for="item in integrationFlowSteps" :key="item.step" class="open-app-page__step-card">
+                      <span>{{ item.step }}</span>
+                      <strong>{{ item.title }}</strong>
+                      <small>{{ item.desc }}</small>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="open-app-page__manual-card open-app-page__manual-card--wide">
+                  <div class="open-app-page__manual-head">
+                    <strong>开放接口清单</strong>
+                    <el-tag size="small" type="info">适合录入 Apifox</el-tag>
+                  </div>
+                  <div class="open-app-page__endpoint-list">
+                    <div v-for="item in endpointItems" :key="item.path" class="open-app-page__endpoint-card">
+                      <div class="open-app-page__endpoint-meta">
+                        <el-tag :type="item.methodType" effect="light">{{ item.method }}</el-tag>
+                        <code>{{ item.path }}</code>
+                      </div>
+                      <strong>{{ item.title }}</strong>
+                      <span>{{ item.desc }}</span>
+                      <small>{{ item.note }}</small>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="open-app-page__manual-card">
+                  <div class="open-app-page__manual-head">
+                    <strong>Apifox 环境变量</strong>
+                  </div>
+                  <div class="open-app-page__contract-pills">
+                    <span v-for="item in apifoxEnvItems" :key="item.name" class="open-app-page__contract-pill">
+                      {{ item.name }} = {{ item.example }}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="open-app-page__manual-card">
+                  <div class="open-app-page__manual-head">
+                    <strong>错误处理约定</strong>
+                  </div>
+                  <ul class="open-app-page__manual-list">
+                    <li v-for="item in errorHandlingItems" :key="item">{{ item }}</li>
+                  </ul>
+                </div>
+
+                <div class="open-app-page__manual-card open-app-page__manual-card--wide">
+                  <div class="open-app-page__manual-head">
+                    <strong>单费用 / 多费用调用示例</strong>
+                    <el-button text icon="CopyDocument" @click="copyText(calculateRequestExample, '核算示例请求已复制')">复制示例</el-button>
+                  </div>
+                  <pre class="open-app-page__code-block">{{ calculateRequestExample }}</pre>
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
         </div>
       </div>
     </section>
@@ -357,6 +459,7 @@ const secretDialogOpen = ref(false)
 const secretPayload = ref({})
 const effectiveRange = ref([])
 const tokenPreset = ref()
+const activeDetailTab = ref('manual')
 
 const tableRef = ref()
 const formRef = ref()
@@ -465,6 +568,108 @@ const currentSummaryItems = computed(() => {
 })
 
 const currentSceneNames = computed(() => currentApp.value?.sceneNames || [])
+const integrationFlowSteps = [
+  { step: '01', title: '申请 token', desc: '第三方先使用 appCode 和 appSecret 申请短时访问令牌。' },
+  { step: '02', title: '查询场景', desc: '按开放应用授权范围获取可访问场景，避免跨场景误调用。' },
+  { step: '03', title: '确认版本', desc: '根据生产或联调口径选择 ACTIVE 或 DRAFT，并确认版本。' },
+  { step: '04', title: '生成模板', desc: '按目标费用生成字段模板，明确变量中文名、路径和必填字段。' },
+  { step: '05', title: '组织输入', desc: '第三方按模板组装对象或对象数组，优先保留 bizNo 方便定位错误。' },
+  { step: '06', title: '执行核算', desc: '调用单费用或多费用核算接口，缺字段时按返回提示逐项修正。' }
+]
+
+const endpointItems = [
+  {
+    method: 'POST',
+    methodType: 'success',
+    path: '/cost/open/auth/token',
+    title: '申请访问令牌',
+    desc: '用 AppCode + AppSecret 换取短时 Bearer Token。',
+    note: '无需 Bearer，成功后返回 accessToken、expiresAt、草稿权限和场景授权范围。'
+  },
+  {
+    method: 'GET',
+    methodType: 'primary',
+    path: '/cost/open/scenes',
+    title: '查询可访问场景',
+    desc: '返回当前开放应用可访问的场景列表。',
+    note: '只返回授权范围内场景，适合作为第三方选择场景的第一步。'
+  },
+  {
+    method: 'GET',
+    methodType: 'primary',
+    path: '/cost/open/scenes/{sceneId}/versions',
+    title: '查询场景版本口径',
+    desc: '返回默认快照模式、支持的快照模式和已发布版本。',
+    note: '如果开放应用未开通草稿联调，则只建议走 ACTIVE。'
+  },
+  {
+    method: 'GET',
+    methodType: 'primary',
+    path: '/cost/open/scenes/{sceneId}/fees',
+    title: '查询运行费用',
+    desc: '获取当前版本或快照下可执行的费用列表。',
+    note: '适合第三方先拉费用清单，再决定单费用、多费用还是全费用调用。'
+  },
+  {
+    method: 'GET',
+    methodType: 'warning',
+    path: '/cost/open/fee-template',
+    title: '生成费用接入模板',
+    desc: '返回变量中文名、来源路径、是否必填、示例值和接入建议。',
+    note: '这是企业级对接的核心入口，第三方不需要再猜字段。'
+  },
+  {
+    method: 'POST',
+    methodType: 'danger',
+    path: '/cost/open/fee/calculate',
+    title: '执行费用核算',
+    desc: '支持单对象、对象数组、单费用、多费用、全费用核算。',
+    note: '如果缺少模板要求字段，会返回中文定位消息而不是单纯报错。'
+  }
+]
+
+const apifoxEnvItems = [
+  { name: 'baseUrl', example: 'http://localhost:8080' },
+  { name: 'appCode', example: 'DEMO_OPEN_APP' },
+  { name: 'appSecret', example: 'demo-open-secret' },
+  { name: 'accessToken', example: '通过令牌接口写入' },
+  { name: 'sceneId', example: '1' },
+  { name: 'versionId', example: '2' },
+  { name: 'feeId', example: '12' },
+  { name: 'feeIds', example: '12,13' }
+]
+
+const errorHandlingItems = [
+  '401：token 未传、无效或已过期，第三方需重新申请 accessToken。',
+  '403：开放应用未开通草稿联调或未授权访问目标场景。',
+  '500：输入数据缺少模板要求字段，平台会返回 variableName 和来源路径 path。',
+  '所有业务错误都优先返回中文提示，便于第三方联调和业务排查。'
+]
+
+const authRequestExample = JSON.stringify({
+  appCode: 'DEMO_OPEN_APP',
+  appSecret: 'demo-open-secret'
+}, null, 2)
+
+const calculateRequestExample = JSON.stringify({
+  sceneId: 1,
+  versionId: 2,
+  snapshotMode: 'ACTIVE',
+  feeIds: [12, 13],
+  inputJson: JSON.stringify([
+    {
+      bizNo: 'SIM-001',
+      cover: {
+        action: 'moor',
+        cargoType: '块矿',
+        workloadTon: 1
+      },
+      shift: {
+        name: '白班'
+      }
+    }
+  ])
+}, null, 2)
 
 function resetForm() {
   form.appId = undefined
@@ -882,6 +1087,143 @@ onMounted(async () => {
   gap: 14px;
 }
 
+.open-app-page__selection-tip {
+  margin-bottom: 16px;
+}
+
+.open-app-page__manual-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.open-app-page__manual-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-blank);
+}
+
+.open-app-page__manual-card--wide {
+  grid-column: 1 / -1;
+}
+
+.open-app-page__manual-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.open-app-page__manual-head strong {
+  color: var(--el-text-color-primary);
+}
+
+.open-app-page__manual-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--el-text-color-regular);
+  line-height: 1.8;
+}
+
+.open-app-page__contract-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.open-app-page__contract-pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-regular);
+  line-height: 1.5;
+}
+
+.open-app-page__code-block {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--el-fill-color-dark);
+  color: var(--el-color-white);
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.open-app-page__step-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.open-app-page__step-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.open-app-page__step-card span {
+  color: var(--el-color-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.open-app-page__step-card strong {
+  color: var(--el-text-color-primary);
+}
+
+.open-app-page__step-card small {
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+
+.open-app-page__endpoint-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.open-app-page__endpoint-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-bg-color-page);
+}
+
+.open-app-page__endpoint-card strong {
+  color: var(--el-text-color-primary);
+}
+
+.open-app-page__endpoint-card span,
+.open-app-page__endpoint-card small {
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+
+.open-app-page__endpoint-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.open-app-page__endpoint-meta code {
+  color: var(--el-color-primary);
+  word-break: break-all;
+}
+
 .open-app-page__scene-list {
   display: flex;
   gap: 10px;
@@ -904,7 +1246,10 @@ onMounted(async () => {
 @media (max-width: 1280px) {
   .open-app-page__metrics,
   .open-app-page__workspace,
-  .open-app-page__detail-summary {
+  .open-app-page__detail-summary,
+  .open-app-page__manual-grid,
+  .open-app-page__endpoint-list,
+  .open-app-page__step-grid {
     grid-template-columns: 1fr;
   }
 }

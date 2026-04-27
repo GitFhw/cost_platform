@@ -1,0 +1,13 @@
+﻿{
+  "name": "核算治理开放接口本地联调环境",
+  "variables": [
+    { "name": "baseUrl", "value": "http://localhost:8080" },
+    { "name": "appCode", "value": "DEMO_OPEN_APP" },
+    { "name": "appSecret", "value": "demo-open-secret" },
+    { "name": "accessToken", "value": "" },
+    { "name": "sceneId", "value": "1" },
+    { "name": "versionId", "value": "2" },
+    { "name": "feeId", "value": "12" },
+    { "name": "feeIds", "value": "12,13" }
+  ]
+}
