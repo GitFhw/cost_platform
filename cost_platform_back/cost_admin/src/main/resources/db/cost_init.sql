@@ -3062,4 +3062,66 @@ left join sys_role_menu existing on existing.role_id = rm.role_id and existing.m
 where rm.menu_id in (2010, 2011, 2012)
   and existing.role_id is null;
 
+create table if not exists cost_open_app (
+    app_id bigint primary key auto_increment comment '开放应用主键',
+    app_code varchar(64) not null comment '开放应用编码',
+    app_name varchar(128) not null comment '开放应用名称',
+    app_secret_hash char(64) not null comment '开放应用密钥 SHA-256 摘要',
+    scene_scope_type varchar(16) not null default 'ALL' comment '场景授权范围类型',
+    scene_ids_json longtext null comment '授权场景主键 JSON',
+    allow_draft_snapshot tinyint(1) not null default 0 comment '是否允许草稿联调',
+    token_ttl_seconds int not null default 7200 comment '访问令牌有效期（秒）',
+    effective_start_time datetime null comment '生效开始时间',
+    effective_end_time datetime null comment '生效结束时间',
+    status char(1) not null default '0' comment '状态（0正常 1停用）',
+    sort_no int null default 0 comment '排序号',
+    create_by varchar(64) null comment '创建人',
+    create_time datetime null comment '创建时间',
+    update_by varchar(64) null comment '更新人',
+    update_time datetime null comment '更新时间',
+    remark varchar(500) null comment '备注',
+    unique key uk_cost_open_app_code (app_code),
+    key idx_cost_open_app_status (status)
+) engine=innodb comment='第三方开放应用';
+
+insert into cost_open_app (
+    app_code, app_name, app_secret_hash, scene_scope_type, scene_ids_json,
+    allow_draft_snapshot, token_ttl_seconds, status, sort_no, create_by, create_time, remark
+)
+select
+    'DEMO_OPEN_APP',
+    '开放联调演示应用',
+    '2184162593f8f03e1334c93d92419bac0ca371e967a2bd77274eb172598976d0',
+    'ALL',
+    null,
+    1,
+    7200,
+    '0',
+    10,
+    'admin',
+    sysdate(),
+    '演示用途：允许使用生效版本与草稿配置换取 token 并执行开放接口联调'
+from dual
+where not exists (select 1 from cost_open_app where app_code = 'DEMO_OPEN_APP');
+
+insert into cost_open_app (
+    app_code, app_name, app_secret_hash, scene_scope_type, scene_ids_json,
+    allow_draft_snapshot, token_ttl_seconds, status, sort_no, create_by, create_time, remark
+)
+select
+    'DEMO_PUBLISHED_APP',
+    '开放生产演示应用',
+    '3b3f916eede6dfc6f56b24b9399757406bfc7d989062eb4ff4930a3cb9caac5f',
+    'ALL',
+    null,
+    0,
+    7200,
+    '0',
+    20,
+    'admin',
+    sysdate(),
+    '演示用途：仅允许使用已发布生效版本，适合作为生产接入口径示例'
+from dual
+where not exists (select 1 from cost_open_app where app_code = 'DEMO_PUBLISHED_APP');
+
 

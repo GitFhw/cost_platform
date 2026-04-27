@@ -3,6 +3,7 @@ package com.ruoyi.web.controller.cost;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruoyi.common.annotation.Log;
+import com.ruoyi.common.constant.HttpStatus;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.enums.BusinessType;
@@ -10,18 +11,38 @@ import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.cost.bo.CostFeeCalculateBo;
+import com.ruoyi.system.domain.cost.bo.CostOpenTokenApplyBo;
+import com.ruoyi.system.domain.cost.vo.CostOpenAppSession;
+import com.ruoyi.system.service.cost.ICostOpenAppService;
+import com.ruoyi.system.service.cost.ICostOpenTokenService;
 import com.ruoyi.system.service.cost.ICostRunService;
 import com.ruoyi.system.service.cost.ICostSceneService;
+import com.ruoyi.web.interceptor.cost.CostOpenApiConstants;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 import static com.ruoyi.system.service.cost.constant.CostDomainConstants.STATUS_ENABLED;
 
+/**
+ * 第三方开放接口控制器
+ */
 @RestController
 @RequestMapping("/cost/open")
 public class CostOpenController extends BaseController {
@@ -35,82 +56,127 @@ public class CostOpenController extends BaseController {
     private ICostRunService runService;
 
     @Autowired
+    private ICostOpenAppService openAppService;
+
+    @Autowired
+    private ICostOpenTokenService openTokenService;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
-    @PreAuthorize("@ss.hasPermi('cost:access:list') or @ss.hasPermi('cost:scene:list') or @ss.hasPermi('cost:simulation:list')")
+    /**
+     * 第三方应用换取访问令牌。
+     */
+    @Log(title = "开放接口令牌", businessType = BusinessType.OTHER)
+    @PostMapping("/auth/token")
+    public AjaxResult issueToken(@Validated @RequestBody CostOpenTokenApplyBo bo) {
+        return AjaxResult.success("开放接口访问令牌申请成功", openTokenService.issueToken(bo));
+    }
+
+    /**
+     * 查询当前开放应用可访问的场景列表。
+     */
     @GetMapping("/scenes")
-    public AjaxResult sceneOptions() {
+    public AjaxResult sceneOptions(HttpServletRequest request) {
+        CostOpenAppSession session = requireOpenSession(request);
         CostScene query = new CostScene();
         query.setStatus(STATUS_ENABLED);
         List<CostScene> scenes = sceneService.selectSceneOptions(query);
         List<Map<String, Object>> sceneItems = scenes.stream()
+                .filter(scene -> openAppService.canAccessScene(session, scene.getSceneId()))
                 .map(this::buildSceneItem)
                 .toList();
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("openApp", buildOpenAppItem(session));
         result.put("sceneCount", sceneItems.size());
         result.put("scenes", sceneItems);
         return success(result);
     }
 
-    @PreAuthorize("@ss.hasPermi('cost:access:list') or @ss.hasPermi('cost:simulation:list') or @ss.hasPermi('cost:task:list')")
+    /**
+     * 查询场景可用版本口径。
+     */
     @GetMapping("/scenes/{sceneId}/versions")
-    public AjaxResult versionOptions(@PathVariable Long sceneId) {
-        CostScene scene = requireScene(sceneId);
+    public AjaxResult versionOptions(HttpServletRequest request, @PathVariable Long sceneId) {
+        CostOpenAppSession session = requireOpenSession(request);
+        CostScene scene = requireAuthorizedScene(session, sceneId);
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("openApp", buildOpenAppItem(session));
         result.put("scene", buildSceneItem(scene));
-        result.put("defaultSnapshotMode", scene.getActiveVersionId() == null ? SNAPSHOT_MODE_DRAFT : SNAPSHOT_MODE_ACTIVE);
-        result.put("supportedSnapshotModes", buildSupportedSnapshotModes());
+        result.put("defaultSnapshotMode", resolveDefaultSnapshotMode(scene, session));
+        result.put("supportedSnapshotModes", buildSupportedSnapshotModes(session));
         result.put("publishedVersions", runService.selectVersionOptions(sceneId));
         return success(result);
     }
 
-    @PreAuthorize("@ss.hasPermi('cost:access:list') or @ss.hasPermi('cost:simulation:list') or @ss.hasPermi('cost:task:list')")
+    /**
+     * 查询场景在指定运行快照下的可执行费用。
+     */
     @GetMapping("/scenes/{sceneId}/fees")
-    public AjaxResult runtimeFeeOptions(@PathVariable Long sceneId,
+    public AjaxResult runtimeFeeOptions(HttpServletRequest request,
+                                        @PathVariable Long sceneId,
                                         @RequestParam(value = "versionId", required = false) Long versionId,
                                         @RequestParam(value = "snapshotMode", required = false) String snapshotMode) {
-        CostScene scene = requireScene(sceneId);
-        List<Map<String, Object>> feeItems = runService.selectRuntimeFeeOptions(sceneId, versionId, snapshotMode);
+        CostOpenAppSession session = requireOpenSession(request);
+        CostScene scene = requireAuthorizedScene(session, sceneId);
+        String normalizedSnapshotMode = normalizeSnapshotMode(snapshotMode);
+        assertSnapshotModeAllowed(session, normalizedSnapshotMode);
+        List<Map<String, Object>> feeItems = runService.selectRuntimeFeeOptions(sceneId, versionId, normalizedSnapshotMode);
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("openApp", buildOpenAppItem(session));
         result.put("scene", buildSceneItem(scene));
         result.put("requestedVersionId", versionId);
-        result.put("snapshotMode", normalizeSnapshotMode(snapshotMode));
+        result.put("snapshotMode", normalizedSnapshotMode);
         result.put("feeCount", feeItems.size());
         result.put("fees", feeItems);
         return success(result);
     }
 
-    @PreAuthorize("@ss.hasPermi('cost:access:list') or @ss.hasPermi('cost:simulation:list') or @ss.hasPermi('cost:task:list')")
+    /**
+     * 生成单费用、多费用或全费用的接入模板。
+     */
     @GetMapping("/fee-template")
-    public AjaxResult feeTemplate(@RequestParam("sceneId") Long sceneId,
+    public AjaxResult feeTemplate(HttpServletRequest request,
+                                  @RequestParam("sceneId") Long sceneId,
                                   @RequestParam(value = "versionId", required = false) Long versionId,
                                   @RequestParam(value = "snapshotMode", required = false) String snapshotMode,
                                   @RequestParam(value = "feeIds", required = false) String feeIds,
                                   @RequestParam(value = "feeId", required = false) Long feeId,
                                   @RequestParam(value = "feeCode", required = false) String feeCode,
                                   @RequestParam(value = "taskType", required = false) String taskType) {
-        requireScene(sceneId);
+        CostOpenAppSession session = requireOpenSession(request);
+        requireAuthorizedScene(session, sceneId);
+        String normalizedSnapshotMode = normalizeSnapshotMode(snapshotMode);
+        assertSnapshotModeAllowed(session, normalizedSnapshotMode);
         Map<String, Object> template = runService.buildFeeInputTemplate(sceneId, versionId, parseLongIdList(feeIds),
-                feeId, feeCode, taskType, snapshotMode);
-        return success(buildOpenTemplateResult(template, snapshotMode));
+                feeId, feeCode, taskType, normalizedSnapshotMode);
+        return success(buildOpenTemplateResult(template, normalizedSnapshotMode, session));
     }
 
-    @PreAuthorize("@ss.hasPermi('cost:simulation:execute') or @ss.hasPermi('cost:task:execute')")
-    @Log(title = "第三方开放核算", businessType = BusinessType.INSERT)
+    /**
+     * 按指定费用范围执行开放接口取价。
+     */
+    @Log(title = "开放接口费用核算", businessType = BusinessType.INSERT)
     @PostMapping("/fee/calculate")
-    public AjaxResult calculateFee(@Valid @RequestBody CostFeeCalculateBo bo) {
-        requireScene(bo.getSceneId());
-        AjaxResult validationError = validateOpenCalculationInput(bo);
+    public AjaxResult calculateFee(HttpServletRequest request, @Valid @RequestBody CostFeeCalculateBo bo) {
+        CostOpenAppSession session = requireOpenSession(request);
+        requireAuthorizedScene(session, bo.getSceneId());
+        String normalizedSnapshotMode = normalizeSnapshotMode(bo.getSnapshotMode());
+        assertSnapshotModeAllowed(session, normalizedSnapshotMode);
+        bo.setSnapshotMode(normalizedSnapshotMode);
+        AjaxResult validationError = validateOpenCalculationInput(bo, session);
         if (validationError != null) {
             return validationError;
         }
         Map<String, Object> result = runService.calculateFee(bo);
         result.put("validationPassed", true);
-        result.put("snapshotMode", normalizeSnapshotMode(bo.getSnapshotMode()));
+        result.put("snapshotMode", normalizedSnapshotMode);
+        result.put("openApp", buildOpenAppItem(session));
         return success(result);
     }
 
-    private CostScene requireScene(Long sceneId) {
+    private CostScene requireAuthorizedScene(CostOpenAppSession session, Long sceneId) {
+        openAppService.assertCanAccessScene(session, sceneId);
         CostScene scene = sceneService.selectSceneById(sceneId);
         if (scene == null) {
             throw new ServiceException("目标场景不存在，请刷新后重试");
@@ -118,11 +184,34 @@ public class CostOpenController extends BaseController {
         return scene;
     }
 
-    private List<Map<String, Object>> buildSupportedSnapshotModes() {
-        return List.of(
-                buildSnapshotModeItem(SNAPSHOT_MODE_ACTIVE, "生效版本", "未指定 versionId 时，按场景当前生效版本执行。"),
-                buildSnapshotModeItem(SNAPSHOT_MODE_DRAFT, "草稿配置", "未指定 versionId 时，按场景当前草稿配置执行，适合联调未发布口径。")
-        );
+    private CostOpenAppSession requireOpenSession(HttpServletRequest request) {
+        Object session = request.getAttribute(CostOpenApiConstants.OPEN_APP_SESSION_ATTR);
+        if (session instanceof CostOpenAppSession openSession) {
+            return openSession;
+        }
+        throw new ServiceException("开放接口访问令牌无效，请重新申请 accessToken", HttpStatus.UNAUTHORIZED);
+    }
+
+    private void assertSnapshotModeAllowed(CostOpenAppSession session, String snapshotMode) {
+        if (SNAPSHOT_MODE_DRAFT.equals(snapshotMode) && !openAppService.allowDraftSnapshot(session)) {
+            throw new ServiceException("当前开放应用未开通草稿联调权限，请切换为生效版本或联系平台管理员开通", HttpStatus.FORBIDDEN);
+        }
+    }
+
+    private String resolveDefaultSnapshotMode(CostScene scene, CostOpenAppSession session) {
+        if (scene.getActiveVersionId() == null && openAppService.allowDraftSnapshot(session)) {
+            return SNAPSHOT_MODE_DRAFT;
+        }
+        return SNAPSHOT_MODE_ACTIVE;
+    }
+
+    private List<Map<String, Object>> buildSupportedSnapshotModes(CostOpenAppSession session) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        items.add(buildSnapshotModeItem(SNAPSHOT_MODE_ACTIVE, "生效版本", "未指定 versionId 时，按场景当前生效版本执行。"));
+        if (openAppService.allowDraftSnapshot(session)) {
+            items.add(buildSnapshotModeItem(SNAPSHOT_MODE_DRAFT, "草稿配置", "允许在未发布配置上联调模板和单费用取价，适合第三方对接前置验证。"));
+        }
+        return items;
     }
 
     private Map<String, Object> buildSnapshotModeItem(String code, String label, String desc) {
@@ -130,6 +219,16 @@ public class CostOpenController extends BaseController {
         item.put("code", code);
         item.put("label", label);
         item.put("description", desc);
+        return item;
+    }
+
+    private Map<String, Object> buildOpenAppItem(CostOpenAppSession session) {
+        LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+        item.put("appCode", session.getAppCode());
+        item.put("appName", session.getAppName());
+        item.put("sceneScopeType", session.getSceneScopeType());
+        item.put("draftSnapshotAllowed", session.getAllowDraftSnapshot());
+        item.put("authorizedSceneIds", session.getAuthorizedSceneIds());
         return item;
     }
 
@@ -146,16 +245,19 @@ public class CostOpenController extends BaseController {
         return item;
     }
 
-    private Map<String, Object> buildOpenTemplateResult(Map<String, Object> template, String snapshotMode) {
+    private Map<String, Object> buildOpenTemplateResult(Map<String, Object> template,
+                                                        String snapshotMode,
+                                                        CostOpenAppSession session) {
         LinkedHashMap<String, Object> result = new LinkedHashMap<>(template);
         List<Map<String, Object>> inputContractFields = buildOpenTemplateFields(template.get("fields"));
+        result.put("openApp", buildOpenAppItem(session));
         result.put("snapshotMode", normalizeSnapshotMode(snapshotMode));
         result.put("inputContractFieldCount", inputContractFields.size());
         result.put("requiredFieldCount", inputContractFields.stream()
                 .filter(item -> Boolean.TRUE.equals(item.get("required")))
                 .count());
         result.put("inputContractFields", inputContractFields);
-        result.put("integrationAdvice", buildTemplateAdvice(result));
+        result.put("integrationAdvice", buildTemplateAdvice(result, session));
         return result;
     }
 
@@ -192,22 +294,25 @@ public class CostOpenController extends BaseController {
         return result;
     }
 
-    private List<String> buildTemplateAdvice(Map<String, Object> template) {
+    private List<String> buildTemplateAdvice(Map<String, Object> template, CostOpenAppSession session) {
         List<String> advice = new ArrayList<>();
         if (Objects.equals(template.get("snapshotSource"), "DRAFT")) {
-            advice.add("当前模板来自草稿配置，适合联调未发布规则；正式接入上线前建议再按生效版本回归一次。");
+            advice.add("当前模板来自草稿配置，适合第三方在未发布口径上做联调验证。");
         } else {
-            advice.add("当前模板来自已发布运行快照，适合第三方按稳定口径联调与上线。");
+            advice.add("当前模板来自已发布运行快照，适合第三方按稳定口径对接和压测。");
         }
         if (Boolean.TRUE.equals(template.get("allFeeScope"))) {
-            advice.add("当前请求未指定目标费用，模板会拉平当前场景全部费用执行链需要的字段。");
+            advice.add("当前模板按全费用执行链拉平了所需字段，适合做整场景联调、全费用压测或批量导入。");
         } else {
-            advice.add("当前模板已按目标费用及其依赖费用执行链收敛，只需要准备相关字段。");
+            advice.add("当前模板已按目标费用及其依赖费用收敛，只需准备相关字段即可。");
+        }
+        if (!openAppService.allowDraftSnapshot(session)) {
+            advice.add("当前开放应用未开通草稿联调权限，正式接入时只能使用已发布生效口径。");
         }
         return advice;
     }
 
-    private AjaxResult validateOpenCalculationInput(CostFeeCalculateBo bo) {
+    private AjaxResult validateOpenCalculationInput(CostFeeCalculateBo bo, CostOpenAppSession session) {
         Map<String, Object> template = runService.buildFeeInputTemplate(bo.getSceneId(), bo.getVersionId(), bo.getFeeIds(),
                 bo.getFeeId(), bo.getFeeCode(), null, bo.getSnapshotMode());
         List<Map<String, Object>> fields = buildOpenTemplateFields(template.get("fields"));
@@ -234,7 +339,7 @@ public class CostOpenController extends BaseController {
                     message.put("variableCode", field.get("variableCode"));
                     message.put("variableName", field.get("variableName"));
                     message.put("path", path);
-                    message.put("message", "缺少必需字段 " + field.get("variableName") + "，请按来源路径补齐：" + path);
+                    message.put("message", "缺少必填字段 " + field.get("variableName") + "，请按来源路径补齐：" + path);
                     validationMessages.add(message);
                 }
             }
@@ -243,6 +348,7 @@ public class CostOpenController extends BaseController {
             return null;
         }
         LinkedHashMap<String, Object> data = new LinkedHashMap<>();
+        data.put("openApp", buildOpenAppItem(session));
         data.put("sceneId", template.get("sceneId"));
         data.put("sceneCode", template.get("sceneCode"));
         data.put("sceneName", template.get("sceneName"));
@@ -254,7 +360,7 @@ public class CostOpenController extends BaseController {
         data.put("validationPassed", false);
         data.put("missingFieldCount", validationMessages.size());
         data.put("validationMessages", validationMessages);
-        return AjaxResult.error("输入数据缺少模板要求字段，请先补齐后再核算", data);
+        return AjaxResult.error("输入数据缺少模板要求字段，请补齐后再重新取价", data);
     }
 
     private List<JsonNode> parseInputNodes(String inputJson) {
@@ -306,7 +412,7 @@ public class CostOpenController extends BaseController {
     }
 
     private String normalizeSnapshotMode(String snapshotMode) {
-        if (StringUtils.isEmpty(snapshotMode)) {
+        if (StringUtils.isBlank(snapshotMode)) {
             return SNAPSHOT_MODE_ACTIVE;
         }
         return SNAPSHOT_MODE_DRAFT.equalsIgnoreCase(snapshotMode.trim())
@@ -338,14 +444,19 @@ public class CostOpenController extends BaseController {
     }
 
     private List<Long> parseLongIdList(String ids) {
-        if (StringUtils.isEmpty(ids)) {
+        if (StringUtils.isBlank(ids)) {
             return Collections.emptyList();
         }
         List<Long> result = new ArrayList<>();
         for (String item : ids.split(",")) {
             String value = StringUtils.trim(item);
-            if (StringUtils.isNotEmpty(value)) {
+            if (StringUtils.isBlank(value)) {
+                continue;
+            }
+            try {
                 result.add(Long.valueOf(value));
+            } catch (NumberFormatException ex) {
+                throw new ServiceException("feeIds 格式不正确，请传逗号分隔的数字主键列表");
             }
         }
         return result;
