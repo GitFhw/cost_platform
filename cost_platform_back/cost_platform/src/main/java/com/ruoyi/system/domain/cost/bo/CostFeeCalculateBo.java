@@ -25,6 +25,11 @@ public class CostFeeCalculateBo {
     private Long versionId;
 
     /**
+     * Snapshot mode when versionId is not provided. Supported values: ACTIVE, DRAFT.
+     */
+    private String snapshotMode;
+
+    /**
      * Fee id
      */
     private Long feeId;
