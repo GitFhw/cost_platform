@@ -4,12 +4,14 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.ruoyi.common.core.domain.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import java.util.Date;
+import java.util.List;
 
 /**
  * 第三方开放应用对象 cost_open_app
@@ -30,6 +32,10 @@ public class CostOpenApp extends BaseEntity {
     @TableField("app_name")
     private String appName;
 
+    /**
+     * 仅用于后端认证，不对前端暴露。
+     */
+    @JsonIgnore
     @TableField("app_secret_hash")
     private String appSecretHash;
 
@@ -53,4 +59,22 @@ public class CostOpenApp extends BaseEntity {
 
     @TableField("status")
     private String status;
+
+    @TableField(exist = false)
+    private List<Long> sceneIds;
+
+    @TableField(exist = false)
+    private List<String> sceneNames;
+
+    @TableField(exist = false)
+    private String sceneNamesSummary;
+
+    @TableField(exist = false)
+    private Integer sceneCount;
+
+    /**
+     * 仅在新建或重置密钥成功后回传一次明文密钥。
+     */
+    @TableField(exist = false)
+    private String appSecretPlaintext;
 }

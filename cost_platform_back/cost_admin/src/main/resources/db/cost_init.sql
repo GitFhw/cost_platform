@@ -3124,4 +3124,58 @@ select
 from dual
 where not exists (select 1 from cost_open_app where app_code = 'DEMO_PUBLISHED_APP');
 
+insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
+select 2290, '开放应用', 1, 10, 'open-app', 'system/openApp/index', '', 'CostOpenAppAdmin', 1, 0, 'C', '0', '0', 'cost:openApp:list', 'lock', 'admin', sysdate(), '第三方接入应用、密钥与场景授权配置中心'
+from dual
+where not exists (select 1 from sys_menu where menu_id = 2290);
+
+insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
+select 2291, '开放应用查询', 2290, 1, '', '', '', '', 1, 0, 'F', '0', '0', 'cost:openApp:query', '#', 'admin', sysdate(), '开放应用查询权限'
+from dual
+where not exists (select 1 from sys_menu where menu_id = 2291);
+
+insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
+select 2292, '开放应用新增', 2290, 2, '', '', '', '', 1, 0, 'F', '0', '0', 'cost:openApp:add', '#', 'admin', sysdate(), '开放应用新增权限'
+from dual
+where not exists (select 1 from sys_menu where menu_id = 2292);
+
+insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
+select 2293, '开放应用修改', 2290, 3, '', '', '', '', 1, 0, 'F', '0', '0', 'cost:openApp:edit', '#', 'admin', sysdate(), '开放应用修改权限'
+from dual
+where not exists (select 1 from sys_menu where menu_id = 2293);
+
+insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
+select 2294, '开放应用删除', 2290, 4, '', '', '', '', 1, 0, 'F', '0', '0', 'cost:openApp:remove', '#', 'admin', sysdate(), '开放应用删除权限'
+from dual
+where not exists (select 1 from sys_menu where menu_id = 2294);
+
+insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
+select 2295, '开放应用重置密钥', 2290, 5, '', '', '', '', 1, 0, 'F', '0', '0', 'cost:openApp:resetSecret', '#', 'admin', sysdate(), '开放应用重置密钥权限'
+from dual
+where not exists (select 1 from sys_menu where menu_id = 2295);
+
+insert into sys_role_menu (role_id, menu_id)
+select 1, 2290 from dual
+where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 2290);
+
+insert into sys_role_menu (role_id, menu_id)
+select 1, 2291 from dual
+where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 2291);
+
+insert into sys_role_menu (role_id, menu_id)
+select 1, 2292 from dual
+where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 2292);
+
+insert into sys_role_menu (role_id, menu_id)
+select 1, 2293 from dual
+where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 2293);
+
+insert into sys_role_menu (role_id, menu_id)
+select 1, 2294 from dual
+where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 2294);
+
+insert into sys_role_menu (role_id, menu_id)
+select 1, 2295 from dual
+where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 2295);
+
 
