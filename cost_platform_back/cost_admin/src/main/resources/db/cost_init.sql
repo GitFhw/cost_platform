@@ -2925,6 +2925,8 @@ create table if not exists cost_access_profile (
     profile_id bigint primary key auto_increment comment '接入方案主键',
     scene_id bigint not null comment '所属场景主键',
     fee_id bigint null comment '目标费用主键',
+    fee_scope_type varchar(16) not null default 'ALL' comment '费用范围类型',
+    fee_ids_json longtext null comment '多费用主键JSON',
     version_id bigint null comment '绑定版本主键',
     profile_code varchar(64) not null comment '方案编码',
     profile_name varchar(128) not null comment '方案名称',

@@ -1,6 +1,8 @@
 package com.ruoyi.system.service.impl.cost;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruoyi.common.constant.UserConstants;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
@@ -19,8 +21,12 @@ import org.springframework.stereotype.Service;
 
 import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class CostAccessProfileServiceImpl implements ICostAccessProfileService {
@@ -29,6 +35,11 @@ public class CostAccessProfileServiceImpl implements ICostAccessProfileService {
     private static final String DEFAULT_REQUEST_METHOD = "GET";
     private static final String DEFAULT_AUTH_TYPE = "NONE";
     private static final String DEFAULT_STATUS = STATUS_ENABLED;
+    private static final String DEFAULT_FEE_SCOPE_TYPE = "ALL";
+    private static final String FEE_SCOPE_SINGLE = "SINGLE";
+    private static final String FEE_SCOPE_MULTI = "MULTI";
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
     private CostAccessProfileMapper accessProfileMapper;
@@ -44,7 +55,7 @@ public class CostAccessProfileServiceImpl implements ICostAccessProfileService {
 
     @Override
     public List<CostAccessProfile> selectAccessProfileList(CostAccessProfile query) {
-        return accessProfileMapper.selectAccessProfileList(query);
+        return enrichProfiles(accessProfileMapper.selectAccessProfileList(query));
     }
 
     @Override
@@ -53,12 +64,12 @@ public class CostAccessProfileServiceImpl implements ICostAccessProfileService {
         if (StringUtils.isEmpty(optionQuery.getStatus())) {
             optionQuery.setStatus(DEFAULT_STATUS);
         }
-        return accessProfileMapper.selectAccessProfileList(optionQuery);
+        return enrichProfiles(accessProfileMapper.selectAccessProfileList(optionQuery));
     }
 
     @Override
     public CostAccessProfile selectAccessProfileById(Long profileId) {
-        return accessProfileMapper.selectAccessProfileById(profileId);
+        return enrichProfile(accessProfileMapper.selectAccessProfileById(profileId));
     }
 
     @Override
@@ -112,8 +123,9 @@ public class CostAccessProfileServiceImpl implements ICostAccessProfileService {
         if (scene == null) {
             throw new ServiceException("所属场景不存在，请刷新后重试");
         }
-        if (profile.getFeeId() != null) {
-            CostFeeItem fee = feeMapper.selectById(profile.getFeeId());
+        List<Long> selectedFeeIds = resolveProfileFeeIds(profile);
+        for (Long feeId : selectedFeeIds) {
+            CostFeeItem fee = feeMapper.selectById(feeId);
             if (fee == null || !profile.getSceneId().equals(fee.getSceneId())) {
                 throw new ServiceException("目标费用不存在或不属于当前场景");
             }
@@ -137,6 +149,7 @@ public class CostAccessProfileServiceImpl implements ICostAccessProfileService {
         profile.setProfileName(StringUtils.trim(profile.getProfileName()));
         profile.setSourceType(StringUtils.upperCase(StringUtils.trim(profile.getSourceType())));
         profile.setTaskType(StringUtils.trim(profile.getTaskType()));
+        profile.setFeeScopeType(StringUtils.upperCase(StringUtils.trim(profile.getFeeScopeType())));
         profile.setRequestMethod(StringUtils.upperCase(StringUtils.trim(profile.getRequestMethod())));
         profile.setEndpointUrl(StringUtils.trim(profile.getEndpointUrl()));
         profile.setAuthType(StringUtils.upperCase(StringUtils.trim(profile.getAuthType())));
@@ -147,6 +160,7 @@ public class CostAccessProfileServiceImpl implements ICostAccessProfileService {
         profile.setSampleInputJson(trimJson(profile.getSampleInputJson()));
         profile.setStatus(StringUtils.trim(profile.getStatus()));
         profile.setRemark(StringUtils.trim(profile.getRemark()));
+        normalizeFeeScope(profile);
     }
 
     private void fillDefaultFields(CostAccessProfile profile, boolean isInsert) {
@@ -171,6 +185,9 @@ public class CostAccessProfileServiceImpl implements ICostAccessProfileService {
         if (StringUtils.isEmpty(profile.getStatus())) {
             profile.setStatus(DEFAULT_STATUS);
         }
+        if (StringUtils.isEmpty(profile.getFeeScopeType())) {
+            profile.setFeeScopeType(DEFAULT_FEE_SCOPE_TYPE);
+        }
         if (profile.getSortNo() == null) {
             profile.setSortNo(0);
         }
@@ -182,5 +199,95 @@ public class CostAccessProfileServiceImpl implements ICostAccessProfileService {
     private String trimJson(String value) {
         String trimmed = StringUtils.trim(value);
         return StringUtils.isEmpty(trimmed) ? "" : trimmed;
+    }
+
+    private List<CostAccessProfile> enrichProfiles(List<CostAccessProfile> profiles) {
+        if (profiles == null || profiles.isEmpty()) {
+            return profiles;
+        }
+        profiles.forEach(this::enrichProfile);
+        return profiles;
+    }
+
+    private CostAccessProfile enrichProfile(CostAccessProfile profile) {
+        if (profile == null) {
+            return null;
+        }
+        List<Long> feeIds = resolveProfileFeeIds(profile);
+        profile.setFeeIds(new ArrayList<>(feeIds));
+        if (feeIds.isEmpty()) {
+            profile.setFeeScopeType(DEFAULT_FEE_SCOPE_TYPE);
+            profile.setFeeId(null);
+            return profile;
+        }
+        if (feeIds.size() == 1) {
+            profile.setFeeScopeType(FEE_SCOPE_SINGLE);
+            profile.setFeeId(feeIds.get(0));
+            return profile;
+        }
+        profile.setFeeScopeType(FEE_SCOPE_MULTI);
+        profile.setFeeId(null);
+        return profile;
+    }
+
+    private void normalizeFeeScope(CostAccessProfile profile) {
+        List<Long> feeIds = resolveProfileFeeIds(profile);
+        profile.setFeeIds(new ArrayList<>(feeIds));
+        if (feeIds.isEmpty()) {
+            profile.setFeeScopeType(DEFAULT_FEE_SCOPE_TYPE);
+            profile.setFeeId(null);
+            profile.setFeeIdsJson("");
+            return;
+        }
+        if (feeIds.size() == 1) {
+            profile.setFeeScopeType(FEE_SCOPE_SINGLE);
+            profile.setFeeId(feeIds.get(0));
+            profile.setFeeIdsJson("");
+            return;
+        }
+        profile.setFeeScopeType(FEE_SCOPE_MULTI);
+        profile.setFeeId(null);
+        profile.setFeeIdsJson(writeFeeIdsJson(feeIds));
+    }
+
+    private List<Long> resolveProfileFeeIds(CostAccessProfile profile) {
+        if (profile == null) {
+            return Collections.emptyList();
+        }
+        Set<Long> orderedIds = new LinkedHashSet<>();
+        if (profile.getFeeIds() != null) {
+            for (Long feeId : profile.getFeeIds()) {
+                if (feeId != null) {
+                    orderedIds.add(feeId);
+                }
+            }
+        }
+        if (orderedIds.isEmpty() && StringUtils.isNotEmpty(profile.getFeeIdsJson())) {
+            try {
+                List<Long> jsonFeeIds = objectMapper.readValue(profile.getFeeIdsJson(), new TypeReference<List<Long>>() {
+                });
+                if (jsonFeeIds != null) {
+                    for (Long feeId : jsonFeeIds) {
+                        if (feeId != null) {
+                            orderedIds.add(feeId);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                throw new ServiceException("接入方案费用范围配置解析失败");
+            }
+        }
+        if (orderedIds.isEmpty() && profile.getFeeId() != null) {
+            orderedIds.add(profile.getFeeId());
+        }
+        return new ArrayList<>(orderedIds);
+    }
+
+    private String writeFeeIdsJson(List<Long> feeIds) {
+        try {
+            return objectMapper.writeValueAsString(feeIds);
+        } catch (Exception e) {
+            throw new ServiceException("接入方案费用范围保存失败");
+        }
     }
 }

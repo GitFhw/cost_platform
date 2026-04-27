@@ -12,6 +12,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
+import java.util.List;
+
 /**
  * 数据接入方案对象 cost_access_profile
  */
@@ -31,6 +33,12 @@ public class CostAccessProfile extends BaseEntity {
 
     @TableField("fee_id")
     private Long feeId;
+
+    @TableField("fee_scope_type")
+    private String feeScopeType;
+
+    @TableField("fee_ids_json")
+    private String feeIdsJson;
 
     @TableField("version_id")
     private Long versionId;
@@ -103,6 +111,9 @@ public class CostAccessProfile extends BaseEntity {
 
     @TableField(exist = false)
     private String feeName;
+
+    @TableField(exist = false)
+    private List<Long> feeIds;
 
     @TableField(exist = false)
     private String versionNo;

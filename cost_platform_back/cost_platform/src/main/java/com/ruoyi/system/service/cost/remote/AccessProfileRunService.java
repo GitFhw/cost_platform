@@ -20,9 +20,13 @@ import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -103,6 +107,7 @@ public class AccessProfileRunService {
         if (profile == null) {
             throw new ServiceException("接入方案不存在，请刷新后重试");
         }
+        populateProfileFeeScope(profile);
         return profile;
     }
 
@@ -119,8 +124,9 @@ public class AccessProfileRunService {
     }
 
     private InputBuildContext buildInputBuildContext(CostAccessProfile profile) {
+        List<Long> feeIds = resolveProfileFeeIds(profile);
         Map<String, Object> template = runService.buildFeeInputTemplate(profile.getSceneId(), profile.getVersionId(),
-                profile.getFeeId(), profile.getFeeCode(), profile.getTaskType());
+                feeIds, profile.getFeeId(), profile.getFeeCode(), profile.getTaskType());
         return accessProfileInputMappingService.buildContext(template, profile.getMappingJson());
     }
 
@@ -172,6 +178,59 @@ public class AccessProfileRunService {
 
     private String firstNonBlank(String first, String second) {
         return StringUtils.isNotEmpty(first) ? first : second;
+    }
+
+    private void populateProfileFeeScope(CostAccessProfile profile) {
+        List<Long> feeIds = resolveProfileFeeIds(profile);
+        profile.setFeeIds(new ArrayList<>(feeIds));
+        if (feeIds.isEmpty()) {
+            profile.setFeeScopeType("ALL");
+            profile.setFeeId(null);
+            return;
+        }
+        if (feeIds.size() == 1) {
+            profile.setFeeScopeType("SINGLE");
+            profile.setFeeId(feeIds.get(0));
+            return;
+        }
+        profile.setFeeScopeType("MULTI");
+        profile.setFeeId(null);
+    }
+
+    private List<Long> resolveProfileFeeIds(CostAccessProfile profile) {
+        if (profile == null) {
+            return Collections.emptyList();
+        }
+        Set<Long> feeIds = new LinkedHashSet<>();
+        if (profile.getFeeIds() != null) {
+            for (Long feeId : profile.getFeeIds()) {
+                if (feeId != null) {
+                    feeIds.add(feeId);
+                }
+            }
+        }
+        if (feeIds.isEmpty() && StringUtils.isNotEmpty(profile.getFeeIdsJson())) {
+            try {
+                String text = profile.getFeeIdsJson().trim();
+                if (text.startsWith("[") && text.endsWith("]")) {
+                    String body = text.substring(1, text.length() - 1).trim();
+                    if (StringUtils.isNotEmpty(body)) {
+                        for (String token : body.split(",")) {
+                            String candidate = token.trim();
+                            if (StringUtils.isNotEmpty(candidate)) {
+                                feeIds.add(Long.valueOf(candidate));
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                throw new ServiceException("接入方案费用范围配置解析失败");
+            }
+        }
+        if (feeIds.isEmpty() && profile.getFeeId() != null) {
+            feeIds.add(profile.getFeeId());
+        }
+        return new ArrayList<>(feeIds);
     }
 
     private static class AccessProfileVersionMeta {
