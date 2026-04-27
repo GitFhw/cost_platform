@@ -8,6 +8,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <id property="profileId" column="profile_id" />
         <result property="sceneId" column="scene_id" />
         <result property="feeId" column="fee_id" />
+        <result property="feeScopeType" column="fee_scope_type" />
+        <result property="feeIdsJson" column="fee_ids_json" />
         <result property="versionId" column="version_id" />
         <result property="profileCode" column="profile_code" />
         <result property="profileName" column="profile_name" />
@@ -39,6 +41,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select p.profile_id,
                p.scene_id,
                p.fee_id,
+               p.fee_scope_type,
+               p.fee_ids_json,
                p.version_id,
                p.profile_code,
                p.profile_name,

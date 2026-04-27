@@ -34,28 +34,133 @@
           <el-button type="danger" icon="Delete" :disabled="!selectedProfileId" @click="handleDeleteProfile" v-hasPermi="['cost:access:remove']">删除方案</el-button>
         </div>
       </div>
-      <el-form inline label-width="88px" class="access-page__inline-form">
-        <el-form-item label="当前方案">
-          <el-select v-model="selectedProfileId" clearable filterable style="width: 360px" placeholder="请选择接入方案" @change="handleProfileChange">
-            <el-option v-for="item in profileOptions" :key="item.profileId" :label="`${item.profileName} / ${item.profileCode}`" :value="item.profileId" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="来源类型">
-          <el-tag size="small" :type="currentProfile?.sourceType === 'HTTP_API' ? 'warning' : 'info'">{{ currentProfile?.sourceType || '未选择' }}</el-tag>
-        </el-form-item>
-        <el-form-item label="执行模式">
-          <el-tag size="small" type="success">{{ currentProfile?.taskType || selectionForm.taskType }}</el-tag>
-        </el-form-item>
-        <el-form-item label="绑定版本">
-          <span>{{ currentProfile?.versionNo || '按当前配置或生效版本' }}</span>
-        </el-form-item>
-      </el-form>
-      <el-alert v-if="profileSummary" class="access-page__alert" :closable="false" :title="profileSummary" type="info" />
       <div class="access-page__summary access-page__summary--context">
         <div v-for="item in contextItems" :key="item.label" class="access-page__card access-page__card--context">
           <span>{{ item.label }}</span>
           <strong>{{ item.value }}</strong>
           <small>{{ item.desc }}</small>
+        </div>
+      </div>
+      <div class="access-page__ledger-shell">
+        <div class="access-page__ledger-head">
+          <div>
+            <h4>方案台账</h4>
+            <p class="access-page__subtext">方案多了以后，不再依赖下拉切换。先在台账里筛、看、装载，再进入下方接入工作流。</p>
+          </div>
+          <div class="access-page__ledger-quick">
+            <span>最近使用</span>
+            <el-select
+              :model-value="recentProfileQuickId"
+              clearable
+              filterable
+              style="width: 280px"
+              placeholder="最近使用方案快捷切换"
+              @change="handleRecentProfileQuickChange"
+            >
+              <el-option
+                v-for="item in recentProfileOptions"
+                :key="item.profileId"
+                :label="`${item.profileName} / ${item.profileCode}`"
+                :value="item.profileId"
+              />
+            </el-select>
+          </div>
+        </div>
+        <el-form inline label-width="84px" class="access-page__inline-form access-page__inline-form--ledger">
+          <el-form-item label="关键词">
+            <el-input v-model="profileFilters.keyword" clearable style="width: 240px" placeholder="方案名 / 编码 / 费用 / 地址" />
+          </el-form-item>
+          <el-form-item label="来源">
+            <el-select v-model="profileFilters.sourceType" clearable style="width: 160px" placeholder="全部来源">
+              <el-option label="原始 JSON / 宽表报文" value="RAW_JSON" />
+              <el-option label="外部 HTTP 接口" value="HTTP_API" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="执行模式">
+            <el-select v-model="profileFilters.taskType" clearable style="width: 160px" placeholder="全部模式">
+              <el-option v-for="item in taskTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="profileFilters.status" clearable style="width: 140px" placeholder="全部状态">
+              <el-option label="正常" value="0" />
+              <el-option label="停用" value="1" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button icon="RefreshRight" @click="resetProfileFilters">重置筛选</el-button>
+          </el-form-item>
+        </el-form>
+        <div class="access-page__summary access-page__summary--profile">
+          <div v-for="item in profileLedgerMetrics" :key="item.label" class="access-page__card access-page__card--ledger">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.desc }}</small>
+          </div>
+        </div>
+        <el-alert v-if="profileSummary" class="access-page__alert" :closable="false" :title="profileSummary" type="info" />
+        <el-table
+          v-loading="profileTableLoading"
+          :data="filteredProfileOptions"
+          border
+          class="access-page__table access-page__table--ledger"
+          row-key="profileId"
+          :row-class-name="resolveProfileRowClassName"
+          @row-click="handleProfileRowClick"
+        >
+          <el-table-column label="方案" min-width="240">
+            <template #default="scope">
+              <div class="access-page__profile-main">
+                <strong>{{ scope.row.profileName }}</strong>
+                <span>{{ scope.row.profileCode }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="目标范围" min-width="220">
+            <template #default="scope">
+              <div class="access-page__profile-scope">
+                <el-tag :type="resolveProfileScopeTagType(scope.row)" size="small">{{ resolveProfileScopeTypeLabel(scope.row) }}</el-tag>
+                <span>{{ resolveProfileScopeLabel(scope.row) }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="来源" width="140">
+            <template #default="scope">
+              <el-tag :type="scope.row.sourceType === 'HTTP_API' ? 'warning' : 'info'" size="small">{{ resolveProfileSourceTypeLabel(scope.row.sourceType) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="执行模式" width="120">
+            <template #default="scope">
+              <el-tag type="success" size="small">{{ resolveTaskTypeLabel(scope.row.taskType) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="绑定版本" min-width="170">
+            <template #default="scope">{{ scope.row.versionNo || '按当前配置或生效版本' }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="100">
+            <template #default="scope">
+              <el-tag :type="scope.row.status === '0' ? 'success' : 'info'" size="small">{{ scope.row.status === '0' ? '正常' : '停用' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="更新时间" min-width="168">
+            <template #default="scope">{{ scope.row.updateTime || scope.row.createTime || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="260" fixed="right">
+            <template #default="scope">
+              <el-button link type="primary" @click.stop="handleLoadProfile(scope.row)">装载</el-button>
+              <el-button link @click.stop="handleOpenProfileDialog('clone', scope.row)" v-hasPermi="['cost:access:add']">复制</el-button>
+              <el-button link @click.stop="handleOpenProfileDialog('edit', scope.row)" v-hasPermi="['cost:access:edit']">编辑</el-button>
+              <el-button link type="danger" @click.stop="handleDeleteProfile(scope.row)" v-hasPermi="['cost:access:remove']">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!profileTableLoading && !filteredProfileOptions.length" :image-size="72" description="当前场景下还没有匹配方案，可以先把下方工作区沉淀为新方案。" />
+        <div v-if="currentProfile" class="access-page__summary access-page__summary--detail">
+          <div v-for="item in activeProfileDetailItems" :key="item.label" class="access-page__card access-page__card--detail">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.desc }}</small>
+          </div>
         </div>
       </div>
     </section>
@@ -353,7 +458,7 @@
 
 <script setup name="CostDataAccess">
 import JsonEditor from '@/components/cost/JsonEditor.vue'
-import { addAccessProfile, createInputBatchByAccessProfile, getAccessProfile, optionselectAccessProfile, previewAccessProfileFetch, removeAccessProfile, updateAccessProfile } from '@/api/cost/access'
+import { addAccessProfile, createInputBatchByAccessProfile, getAccessProfile, listAccessProfile, previewAccessProfileFetch, removeAccessProfile, updateAccessProfile } from '@/api/cost/access'
 import { optionselectFee } from '@/api/cost/fee'
 import { calculateFee, createTaskInputBatch, getFeeRunInputTemplate, listVersionOptions, previewBuiltInput } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
@@ -368,17 +473,20 @@ const router = useRouter()
 const { proxy } = getCurrentInstance()
 const settingsStore = useSettingsStore()
 const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
+const RECENT_PROFILE_STORAGE_KEY = 'cost-access-recent-profile-ids'
 
 const sceneOptions = ref([])
 const versionOptions = ref([])
 const feeOptions = ref([])
 const profileOptions = ref([])
+const profileTableLoading = ref(false)
 const templateData = ref({})
 const feeResult = ref({})
 const buildPreview = ref({})
 const createdBatch = ref({})
 const autoMappingJson = ref('')
 const selectedProfileId = ref(undefined)
+const recentProfileIds = ref(readRecentProfileIds())
 const profileDialogVisible = ref(false)
 const profileDialogMode = ref('add')
 const activeStageKey = ref('template')
@@ -386,12 +494,41 @@ const templateStageRef = ref()
 const feeStageRef = ref()
 const previewStageRef = ref()
 
+const taskTypeOptions = [
+  { label: '试算', value: 'SIMULATION' },
+  { label: '正式单笔', value: 'FORMAL_SINGLE' },
+  { label: '正式批量', value: 'FORMAL_BATCH' }
+]
+
+function normalizeNumericIds(value) {
+  const source = Array.isArray(value) ? value : [value]
+  const idSet = new Set()
+  source.forEach(item => {
+    if (item === undefined || item === null || item === '') {
+      return
+    }
+    String(item)
+      .split(',')
+      .map(token => Number(String(token).trim()))
+      .filter(token => Number.isFinite(token) && token > 0)
+      .forEach(token => idSet.add(token))
+  })
+  return [...idSet]
+}
+
+function parseRouteFeeIds(feeIdsQuery, feeIdQuery) {
+  const feeIds = normalizeNumericIds(feeIdsQuery)
+  return feeIds.length ? feeIds : normalizeNumericIds(feeIdQuery)
+}
+
+const initialRouteFeeIds = parseRouteFeeIds(route.query.feeIds, route.query.feeId)
+
 const selectionForm = reactive({
   sceneId: route.query.sceneId ? Number(route.query.sceneId) : undefined,
   versionId: resolveWorkingVersionId(route.query.versionId ? Number(route.query.versionId) : undefined),
-  feeIds: route.query.feeId ? [Number(route.query.feeId)] : [],
-  feeId: route.query.feeId ? Number(route.query.feeId) : undefined,
-  feeCode: route.query.feeCode || '',
+  feeIds: initialRouteFeeIds,
+  feeId: initialRouteFeeIds.length === 1 ? initialRouteFeeIds[0] : undefined,
+  feeCode: initialRouteFeeIds.length === 1 ? route.query.feeCode || '' : '',
   taskType: route.query.taskType || 'FORMAL_BATCH'
 })
 
@@ -423,6 +560,13 @@ const profileForm = reactive({
   remark: ''
 })
 
+const profileFilters = reactive({
+  keyword: '',
+  sourceType: '',
+  taskType: '',
+  status: ''
+})
+
 const templateFields = computed(() => templateData.value.fields || [])
 const feeRecords = computed(() => feeResult.value.records || [])
 const buildPreviewRecords = computed(() => buildPreview.value.mappedRecords || [])
@@ -450,6 +594,15 @@ const createdBatchResumeTip = computed(() => {
 const formattedTemplateJson = computed(() => formatJson(templateData.value.inputJson))
 const formattedBuildPreviewJson = computed(() => formatJson(buildPreview.value))
 const currentProfile = computed(() => profileOptions.value.find(item => item.profileId === selectedProfileId.value))
+const recentProfileOptions = computed(() => recentProfileIds.value
+  .map(profileId => profileOptions.value.find(item => item.profileId === profileId))
+  .filter(Boolean)
+)
+const recentProfileQuickId = computed(() => {
+  return recentProfileOptions.value.some(item => item.profileId === selectedProfileId.value)
+    ? selectedProfileId.value
+    : undefined
+})
 const currentScene = computed(() => sceneOptions.value.find(item => item.sceneId === selectionForm.sceneId))
 const selectedFees = computed(() => {
   const selectedIds = new Set(normalizeSelectedFeeIds())
@@ -461,7 +614,53 @@ const currentFee = computed(() => {
   return isSingleFeeScope.value ? selectedFees.value[0] : undefined
 })
 const currentVersion = computed(() => versionOptions.value.find(item => item.versionId === selectionForm.versionId))
-const profileDialogTitle = computed(() => profileDialogMode.value === 'edit' ? '更新接入方案' : '保存接入方案')
+const profileDialogTitle = computed(() => {
+  if (profileDialogMode.value === 'edit') return '更新接入方案'
+  if (profileDialogMode.value === 'clone') return '复制接入方案'
+  return '保存接入方案'
+})
+const filteredProfileOptions = computed(() => {
+  const keyword = String(profileFilters.keyword || '').trim().toLowerCase()
+  const recentIndexMap = recentProfileIds.value.reduce((acc, profileId, index) => {
+    acc.set(profileId, index)
+    return acc
+  }, new Map())
+  return [...profileOptions.value]
+    .filter(item => {
+      if (profileFilters.sourceType && item.sourceType !== profileFilters.sourceType) return false
+      if (profileFilters.taskType && item.taskType !== profileFilters.taskType) return false
+      if (profileFilters.status && item.status !== profileFilters.status) return false
+      if (!keyword) return true
+        return [
+          item.profileName,
+          item.profileCode,
+          item.feeName,
+          item.feeCode,
+          item.feeScopeType,
+          resolveProfileScopeTypeLabel(item),
+          resolveProfileScopeLabel(item),
+          item.endpointUrl,
+          item.versionNo
+        ]
+          .filter(Boolean)
+          .some(field => String(field).toLowerCase().includes(keyword))
+    })
+    .sort((a, b) => {
+      const aMatched = Number(isProfileScopeMatched(a))
+      const bMatched = Number(isProfileScopeMatched(b))
+      if (bMatched !== aMatched) {
+        return bMatched - aMatched
+      }
+      const aRecent = recentIndexMap.has(a.profileId) ? recentIndexMap.get(a.profileId) : Number.MAX_SAFE_INTEGER
+      const bRecent = recentIndexMap.has(b.profileId) ? recentIndexMap.get(b.profileId) : Number.MAX_SAFE_INTEGER
+      if (aRecent !== bRecent) {
+        return aRecent - bRecent
+      }
+      const aTime = new Date(a.updateTime || a.createTime || 0).getTime()
+      const bTime = new Date(b.updateTime || b.createTime || 0).getTime()
+      return bTime - aTime
+    })
+})
 const buildPreviewFetchTitle = computed(() => {
   const fetchMeta = buildPreview.value.fetchMeta
   if (!fetchMeta) return ''
@@ -483,6 +682,15 @@ const metricItems = computed(() => [
   { label: '模板字段', value: templateData.value.inputFieldCount || 0, desc: '当前费用模板要求准备的字段数' },
   { label: '本次记录', value: feeResult.value.recordCount || 0, desc: '最近一次费用取价返回的结果行数' }
 ])
+const profileLedgerMetrics = computed(() => {
+  const matchedCount = profileOptions.value.filter(item => isProfileScopeMatched(item)).length
+  return [
+    { label: '方案总数', value: profileOptions.value.length, desc: '当前场景下已沉淀的接入方案数' },
+    { label: '匹配当前范围', value: matchedCount, desc: '与当前目标费用和版本口径直接匹配的方案数' },
+    { label: 'HTTP 直连方案', value: profileOptions.value.filter(item => item.sourceType === 'HTTP_API').length, desc: '支持按方案直连接口拉取的方案数' },
+    { label: '已装载方案', value: currentProfile.value?.profileName || '未装载', desc: currentProfile.value?.profileCode || '在台账里选择后会同步下方工作流' }
+  ]
+})
 const targetFeeTitle = computed(() => {
   if (isAllFeeScope.value) return '全部费用'
   if (isSingleFeeScope.value) return currentFee.value?.feeName || '单费用'
@@ -524,6 +732,31 @@ const contextItems = computed(() => [
     desc: currentProfile.value?.profileCode || '可直接把当前映射和样例沉淀为方案'
   }
 ])
+const activeProfileDetailItems = computed(() => {
+  if (!currentProfile.value) return []
+  return [
+    {
+      label: '装载方案',
+      value: currentProfile.value.profileName,
+      desc: currentProfile.value.profileCode
+    },
+    {
+      label: '方案来源',
+      value: resolveProfileSourceTypeLabel(currentProfile.value.sourceType),
+      desc: currentProfile.value.endpointUrl || '当前方案以页面样例或原始 JSON 为主'
+    },
+    {
+      label: '费用范围',
+      value: resolveProfileScopeTypeLabel(currentProfile.value),
+      desc: resolveProfileScopeLabel(currentProfile.value)
+    },
+    {
+      label: '执行模式',
+      value: resolveTaskTypeLabel(currentProfile.value.taskType),
+      desc: currentProfile.value.versionNo || '按当前配置或生效版本执行'
+    }
+  ]
+})
 const workflowStages = computed(() => [
   {
     key: 'template',
@@ -566,8 +799,7 @@ const workflowStages = computed(() => [
 const profileSummary = computed(() => {
   if (!currentProfile.value) return ''
   const sourceLabel = currentProfile.value.sourceType === 'HTTP_API' ? '外部 HTTP 接口' : '原始 JSON / 宽表报文'
-  const targetFee = currentProfile.value.feeName ? `${currentProfile.value.feeName} / ${currentProfile.value.feeCode}` : '场景级方案'
-  return `当前方案 ${currentProfile.value.profileName}（${currentProfile.value.profileCode}），面向 ${targetFee}，来源为 ${sourceLabel}。保存时会同步固化当前映射和样例载荷。`
+  return `当前方案 ${currentProfile.value.profileName}（${currentProfile.value.profileCode}），面向 ${resolveProfileScopeLabel(currentProfile.value)}，来源为 ${sourceLabel}。保存时会同步固化当前映射和样例载荷。`
 })
 const feeResultSummary = computed(() => {
   if (!feeResult.value.recordCount) return ''
@@ -575,6 +807,147 @@ const feeResultSummary = computed(() => {
   const inputCount = feeResult.value.inputCount || feeResult.value.recordCount
   return `本次回算 ${inputCount} 个对象、${targetCount} 项费用，共 ${feeResult.value.recordCount} 行结果，成功 ${feeResult.value.successCount || 0} 条，未命中 ${feeResult.value.noMatchCount || 0} 条，失败 ${feeResult.value.failedCount || 0} 条。`
 })
+
+function readRecentProfileIds() {
+  if (typeof window === 'undefined') {
+    return []
+  }
+  try {
+    const stored = window.localStorage.getItem(RECENT_PROFILE_STORAGE_KEY)
+    const parsed = JSON.parse(stored || '[]')
+    return Array.isArray(parsed)
+      ? parsed.map(item => Number(item)).filter(item => Number.isFinite(item))
+      : []
+  } catch (error) {
+    return []
+  }
+}
+
+function persistRecentProfileIds(profileIds) {
+  if (typeof window === 'undefined') {
+    return
+  }
+  window.localStorage.setItem(RECENT_PROFILE_STORAGE_KEY, JSON.stringify(profileIds))
+}
+
+function rememberRecentProfile(profileId) {
+  if (!profileId) return
+  const nextIds = [profileId, ...recentProfileIds.value.filter(item => item !== profileId)].slice(0, 8)
+  recentProfileIds.value = nextIds
+  persistRecentProfileIds(nextIds)
+}
+
+function resolveTaskTypeLabel(taskType) {
+  return taskTypeOptions.find(item => item.value === taskType)?.label || taskType || '未设置'
+}
+
+function resolveProfileSourceTypeLabel(sourceType) {
+  if (sourceType === 'HTTP_API') return '外部 HTTP 接口'
+  if (sourceType === 'RAW_JSON') return '原始 JSON / 宽表报文'
+  return sourceType || '未设置'
+}
+
+function resolveProfileFeeIds(profile) {
+  if (!profile) return []
+  const directIds = normalizeNumericIds(profile.feeIds)
+  if (directIds.length) {
+    return directIds
+  }
+  if (profile.feeIdsJson) {
+    try {
+      const parsed = JSON.parse(profile.feeIdsJson)
+      const parsedIds = normalizeNumericIds(parsed)
+      if (parsedIds.length) {
+        return parsedIds
+      }
+    } catch (error) {
+      return normalizeNumericIds(profile.feeIdsJson)
+    }
+  }
+  return normalizeNumericIds(profile.feeId)
+}
+
+function resolveProfileScopeType(profile) {
+  const feeIds = resolveProfileFeeIds(profile)
+  if (!feeIds.length) return 'ALL'
+  if (feeIds.length === 1) return 'SINGLE'
+  return 'MULTI'
+}
+
+function resolveProfileScopeTypeLabel(profile) {
+  const scopeType = resolveProfileScopeType(profile)
+  if (scopeType === 'SINGLE') return '单费用方案'
+  if (scopeType === 'MULTI') return '多费用组合'
+  return '全费用方案'
+}
+
+function resolveProfileScopeTagType(profile) {
+  const scopeType = resolveProfileScopeType(profile)
+  if (scopeType === 'SINGLE') return 'warning'
+  if (scopeType === 'MULTI') return 'info'
+  return 'success'
+}
+
+function resolveProfileScopeLabel(profile) {
+  if (!profile) return '未装载'
+  const feeIds = resolveProfileFeeIds(profile)
+  if (!feeIds.length) {
+    return '当前场景全部费用'
+  }
+  if (feeIds.length === 1) {
+    const currentFeeRecord = feeOptions.value.find(item => item.feeId === feeIds[0])
+    const feeName = profile.feeName || currentFeeRecord?.feeName || `费用#${feeIds[0]}`
+    const feeCode = profile.feeCode || currentFeeRecord?.feeCode || '-'
+    return `${feeName} / ${feeCode}`
+  }
+  const feeNames = feeIds
+    .map(feeId => feeOptions.value.find(item => item.feeId === feeId))
+    .filter(Boolean)
+    .map(item => item.feeName || item.feeCode || `费用#${item.feeId}`)
+  if (!feeNames.length) {
+    return `已绑定 ${feeIds.length} 项费用`
+  }
+  const summaryNames = feeNames.slice(0, 3).join('、')
+  return feeIds.length > 3 ? `${summaryNames} 等 ${feeIds.length} 项` : `${summaryNames} 共 ${feeIds.length} 项`
+}
+
+function isProfileScopeMatched(profile) {
+  if (!profile) return false
+  const profileScopeType = resolveProfileScopeType(profile)
+  const profileFeeIds = resolveProfileFeeIds(profile)
+  const currentFeeIds = normalizeSelectedFeeIds()
+  if (isAllFeeScope.value) {
+    return profileScopeType === 'ALL'
+  }
+  if (isSingleFeeScope.value) {
+    const currentFeeId = currentFeeIds[0]
+    if (profileScopeType === 'ALL') {
+      return true
+    }
+    if (profileScopeType === 'SINGLE') {
+      return profileFeeIds[0] === currentFeeId
+    }
+    return profileFeeIds.includes(currentFeeId)
+  }
+  if (profileScopeType === 'ALL') {
+    return true
+  }
+  if (profileScopeType !== 'MULTI' || profileFeeIds.length !== currentFeeIds.length) {
+    return false
+  }
+  return currentFeeIds.every(feeId => profileFeeIds.includes(feeId))
+}
+
+function resolveProfileRowClassName({ row }) {
+  return row?.profileId === selectedProfileId.value ? 'is-selected-profile-row' : ''
+}
+
+function resetProfileFilters() {
+  profileFilters.keyword = ''
+  profileFilters.sourceType = ''
+  profileFilters.taskType = ''
+  profileFilters.status = ''
+}
 
 function scrollToStage(stageKey) {
   activeStageKey.value = stageKey
@@ -608,9 +981,7 @@ async function loadVersions(sceneId) {
 }
 
 function normalizeSelectedFeeIds() {
-  return Array.isArray(selectionForm.feeIds)
-    ? selectionForm.feeIds.filter(item => item !== undefined && item !== null)
-    : []
+  return normalizeNumericIds(selectionForm.feeIds)
 }
 
 function syncSingleFeeFields() {
@@ -667,16 +1038,22 @@ async function loadProfiles() {
     selectedProfileId.value = undefined
     return
   }
-  syncSingleFeeFields()
-  const response = await optionselectAccessProfile({
-    sceneId: selectionForm.sceneId,
-    feeId: selectionForm.feeId,
-    status: '0'
-  })
-  profileOptions.value = response?.data || []
+  profileTableLoading.value = true
+  try {
+    const response = await listAccessProfile({
+      sceneId: selectionForm.sceneId,
+      pageNum: 1,
+      pageSize: 1000
+    })
+    profileOptions.value = response?.rows || []
+  } finally {
+    profileTableLoading.value = false
+  }
   if (!profileOptions.value.find(item => item.profileId === selectedProfileId.value)) {
     selectedProfileId.value = undefined
   }
+  recentProfileIds.value = recentProfileIds.value.filter(profileId => profileOptions.value.some(item => item.profileId === profileId))
+  persistRecentProfileIds(recentProfileIds.value)
 }
 
 function resetFeeScopedState(options = {}) {
@@ -833,19 +1210,23 @@ function resetProfileForm() {
   profileForm.remark = ''
 }
 
-async function handleOpenProfileDialog(mode) {
+async function handleOpenProfileDialog(mode, row) {
   if (!selectionForm.sceneId) {
     proxy.$modal.msgWarning('请先选择场景')
     return
   }
+  if (row?.profileId && row.profileId !== selectedProfileId.value) {
+    await handleLoadProfile(row)
+  }
   profileDialogMode.value = mode
   resetProfileForm()
-  if (mode === 'edit') {
-    if (!selectedProfileId.value) {
+  if (mode === 'edit' || mode === 'clone') {
+    const profileId = row?.profileId || selectedProfileId.value
+    if (!profileId) {
       proxy.$modal.msgWarning('请先选择接入方案')
       return
     }
-    const response = await getAccessProfile(selectedProfileId.value)
+    const response = await getAccessProfile(profileId)
     const detail = response?.data || {}
     profileForm.profileId = detail.profileId
     profileForm.profileCode = detail.profileCode || ''
@@ -860,16 +1241,25 @@ async function handleOpenProfileDialog(mode) {
     profileForm.fetchConfigJson = detail.fetchConfigJson || ''
     profileForm.status = detail.status || '0'
     profileForm.remark = detail.remark || ''
+    if (mode === 'clone') {
+      profileForm.profileId = undefined
+      profileForm.profileCode = `${detail.profileCode || 'PROFILE'}_COPY`
+      profileForm.profileName = `${detail.profileName || '接入方案'}-复制`
+    }
   }
   profileDialogVisible.value = true
 }
 
 function buildProfilePayload() {
   syncSingleFeeFields()
+  const feeIds = normalizeSelectedFeeIds()
+  const feeScopeType = feeIds.length === 0 ? 'ALL' : feeIds.length === 1 ? 'SINGLE' : 'MULTI'
   return {
     profileId: profileForm.profileId,
     sceneId: selectionForm.sceneId,
-    feeId: isSingleFeeScope.value ? selectionForm.feeId : undefined,
+    feeScopeType,
+    feeIds,
+    feeId: feeScopeType === 'SINGLE' ? feeIds[0] : undefined,
     versionId: profileForm.versionId,
     profileCode: profileForm.profileCode?.trim(),
     profileName: profileForm.profileName?.trim(),
@@ -907,6 +1297,7 @@ async function handleSubmitProfile() {
   await loadProfiles()
   const matched = profileOptions.value.find(item => item.profileCode === payload.profileCode)
   selectedProfileId.value = matched?.profileId
+  rememberRecentProfile(matched?.profileId)
   proxy.$modal.msgSuccess('接入方案已保存')
 }
 
@@ -916,9 +1307,15 @@ async function handleProfileChange(profileId) {
   }
   const response = await getAccessProfile(profileId)
   const detail = response?.data || {}
-  selectionForm.feeIds = detail.feeId ? [detail.feeId] : []
-  selectionForm.feeId = detail.feeId
-  selectionForm.feeCode = detail.feeCode || ''
+  const profileFeeIds = resolveProfileFeeIds(detail)
+  selectionForm.feeIds = profileFeeIds
+  syncSingleFeeFields()
+  if (!selectionForm.feeCode && profileFeeIds.length === 1) {
+    selectionForm.feeCode = detail.feeCode || ''
+  }
+  if (profileFeeIds.length !== 1) {
+    selectionForm.feeCode = ''
+  }
   selectionForm.versionId = detail.versionId
   selectionForm.taskType = detail.taskType || selectionForm.taskType
   if (detail.mappingJson) {
@@ -935,9 +1332,25 @@ async function handleProfileChange(profileId) {
   if (detail.sampleInputJson) {
     calcForm.inputJson = formatJson(detail.sampleInputJson)
   }
+  rememberRecentProfile(profileId)
   if (selectionForm.sceneId) {
     await handleBuildTemplate()
   }
+}
+
+async function handleLoadProfile(row) {
+  if (!row?.profileId) return
+  selectedProfileId.value = row.profileId
+  await handleProfileChange(row.profileId)
+}
+
+async function handleProfileRowClick(row) {
+  await handleLoadProfile(row)
+}
+
+async function handleRecentProfileQuickChange(profileId) {
+  if (!profileId) return
+  await handleLoadProfile(profileOptions.value.find(item => item.profileId === profileId))
 }
 
 async function handlePreviewBuildByProfile() {
@@ -1032,14 +1445,19 @@ async function handleResumeBatchByProfile() {
   proxy.$modal.msgSuccess(batchNo ? `已继续装载并完成导入批次 ${batchNo}` : '已继续装载并完成导入批次')
 }
 
-async function handleDeleteProfile() {
-  if (!selectedProfileId.value) {
+async function handleDeleteProfile(row) {
+  const profileId = row?.profileId || selectedProfileId.value
+  if (!profileId) {
     proxy.$modal.msgWarning('请先选择接入方案')
     return
   }
   await proxy.$modal.confirm('确认删除当前接入方案吗？删除后不会影响已发布版本，只会移除接入中心的复用草稿。')
-  await removeAccessProfile(selectedProfileId.value)
-  selectedProfileId.value = undefined
+  await removeAccessProfile(profileId)
+  if (selectedProfileId.value === profileId) {
+    selectedProfileId.value = undefined
+  }
+  recentProfileIds.value = recentProfileIds.value.filter(item => item !== profileId)
+  persistRecentProfileIds(recentProfileIds.value)
   await loadProfiles()
   proxy.$modal.msgSuccess('接入方案已删除')
 }
@@ -1198,6 +1616,10 @@ onActivated(async () => {
   margin-top: 14px;
 }
 
+.access-page__inline-form--ledger {
+  margin-top: 18px;
+}
+
 .access-page__form-shell,
 .access-page__work-pane {
   display: grid;
@@ -1229,6 +1651,11 @@ onActivated(async () => {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.access-page__summary--profile,
+.access-page__summary--detail {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .access-page__card {
   border-radius: 14px;
   background: color-mix(in srgb, var(--el-color-success-light-9) 30%, var(--el-bg-color-overlay));
@@ -1238,6 +1665,71 @@ onActivated(async () => {
   font-size: 18px;
   line-height: 1.45;
   color: var(--el-text-color-primary);
+  word-break: break-word;
+}
+
+.access-page__card--ledger strong,
+.access-page__card--detail strong {
+  font-size: 18px;
+  line-height: 1.45;
+  color: var(--el-text-color-primary);
+  word-break: break-word;
+}
+
+.access-page__ledger-shell {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--el-border-color) 88%, transparent);
+}
+
+.access-page__ledger-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.access-page__ledger-head h4 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.access-page__ledger-quick {
+  display: grid;
+  gap: 8px;
+  min-width: 280px;
+}
+
+.access-page__ledger-quick span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  text-align: right;
+}
+
+.access-page__table--ledger :deep(.el-table__row) {
+  cursor: pointer;
+}
+
+.access-page__table--ledger :deep(.is-selected-profile-row) {
+  --el-table-tr-bg-color: color-mix(in srgb, var(--el-color-success-light-9) 55%, var(--el-bg-color-overlay));
+}
+
+.access-page__profile-main,
+.access-page__profile-scope {
+  display: grid;
+  gap: 6px;
+}
+
+.access-page__profile-main strong {
+  color: var(--el-text-color-primary);
+}
+
+.access-page__profile-main span,
+.access-page__profile-scope span {
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
   word-break: break-word;
 }
 
@@ -1382,6 +1874,8 @@ onActivated(async () => {
 @media (max-width: 1280px) {
   .access-page__metrics,
   .access-page__summary--context,
+  .access-page__summary--profile,
+  .access-page__summary--detail,
   .access-page__stage-strip {
     grid-template-columns: 1fr;
   }
@@ -1390,9 +1884,14 @@ onActivated(async () => {
     flex-direction: column;
   }
 
+  .access-page__ledger-head,
   .access-page__section-head,
   .access-page__pane-head {
     flex-direction: column;
+  }
+
+  .access-page__ledger-quick span {
+    text-align: left;
   }
 }
 </style>

@@ -142,6 +142,9 @@ public class AccessProfileBatchFacade {
         summary.put("sceneId", profile.getSceneId());
         summary.put("sceneCode", profile.getSceneCode());
         summary.put("sceneName", profile.getSceneName());
+        summary.put("feeScopeType", profile.getFeeScopeType());
+        summary.put("feeIds", profile.getFeeIds());
+        summary.put("feeIdsJson", profile.getFeeIdsJson());
         summary.put("feeId", profile.getFeeId());
         summary.put("feeCode", profile.getFeeCode());
         summary.put("feeName", profile.getFeeName());
