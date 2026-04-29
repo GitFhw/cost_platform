@@ -103,11 +103,20 @@
           <span>{{ parseTime(scope.row.updateTime) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="250" fixed="right" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="210" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
-          <el-button link type="primary" icon="View" @click="handleGovernance(scope.row)">治理</el-button>
-          <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['cost:fee:edit']">修改</el-button>
-          <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['cost:fee:remove']">删除</el-button>
+          <div class="cost-row-actions">
+            <el-button link type="primary" icon="View" @click="handleGovernance(scope.row)">治理</el-button>
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['cost:fee:edit']">修改</el-button>
+            <el-dropdown trigger="click" @command="command => handleFeeRowCommand(command, scope.row)">
+              <el-button link type="primary" icon="MoreFilled">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="delete" icon="Delete" v-hasPermi="['cost:fee:remove']">删除费用</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
       <template #empty>
@@ -422,6 +431,12 @@ function handleSelectionChange(selection) {
   ids.value = selection.map(item => item.feeId)
   single.value = selection.length !== 1
   multiple.value = !selection.length
+}
+
+function handleFeeRowCommand(command, row) {
+  if (command === 'delete') {
+    handleDelete(row)
+  }
 }
 
 function handleQuery() {

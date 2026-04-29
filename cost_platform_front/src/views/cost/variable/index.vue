@@ -188,13 +188,22 @@
       <el-table-column label="状态" prop="status" width="100" align="center">
         <template #default="scope"><dict-tag :options="variableStatusOptions" :value="scope.row.status" /></template>
       </el-table-column>
-      <el-table-column label="操作" width="360" fixed="right" align="center">
+      <el-table-column label="操作" width="260" fixed="right" align="center">
         <template #default="scope">
-          <el-button link type="primary" icon="Document" @click="handleDetail(scope.row)">详情</el-button>
-          <el-button link type="primary" icon="View" @click="handleGovernance(scope.row)">治理</el-button>
-          <el-button link type="primary" icon="CopyDocument" @click="handleCopy(scope.row)">复制</el-button>
-          <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)">修改</el-button>
-          <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)">删除</el-button>
+          <div class="cost-row-actions">
+            <el-button link type="primary" icon="Document" @click="handleDetail(scope.row)">详情</el-button>
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)">修改</el-button>
+            <el-dropdown trigger="click" @command="command => handleVariableRowCommand(command, scope.row)">
+              <el-button link type="primary" icon="MoreFilled">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="governance" icon="View">治理检查</el-dropdown-item>
+                  <el-dropdown-item command="copy" icon="CopyDocument">复制变量</el-dropdown-item>
+                  <el-dropdown-item command="delete" icon="Delete" v-hasPermi="['cost:variable:remove']">删除变量</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
       <template #empty>
@@ -1128,6 +1137,15 @@ function handleSelectionChange(selection) {
   ids.value = selection.map(item => item.variableId)
   single.value = selection.length !== 1
   multiple.value = !selection.length
+}
+
+function handleVariableRowCommand(command, row) {
+  const handlers = {
+    governance: handleGovernance,
+    copy: handleCopy,
+    delete: handleDelete
+  }
+  handlers[command]?.(row)
 }
 
 function handleQuery() {

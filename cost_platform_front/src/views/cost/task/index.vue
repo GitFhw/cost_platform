@@ -381,13 +381,22 @@
           <el-table-column label="成功/失败" width="120" align="center">
             <template #default="scope">{{ scope.row.successCount }}/{{ scope.row.failCount }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="310" fixed="right" align="center">
+          <el-table-column label="操作" width="240" fixed="right" align="center">
             <template #default="scope">
-              <el-button link type="primary" icon="View" @click="handleDetail(scope.row)">详情</el-button>
-              <el-button link type="success" icon="Histogram" @click="handleOpenPartitionMonitor(scope.row)">分片监控</el-button>
-              <el-button link type="success" icon="List" @click="openResultCenter(scope.row)">查看结果</el-button>
-              <el-button link type="danger" icon="Warning" @click="openAlertCenter(scope.row)">查看告警</el-button>
-              <el-button link type="warning" icon="CircleClose" @click="handleCancel(scope.row)" v-hasPermi="['cost:task:cancel']">取消</el-button>
+              <div class="cost-row-actions">
+                <el-button link type="primary" icon="View" @click="handleDetail(scope.row)">详情</el-button>
+                <el-button link type="success" icon="Histogram" @click="handleOpenPartitionMonitor(scope.row)">分片</el-button>
+                <el-dropdown trigger="click" @command="command => handleTaskRowCommand(command, scope.row)">
+                  <el-button link type="primary" icon="MoreFilled">更多</el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="result" icon="List">查看结果</el-dropdown-item>
+                      <el-dropdown-item command="alert" icon="Warning">查看告警</el-dropdown-item>
+                      <el-dropdown-item command="cancel" icon="CircleClose" v-hasPermi="['cost:task:cancel']">取消任务</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
             </template>
           </el-table-column>
           <template #empty>
@@ -1339,6 +1348,15 @@ async function handleDetail(row) {
   detailBatchQuery.pageNum = 1
   detailBatchQuery.pageSize = 10
   detailOpen.value = true
+}
+
+function handleTaskRowCommand(command, row) {
+  const handlers = {
+    result: openResultCenter,
+    alert: openAlertCenter,
+    cancel: handleCancel
+  }
+  handlers[command]?.(row)
 }
 
 async function handleOpenPartitionMonitor(row) {
