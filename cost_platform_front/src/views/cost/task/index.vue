@@ -390,6 +390,16 @@
               <el-button link type="warning" icon="CircleClose" @click="handleCancel(scope.row)" v-hasPermi="['cost:task:cancel']">取消</el-button>
             </template>
           </el-table-column>
+          <template #empty>
+            <cost-table-empty
+              title="当前没有正式核算任务"
+              description="正式任务用于落库结果和后续追溯。可以在左侧提交任务，或先创建导入批次后再发起核算。"
+            >
+              <el-button type="primary" icon="Promotion" @click="handleSubmit" v-hasPermi="['cost:task:execute']">提交任务</el-button>
+              <el-button plain icon="Upload" @click="openBatchDialog">创建批次</el-button>
+              <el-button icon="Refresh" @click="resetQuery">清空筛选</el-button>
+            </cost-table-empty>
+          </template>
         </el-table>
 
         <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />

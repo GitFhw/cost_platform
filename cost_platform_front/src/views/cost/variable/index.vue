@@ -197,6 +197,16 @@
           <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)">删除</el-button>
         </template>
       </el-table-column>
+      <template #empty>
+        <cost-table-empty
+          title="当前没有变量数据"
+          description="变量承接业务输入、字典、第三方接口和公式结果。可以新增变量、导入变量，或先套用共享模板。"
+        >
+          <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['cost:variable:add']">新增变量</el-button>
+          <el-button type="primary" plain icon="Upload" @click="handleImport" v-hasPermi="['cost:variable:add']">导入变量</el-button>
+          <el-button icon="Refresh" @click="resetQuery">清空筛选</el-button>
+        </cost-table-empty>
+      </template>
     </el-table>
 
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
