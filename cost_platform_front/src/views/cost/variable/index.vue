@@ -233,9 +233,18 @@
             <el-option v-for="item in formGroupOptions" :key="item.groupId" :label="item.groupName" :value="item.groupId" />
           </el-select>
         </el-form-item>
-        <div class="variable-center__drawer-tip">
-          先选来源类型，再补齐对应配置。第三方接口变量需明确来源系统、鉴权、字段映射、同步方式、缓存策略和失败兜底。
+        <div class="variable-center__source-guide">
+          <div v-for="item in sourceGuideItems" :key="item.value" class="variable-center__source-guide-item" :class="{ 'is-active': form.sourceType === item.value }">
+            <el-tag size="small" :type="item.tag">{{ item.label }}</el-tag>
+            <strong>{{ item.title }}</strong>
+            <span>{{ item.desc }}</span>
+          </div>
         </div>
+        <div class="variable-center__form-section">
+          <div class="variable-center__form-section-head">
+            <strong>基础信息</strong>
+            <span>先定义变量身份、数据类型和启停状态，后续配置会随来源类型自动分流。</span>
+          </div>
         <el-row :gutter="14">
           <el-col :span="12"><el-form-item label="变量编码" prop="variableCode"><el-input v-model="form.variableCode" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="变量名称" prop="variableName"><el-input v-model="form.variableName" /></el-form-item></el-col>
@@ -245,6 +254,14 @@
           <el-col :span="12"><el-form-item label="状态" prop="status"><el-radio-group v-model="form.status"><el-radio v-for="item in variableStatusOptions" :key="item.value" :label="item.value">{{ item.label }}</el-radio></el-radio-group></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="默认值" prop="defaultValue"><el-input v-model="form.defaultValue" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="精度" prop="precisionScale"><el-input-number v-model="form.precisionScale" :min="0" :max="8" style="width: 100%" /></el-form-item></el-col>
+        </el-row>
+        </div>
+        <div v-if="['INPUT', 'DICT', 'REMOTE'].includes(form.sourceType)" class="variable-center__form-section">
+          <div class="variable-center__form-section-head">
+            <strong>取值定位</strong>
+            <span>{{ currentSourceGuide.pathHint }}</span>
+          </div>
+          <el-row :gutter="14">
           <el-col v-if="['INPUT', 'DICT', 'REMOTE'].includes(form.sourceType)" :span="24">
             <el-form-item label="来源路径" prop="dataPath">
               <el-input v-model="form.dataPath" placeholder="可选；为空时按变量编码平铺取值，填写后如 cover.action、oddWork.quantity" />
@@ -254,6 +271,12 @@
             </div>
           </el-col>
         </el-row>
+        </div>
+        <div v-if="form.sourceType === 'DICT'" class="variable-center__form-section">
+          <div class="variable-center__form-section-head">
+            <strong>字典约束</strong>
+            <span>用于限定变量可选值，避免规则条件里出现不可识别的业务值。</span>
+          </div>
         <el-form-item v-if="form.sourceType === 'DICT'" label="字典类型" prop="dictType">
           <el-select v-model="form.dictType" clearable filterable style="width: 100%" placeholder="请选择系统字典或核算字典">
             <el-option-group v-for="group in dictTypeOptionGroups" :key="group.label" :label="group.label">
@@ -270,8 +293,14 @@
             字典来源变量统一从系统字典与核算字典下拉选择；来源路径可选，配置后可绑定对象内属性，例如 cover.action。
           </div>
         </el-form-item>
+        </div>
         <template v-if="form.sourceType === 'REMOTE'">
-          <el-alert title="第三方接口变量采用六层配置模型：请求定义、鉴权定义、响应提取、字段映射、分页策略、特殊适配。" type="info" :closable="false" show-icon class="mb12" />
+          <div class="variable-center__form-section">
+          <div class="variable-center__form-section-head">
+            <strong>远程接入</strong>
+            <span>第三方接口变量采用请求定义、鉴权定义、响应提取、字段映射、分页策略和特殊适配分区配置。</span>
+          </div>
+          <el-alert title="先测试接口，再预览映射结果，确认通过后保存变量。" type="info" :closable="false" show-icon class="mb12" />
           <div class="variable-center__drawer-actions variable-center__drawer-actions--remote">
             <el-button type="primary" plain icon="Connection" @click="handleTestRemoteDraft">测试接口</el-button>
             <el-button type="success" plain icon="View" @click="handlePreviewRemoteDraft">预览数据</el-button>
@@ -295,8 +324,14 @@
             <el-col :span="8"><el-form-item label="缓存策略" prop="cachePolicy"><el-select v-model="form.cachePolicy" style="width: 100%"><el-option v-for="item in cachePolicyOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="失败兜底" prop="fallbackPolicy"><el-select v-model="form.fallbackPolicy" style="width: 100%"><el-option v-for="item in fallbackPolicyOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item></el-col>
           </el-row>
+          </div>
         </template>
         <template v-if="form.sourceType === 'FORMULA'">
+          <div class="variable-center__form-section">
+          <div class="variable-center__form-section-head">
+            <strong>公式绑定</strong>
+            <span>公式变量只绑定公式实验室资产，表达式在公式实验室维护，变量中心负责运行链引用。</span>
+          </div>
           <el-form-item label="公式编码" prop="formulaCode">
             <el-select v-model="form.formulaCode" clearable filterable style="width: 100%" placeholder="请选择公式实验室中的公式编码">
               <el-option v-for="item in formulaOptions" :key="item.formulaCode" :label="`${item.formulaName} / ${item.formulaCode}`" :value="item.formulaCode" />
@@ -311,6 +346,7 @@
           <el-form-item label="标准表达式" prop="formulaExpr">
             <el-input v-model="form.formulaExpr" type="textarea" :rows="3" readonly placeholder="选择公式编码后自动回填，仅用于查看历史表达式" />
           </el-form-item>
+          </div>
         </template>
         <el-form-item label="备注" prop="remark"><el-input v-model="form.remark" type="textarea" :rows="3" /></el-form-item>
       </el-form>
@@ -764,6 +800,40 @@ const adapterTypeOptions = [
   { label: '分页包装对象', value: 'PAGE_ENVELOPE' },
   { label: '单对象响应', value: 'SINGLE_OBJECT' }
 ]
+const sourceGuideItems = [
+  {
+    value: 'INPUT',
+    label: 'INPUT',
+    tag: 'success',
+    title: '业务输入',
+    desc: '承接任务入参或导入批次字段',
+    pathHint: '用于声明变量从输入 JSON 的哪个路径取值；为空时按变量编码读取平铺输入。'
+  },
+  {
+    value: 'DICT',
+    label: 'DICT',
+    tag: 'info',
+    title: '字典取值',
+    desc: '先定位输入，再用字典限定值域',
+    pathHint: '先声明输入路径，再绑定字典类型；字典只负责约束值域，不代表取值位置。'
+  },
+  {
+    value: 'REMOTE',
+    label: 'REMOTE',
+    tag: 'warning',
+    title: '远程接口',
+    desc: '从第三方系统测试、预览并映射',
+    pathHint: '远程变量可声明映射后的业务路径；接口请求、鉴权、分页和映射在下方远程接入区维护。'
+  },
+  {
+    value: 'FORMULA',
+    label: 'FORMULA',
+    tag: 'info',
+    title: '公式变量',
+    desc: '绑定公式实验室资产后参与运行',
+    pathHint: '公式变量不需要来源路径，运行时由公式实验室表达式计算生成。'
+  }
+]
 
 const governanceOpen = ref(false)
 const governanceLoading = ref(false)
@@ -872,6 +942,7 @@ const data = reactive({
 })
 const { queryParams, form, copyForm, templateForm, importForm, rules, copyRules } = toRefs(data)
 const requestBodyLang = computed(() => String(form.value.contentType || '').toLowerCase().includes('json') ? 'json' : 'text')
+const currentSourceGuide = computed(() => sourceGuideItems.find(item => item.value === form.value.sourceType) || sourceGuideItems[0])
 
 const metricItems = computed(() => [
   { label: '变量总数', value: statistics.variableCount, desc: '当前筛选条件下的变量规模' },
@@ -1566,6 +1637,15 @@ getList()
 .variable-center__guide-item span { color: var(--el-text-color-secondary); line-height: 1.7; }
 .variable-center__drawer-tip { margin-bottom: 16px; padding: 12px 14px; border-radius: 12px; color: var(--el-text-color-regular); background: color-mix(in srgb, var(--el-color-primary-light-9) 32%, var(--el-bg-color-overlay)); line-height: 1.8; }
 .variable-center__drawer-tip--compact { margin-top: 10px; margin-bottom: 0; padding: 10px 12px; font-size: 12px; }
+.variable-center__source-guide { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.variable-center__source-guide-item { display: grid; gap: 6px; align-content: flex-start; min-height: 112px; padding: 12px; border: 1px solid var(--el-border-color-light); border-radius: 10px; background: var(--el-fill-color-extra-light); transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease; }
+.variable-center__source-guide-item.is-active { border-color: color-mix(in srgb, var(--el-color-primary) 55%, var(--el-border-color-light)); background: color-mix(in srgb, var(--el-color-primary-light-9) 28%, var(--el-bg-color-overlay)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--el-color-primary) 14%, transparent); }
+.variable-center__source-guide-item strong { font-size: 13px; color: var(--el-text-color-primary); }
+.variable-center__source-guide-item span { font-size: 12px; line-height: 1.6; color: var(--el-text-color-secondary); }
+.variable-center__form-section { margin-bottom: 14px; padding: 14px 14px 2px; border: 1px solid var(--el-border-color-lighter); border-radius: 12px; background: var(--el-bg-color-overlay); }
+.variable-center__form-section-head { display: grid; gap: 4px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed var(--el-border-color-light); }
+.variable-center__form-section-head strong { font-size: 14px; color: var(--el-text-color-primary); }
+.variable-center__form-section-head span { font-size: 12px; line-height: 1.7; color: var(--el-text-color-secondary); }
 .variable-center__drawer-actions { display: flex; justify-content: flex-end; margin: -6px 0 10px; }
 .variable-center__source-cell { display: grid; gap: 4px; line-height: 1.5; }
 .variable-center__source-cell strong { font-size: 13px; color: var(--el-text-color-primary); }
@@ -1612,6 +1692,7 @@ getList()
   .variable-center__workspace { grid-template-columns: 1fr; }
   .variable-center__template-metrics,
   .variable-center__action-grid,
+  .variable-center__source-guide,
   .variable-governance__summary,
   .variable-template-summary,
   .variable-template-governance,
@@ -1624,6 +1705,7 @@ getList()
   .variable-center__metrics,
   .variable-center__template-metrics,
   .variable-center__action-grid,
+  .variable-center__source-guide,
   .variable-governance__summary,
   .variable-template-toolbar,
   .variable-template-summary,
