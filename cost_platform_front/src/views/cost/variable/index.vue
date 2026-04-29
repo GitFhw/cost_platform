@@ -178,13 +178,14 @@
       <el-table-column label="来源" prop="sourceType" width="120" align="center">
         <template #default="scope"><dict-tag :options="sourceTypeOptions" :value="scope.row.sourceType" /></template>
       </el-table-column>
-      <el-table-column label="来源路径" prop="dataPath" width="140" align="center">
-        <template #default="scope">{{ scope.row.dataPath || '-' }}</template>
+      <el-table-column label="来源摘要" min-width="240" :show-overflow-tooltip="true">
+        <template #default="scope">
+          <div class="variable-center__source-cell">
+            <strong>{{ resolveVariableSourceSummary(scope.row) }}</strong>
+            <span>{{ resolveVariableSourceHint(scope.row) }}</span>
+          </div>
+        </template>
       </el-table-column>
-      <el-table-column label="来源系统" prop="sourceSystem" width="140" align="center">
-        <template #default="scope">{{ scope.row.sourceSystem || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="第三方接口" prop="remoteApi" min-width="180" align="center" :show-overflow-tooltip="true" />
       <el-table-column label="状态" prop="status" width="100" align="center">
         <template #default="scope"><dict-tag :options="variableStatusOptions" :value="scope.row.status" /></template>
       </el-table-column>
@@ -1475,6 +1476,33 @@ function resolveDictTypeLabel(dictType) {
   return `${match.dictName} / ${match.dictType}${suffix}`
 }
 
+function resolveVariableSourceSummary(row) {
+  if (row.sourceType === 'REMOTE') {
+    return row.sourceSystem || '第三方接口'
+  }
+  if (row.sourceType === 'DICT') {
+    return resolveDictTypeLabel(row.dictType)
+  }
+  if (row.sourceType === 'FORMULA') {
+    return row.formulaCode || '公式变量'
+  }
+  return row.dataPath || row.variableCode || '-'
+}
+
+function resolveVariableSourceHint(row) {
+  if (row.sourceType === 'REMOTE') {
+    const method = resolveRemoteOptionLabel(requestMethodOptions, row.requestMethod)
+    return `${method} / ${row.dataPath || '按变量编码取值'}`
+  }
+  if (row.sourceType === 'DICT') {
+    return row.dataPath ? `从 ${row.dataPath} 取值后做字典约束` : '按变量编码取值后做字典约束'
+  }
+  if (row.sourceType === 'FORMULA') {
+    return row.businessFormula || row.formulaExpr || '在公式实验室维护计算口径'
+  }
+  return row.dataPath ? '按来源路径读取业务输入' : '按变量编码读取平铺输入'
+}
+
 function formatJson(value) {
   return safeFormatJson(value, '-')
 }
@@ -1539,6 +1567,9 @@ getList()
 .variable-center__drawer-tip { margin-bottom: 16px; padding: 12px 14px; border-radius: 12px; color: var(--el-text-color-regular); background: color-mix(in srgb, var(--el-color-primary-light-9) 32%, var(--el-bg-color-overlay)); line-height: 1.8; }
 .variable-center__drawer-tip--compact { margin-top: 10px; margin-bottom: 0; padding: 10px 12px; font-size: 12px; }
 .variable-center__drawer-actions { display: flex; justify-content: flex-end; margin: -6px 0 10px; }
+.variable-center__source-cell { display: grid; gap: 4px; line-height: 1.5; }
+.variable-center__source-cell strong { font-size: 13px; color: var(--el-text-color-primary); }
+.variable-center__source-cell span { font-size: 12px; color: var(--el-text-color-secondary); }
 .variable-center__test-dialog { display: grid; gap: 12px; }
 .variable-center__test-preview { display: grid; gap: 8px; }
 .variable-center__test-preview-label { font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); }
