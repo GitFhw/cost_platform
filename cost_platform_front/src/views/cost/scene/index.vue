@@ -700,6 +700,7 @@ import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listSc
 import { deptTreeSelect } from '@/api/system/user'
 import useSettingsStore from '@/store/modules/settings'
 import { getCostSceneContextId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
 import { resolveCostChangeTypeLabel } from '@/utils/costDisplayLabels'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { formatLegacyOrgLabel } from '@/utils/costOptionLabel'
@@ -1101,7 +1102,16 @@ function handleOpenPublishAudit() {
   })
 }
 
-function handleSetCurrentScene(row) {
+async function handleSetCurrentScene(row) {
+  const confirmed = await confirmCostSceneSwitch({
+    currentSceneId: currentSceneInfo.value.sceneId,
+    nextSceneId: row.sceneId,
+    sceneOptions: sceneList.value,
+    scope: '全局工作场景'
+  })
+  if (!confirmed) {
+    return
+  }
   setCostSceneContextId(row)
   currentSceneInfo.value = row
   loadCurrentScenePublishSummary(row)

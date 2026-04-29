@@ -777,6 +777,7 @@ import {
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
@@ -837,6 +838,8 @@ const routeTaskContext = reactive({
   view: route.query.view || ''
 })
 const lastOpenedRouteTaskKey = ref('')
+const lastQuerySceneId = ref(undefined)
+const lastFormSceneId = ref(undefined)
 
 const queryParams = reactive({
   pageNum: 1,
@@ -952,6 +955,8 @@ async function loadBaseOptions() {
   if (!form.sceneId) form.sceneId = preferredSceneId
   if (!batchForm.sceneId) batchForm.sceneId = preferredSceneId
   if (!batchQuery.sceneId) batchQuery.sceneId = preferredSceneId
+  lastQuerySceneId.value = queryParams.sceneId
+  lastFormSceneId.value = form.sceneId
 }
 
 async function loadVersionOptions(sceneId, target) {
@@ -1016,15 +1021,36 @@ function resetQuery() {
 }
 
 async function handleQuerySceneChange(sceneId) {
+  const confirmed = await confirmCostSceneSwitch({
+    currentSceneId: lastQuerySceneId.value,
+    nextSceneId: sceneId,
+    sceneOptions: sceneOptions.value,
+    scope: '正式核算任务筛选'
+  })
+  if (!confirmed) {
+    queryParams.sceneId = lastQuerySceneId.value
+    return
+  }
   queryParams.versionId = undefined
   queryParams.sceneId = sceneId
   batchQuery.sceneId = sceneId
+  lastQuerySceneId.value = sceneId
   clearCostWorkContext(['versionId'])
   syncCostWorkContext({ sceneId, billMonth: queryParams.billMonth || form.billMonth })
   await loadVersionOptions(sceneId, versionOptions)
 }
 
 async function handleFormSceneChange(sceneId) {
+  const confirmed = await confirmCostSceneSwitch({
+    currentSceneId: lastFormSceneId.value,
+    nextSceneId: sceneId,
+    sceneOptions: sceneOptions.value,
+    scope: '正式核算提交场景'
+  })
+  if (!confirmed) {
+    form.sceneId = lastFormSceneId.value
+    return
+  }
   form.versionId = undefined
   queryParams.versionId = undefined
   batchForm.versionId = undefined
@@ -1032,6 +1058,8 @@ async function handleFormSceneChange(sceneId) {
   batchForm.sceneId = sceneId
   batchQuery.sceneId = sceneId
   queryParams.sceneId = sceneId
+  lastFormSceneId.value = sceneId
+  lastQuerySceneId.value = sceneId
   clearCostWorkContext(['versionId'])
   syncCostWorkContext({ sceneId, billMonth: form.billMonth })
   await loadVersionOptions(sceneId, formVersionOptions)

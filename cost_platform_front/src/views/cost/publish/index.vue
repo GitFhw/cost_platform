@@ -415,6 +415,7 @@ import { activatePublishVersion, addPublishVersion, getPublishDiff, getPublishPr
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { resolveCostChangeTypeLabel, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
@@ -444,6 +445,8 @@ const diffVersionOptions = ref([])
 const diffFeeCode = ref(undefined)
 const selectedFeeDiffCode = ref(undefined)
 const selectedRuleDiffCode = ref(undefined)
+const lastQuerySceneId = ref(undefined)
+const lastPublishSceneId = ref(undefined)
 
 const queryParams = reactive({
   pageNum: 1,
@@ -529,6 +532,8 @@ async function loadBaseOptions() {
   sceneOptions.value = sceneResponse?.data || []
   queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.sceneId)
   publishForm.sceneId = resolveWorkingCostSceneId(sceneOptions.value, publishForm.sceneId, queryParams.sceneId)
+  lastQuerySceneId.value = queryParams.sceneId
+  lastPublishSceneId.value = publishForm.sceneId
 }
 
 async function getList() {
@@ -556,18 +561,42 @@ function resetQuery() {
   getList()
 }
 
-function handleQuerySceneChange(sceneId) {
+async function handleQuerySceneChange(sceneId) {
+  const confirmed = await confirmCostSceneSwitch({
+    currentSceneId: lastQuerySceneId.value,
+    nextSceneId: sceneId,
+    sceneOptions: sceneOptions.value,
+    scope: '发布台账筛选'
+  })
+  if (!confirmed) {
+    queryParams.sceneId = lastQuerySceneId.value
+    return
+  }
   queryParams.sceneId = sceneId
   publishForm.sceneId = sceneId
+  lastQuerySceneId.value = sceneId
+  lastPublishSceneId.value = sceneId
 }
 
 function handleOpenAudit() {
   router.push({ path: COST_MENU_ROUTES.publishAudit, query: queryParams.sceneId ? { sceneId: queryParams.sceneId } : {} })
 }
 
-function handlePublishSceneChange(sceneId) {
+async function handlePublishSceneChange(sceneId) {
+  const confirmed = await confirmCostSceneSwitch({
+    currentSceneId: lastPublishSceneId.value,
+    nextSceneId: sceneId,
+    sceneOptions: sceneOptions.value,
+    scope: '发布执行场景'
+  })
+  if (!confirmed) {
+    publishForm.sceneId = lastPublishSceneId.value
+    return
+  }
   publishForm.sceneId = sceneId
   queryParams.sceneId = sceneId
+  lastPublishSceneId.value = sceneId
+  lastQuerySceneId.value = sceneId
 }
 
 async function handlePrecheck() {
