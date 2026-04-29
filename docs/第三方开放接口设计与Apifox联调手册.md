@@ -201,6 +201,21 @@ Authorization: Bearer {{accessToken}}
 
 返回当前开放应用可访问的场景列表。
 
+**Apifox 填写方式**
+
+- 方法：`GET`
+- 地址：`{{baseUrl}}/cost/open/scenes`
+- Headers：
+
+```http
+Authorization: Bearer {{accessToken}}
+```
+
+- Params：无
+- Body：无
+
+> 这是最容易误填的接口之一。该接口不需要任何 Query 参数，也不需要 Body；如果返回 `401`，优先检查 `accessToken` 是否已过期，或 Apifox 的 Bearer Token 是否重复拼接了 `Bearer` 前缀。
+
 **成功返回要点**
 
 - `openApp`：当前开放应用摘要
@@ -258,6 +273,19 @@ Authorization: Bearer {{accessToken}}
 - 如果第三方没有草稿联调权限，就按返回的 `supportedSnapshotModes` 只走 `ACTIVE`
 - 如果是平台和第三方联合调试未发布规则，可在允许时使用 `DRAFT`
 
+**Apifox 填写示例**
+
+- 方法：`GET`
+- 地址：`{{baseUrl}}/cost/open/scenes/{{sceneId}}/versions`
+- Headers：
+
+```http
+Authorization: Bearer {{accessToken}}
+```
+
+- Params：无
+- Body：无
+
 ### 7.3 查询场景运行费用
 
 **接口**
@@ -271,6 +299,30 @@ Authorization: Bearer {{accessToken}}
 - 单费用调用时选择目标费用
 - 多费用调用时组合费用范围
 - 全费用调用前确认费用数量
+
+**Apifox 填写示例**
+
+- 方法：`GET`
+- 地址：`{{baseUrl}}/cost/open/scenes/{{sceneId}}/fees`
+- Headers：
+
+```http
+Authorization: Bearer {{accessToken}}
+```
+
+- Params（正式生效版）：
+
+| 参数 | 示例值 |
+|---|---|
+| `versionId` | `{{versionId}}` |
+
+- Params（草稿联调）：
+
+| 参数 | 示例值 |
+|---|---|
+| `snapshotMode` | `DRAFT` |
+
+> 如果同时传了 `versionId` 和 `snapshotMode`，第三方应优先明确自己想走哪种口径，避免在联调与正式版本之间混淆。
 
 ### 7.4 生成费用接入模板
 
@@ -332,6 +384,59 @@ Authorization: Bearer {{accessToken}}
 - 是否必填
 - 示例值
 
+**Apifox 示例 1：单费用模板**
+
+- 方法：`GET`
+- 地址：`{{baseUrl}}/cost/open/fee-template`
+- Headers：
+
+```http
+Authorization: Bearer {{accessToken}}
+```
+
+- Params（按费用编码）：
+
+| 参数 | 示例值 |
+|---|---|
+| `sceneId` | `{{sceneId}}` |
+| `versionId` | `{{versionId}}` |
+| `feeCode` | `SG_FEMALE_SHIFT_LABOR` |
+
+- Params（按费用主键）：
+
+| 参数 | 示例值 |
+|---|---|
+| `sceneId` | `{{sceneId}}` |
+| `versionId` | `{{versionId}}` |
+| `feeId` | `{{feeId}}` |
+
+**Apifox 示例 2：多费用模板**
+
+- 方法：`GET`
+- 地址：`{{baseUrl}}/cost/open/fee-template`
+- Params：
+
+| 参数 | 示例值 |
+|---|---|
+| `sceneId` | `{{sceneId}}` |
+| `versionId` | `{{versionId}}` |
+| `feeIds` | `12,13` |
+
+> `feeIds` 是**逗号分隔的数字主键字符串**，不是 JSON 数组。
+
+**Apifox 示例 3：全费用模板**
+
+- 方法：`GET`
+- 地址：`{{baseUrl}}/cost/open/fee-template`
+- Params：
+
+| 参数 | 示例值 |
+|---|---|
+| `sceneId` | `{{sceneId}}` |
+| `versionId` | `{{versionId}}` |
+
+> 不传 `feeId`、`feeIds`、`feeCode`，系统就会按当前场景和运行快照生成全费用模板。
+
 ### 7.5 执行费用核算
 
 **接口**
@@ -359,7 +464,9 @@ Authorization: Bearer {{accessToken}}
   "sceneId": 1,
   "snapshotMode": "DRAFT",
   "feeCode": "SG_FEMALE_SHIFT_LABOR",
-  "inputJson": "[{\"bizNo\":\"SIM-001\",\"femaleTeam\":{\"headcount\":6},\"attendance\":{\"actual\":5,\"required\":6}}]"
+  "billMonth": "2026-04",
+  "includeExplain": true,
+  "inputJson": "[{\"bizNo\":\"SIM-001\",\"femaleTeam\":{\"headcount\":6},\"attendance\":{\"femaleActual\":5,\"femaleRequired\":6}}]"
 }
 ```
 
@@ -369,16 +476,40 @@ Authorization: Bearer {{accessToken}}
 {
   "sceneId": 1,
   "versionId": 2,
-  "snapshotMode": "ACTIVE",
   "feeIds": [12, 13],
   "includeExplain": false,
-  "inputJson": "[{\"bizNo\":\"SIM-001\",\"cover\":{\"action\":\"moor\",\"cargoType\":\"块矿\",\"workloadTon\":1},\"shift\":{\"name\":\"白班\"}}]"
+  "billMonth": "2026-04",
+  "inputJson": "[{\"bizNo\":\"SIM-002\",\"femaleTeam\":{\"headcount\":6},\"attendance\":{\"femaleActual\":5,\"femaleRequired\":6},\"coverWork\":{\"action\":\"moor\",\"cargoType\":\"块矿\",\"workloadTon\":1200}}]"
 }
 ```
 
 **全费用调用说明**
 
 如果 `feeId`、`feeIds`、`feeCode` 都不传，则系统按当前场景运行快照做全费用执行链核算。
+
+**全费用示例**
+
+```json
+{
+  "sceneId": 1,
+  "versionId": 2,
+  "billMonth": "2026-04",
+  "includeExplain": false,
+  "inputJson": "[{\"bizNo\":\"SIM-003\",\"femaleTeam\":{\"headcount\":6},\"attendance\":{\"femaleActual\":5,\"femaleRequired\":6},\"coverWork\":{\"action\":\"moor\",\"cargoType\":\"块矿\",\"workloadTon\":1200},\"mooring\":{\"headcount\":4},\"oddWork\":{\"hours\":8},\"seasonal\":{\"subsidyEquiv\":1},\"overtime\":{\"days\":2}}]"
+}
+```
+
+**Apifox 填写提醒**
+
+1. `inputJson` 是一个**字符串字段**
+   - 不是直接把 JSON 数组贴成对象
+   - 而是把业务 JSON 序列化后，放进 `inputJson`
+2. 单费用有三种指定方式，通常三选一：
+   - `feeId`
+   - `feeIds`
+   - `feeCode`
+3. 如果三者都不传，默认按全费用执行链处理
+4. `billMonth` 只在公式或变量依赖账期上下文时才需要显式传入
 
 ---
 
@@ -452,6 +583,13 @@ Authorization: Bearer {{accessToken}}
 | `feeId` | `12` |
 | `feeIds` | `12,13` |
 
+推荐额外增加 2 个临时变量，方便联调时切换：
+
+| 变量名 | 示例值 |
+|---|---|
+| `feeCode` | `SG_FEMALE_SHIFT_LABOR` |
+| `snapshotMode` | `ACTIVE` 或 `DRAFT` |
+
 ### 10.2 令牌接口用例建议
 
 请求：
@@ -484,6 +622,8 @@ if (body && body.code === 200 && body.data && body.data.accessToken) {
 Authorization: Bearer {{accessToken}}
 ```
 
+> 如果你在 Apifox 的 `Auth` 页签里选择了 `Bearer Token`，那么 Token 输入框里只填写 `{{accessToken}}` 即可，不要再手动写 `Bearer ` 前缀，否则会形成双前缀，导致认证失败。
+
 ### 10.4 推荐联调顺序
 
 1. 先调 `/auth/token`
@@ -492,6 +632,53 @@ Authorization: Bearer {{accessToken}}
 4. 再调 `/scenes/{sceneId}/fees`
 5. 再调 `/fee-template`
 6. 最后调 `/fee/calculate`
+
+### 10.5 一次跑通的最小示例
+
+**步骤 1：申请 token**
+
+```json
+POST {{baseUrl}}/cost/open/auth/token
+{
+  "appCode": "{{appCode}}",
+  "appSecret": "{{appSecret}}"
+}
+```
+
+**步骤 2：查询可访问场景**
+
+```http
+GET {{baseUrl}}/cost/open/scenes
+Authorization: Bearer {{accessToken}}
+```
+
+**步骤 3：按正式生效版生成单费用模板**
+
+```http
+GET {{baseUrl}}/cost/open/fee-template?sceneId={{sceneId}}&versionId={{versionId}}&feeCode=SG_FEMALE_SHIFT_LABOR
+Authorization: Bearer {{accessToken}}
+```
+
+**步骤 4：执行单费用核算**
+
+```json
+POST {{baseUrl}}/cost/open/fee/calculate
+{
+  "sceneId": {{sceneId}},
+  "versionId": {{versionId}},
+  "feeCode": "SG_FEMALE_SHIFT_LABOR",
+  "billMonth": "2026-04",
+  "includeExplain": true,
+  "inputJson": "[{\"bizNo\":\"BIZ-001\",\"femaleTeam\":{\"headcount\":6},\"attendance\":{\"femaleActual\":5,\"femaleRequired\":6}}]"
+}
+```
+
+### 10.6 最容易填错的 4 个地方
+
+1. `GET /cost/open/scenes` 不需要 Body，也不需要 Params
+2. `accessToken` 过期后，必须重新调用 `/cost/open/auth/token`
+3. `fee-template` 的 `feeIds` 要传逗号分隔字符串，不是 JSON 数组
+4. `fee/calculate` 的 `inputJson` 必须是字符串，不是直接贴对象或数组
 
 ---
 
