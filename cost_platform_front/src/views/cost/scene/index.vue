@@ -926,12 +926,14 @@ async function syncCurrentSceneInfo() {
   const matched = sceneList.value.find(item => item.sceneId === currentSceneId)
   if (matched) {
     currentSceneInfo.value = matched
+    setCostSceneContextId(matched)
     await loadCurrentScenePublishSummary(matched)
     return
   }
   try {
     const response = await getScene(currentSceneId)
     currentSceneInfo.value = response.data || {}
+    setCostSceneContextId(currentSceneInfo.value)
     await loadCurrentScenePublishSummary(currentSceneInfo.value)
   } catch (error) {
     currentSceneInfo.value = {}
@@ -1100,7 +1102,7 @@ function handleOpenPublishAudit() {
 }
 
 function handleSetCurrentScene(row) {
-  setCostSceneContextId(row.sceneId)
+  setCostSceneContextId(row)
   currentSceneInfo.value = row
   loadCurrentScenePublishSummary(row)
   proxy.$modal.msgSuccess(`已将 ${row.sceneName} 设为当前工作场景`)

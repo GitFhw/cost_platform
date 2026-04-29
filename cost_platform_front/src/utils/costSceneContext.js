@@ -16,8 +16,15 @@ export function getCostSceneContextId() {
 }
 
 export function setCostSceneContextId(sceneId) {
-  const normalized = normalizeSceneId(sceneId)
-  patchCostWorkContext({ sceneId: normalized })
+  const scene = typeof sceneId === 'object' && sceneId !== null ? sceneId : {}
+  const normalized = normalizeSceneId(scene.sceneId || sceneId)
+  patchCostWorkContext({
+    sceneId: normalized,
+    sceneCode: scene.sceneCode,
+    sceneName: scene.sceneName,
+    businessDomain: scene.businessDomain,
+    businessDomainName: scene.businessDomainName || scene.businessDomainLabel
+  })
   if (normalized) {
     cache.local.set(COST_SCENE_CONTEXT_KEY, String(normalized))
     return

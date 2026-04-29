@@ -1,6 +1,7 @@
 import cache from '@/plugins/cache'
 
 const COST_WORK_CONTEXT_KEY = 'cost.workContext'
+export const COST_WORK_CONTEXT_CHANGE_EVENT = 'cost-work-context-change'
 
 export function normalizeSceneId(value) {
   const numberValue = Number(value)
@@ -20,6 +21,14 @@ export function normalizeBillMonth(value) {
   return /^\d{4}-\d{2}$/.test(trimmed) ? trimmed : undefined
 }
 
+function normalizeText(value) {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  const text = String(value).trim()
+  return text || undefined
+}
+
 export function resolveCurrentBillMonth() {
   const current = new Date()
   const month = String(current.getMonth() + 1).padStart(2, '0')
@@ -30,17 +39,34 @@ function normalizeWorkContext(context = {}) {
   return {
     sceneId: normalizeSceneId(context.sceneId),
     versionId: normalizeVersionId(context.versionId),
-    billMonth: normalizeBillMonth(context.billMonth)
+    billMonth: normalizeBillMonth(context.billMonth),
+    sceneCode: normalizeText(context.sceneCode),
+    sceneName: normalizeText(context.sceneName),
+    businessDomain: normalizeText(context.businessDomain),
+    businessDomainName: normalizeText(context.businessDomainName),
+    versionNo: normalizeText(context.versionNo),
+    versionName: normalizeText(context.versionName)
   }
+}
+
+function emitWorkContextChange(context) {
+  if (typeof window === 'undefined') {
+    return
+  }
+  window.dispatchEvent(new CustomEvent(COST_WORK_CONTEXT_CHANGE_EVENT, {
+    detail: context
+  }))
 }
 
 function persistWorkContext(context) {
   const normalized = normalizeWorkContext(context)
   if (!normalized.sceneId && !normalized.versionId && !normalized.billMonth) {
     cache.local.remove(COST_WORK_CONTEXT_KEY)
+    emitWorkContextChange({})
     return {}
   }
   cache.local.setJSON(COST_WORK_CONTEXT_KEY, normalized)
+  emitWorkContextChange(normalized)
   return normalized
 }
 
@@ -57,7 +83,13 @@ export function patchCostWorkContext(patch = {}) {
   const next = {
     sceneId: Object.prototype.hasOwnProperty.call(patch, 'sceneId') ? normalizeSceneId(patch.sceneId) : current.sceneId,
     versionId: Object.prototype.hasOwnProperty.call(patch, 'versionId') ? normalizeVersionId(patch.versionId) : current.versionId,
-    billMonth: Object.prototype.hasOwnProperty.call(patch, 'billMonth') ? normalizeBillMonth(patch.billMonth) : current.billMonth
+    billMonth: Object.prototype.hasOwnProperty.call(patch, 'billMonth') ? normalizeBillMonth(patch.billMonth) : current.billMonth,
+    sceneCode: Object.prototype.hasOwnProperty.call(patch, 'sceneCode') ? normalizeText(patch.sceneCode) : current.sceneCode,
+    sceneName: Object.prototype.hasOwnProperty.call(patch, 'sceneName') ? normalizeText(patch.sceneName) : current.sceneName,
+    businessDomain: Object.prototype.hasOwnProperty.call(patch, 'businessDomain') ? normalizeText(patch.businessDomain) : current.businessDomain,
+    businessDomainName: Object.prototype.hasOwnProperty.call(patch, 'businessDomainName') ? normalizeText(patch.businessDomainName) : current.businessDomainName,
+    versionNo: Object.prototype.hasOwnProperty.call(patch, 'versionNo') ? normalizeText(patch.versionNo) : current.versionNo,
+    versionName: Object.prototype.hasOwnProperty.call(patch, 'versionName') ? normalizeText(patch.versionName) : current.versionName
   }
   return persistWorkContext(next)
 }
@@ -76,6 +108,12 @@ export function syncCostWorkContext(context = {}) {
   if (billMonth) {
     patch.billMonth = billMonth
   }
+  ;['sceneCode', 'sceneName', 'businessDomain', 'businessDomainName', 'versionNo', 'versionName'].forEach(field => {
+    const value = normalizeText(context[field])
+    if (value) {
+      patch[field] = value
+    }
+  })
   if (!Object.keys(patch).length) {
     return getCostWorkContext()
   }
