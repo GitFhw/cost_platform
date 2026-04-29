@@ -417,6 +417,7 @@ import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { confirmCostNextAction } from '@/utils/costNextAction'
 import { resolveCostChangeTypeLabel, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
@@ -626,6 +627,13 @@ async function handlePublish() {
   publishTab.value = 'ledger'
   getList()
   handlePrecheck()
+  const goNext = await confirmCostNextAction({
+    message: '发布版本已生成。建议马上进入试算中心，用当前场景和版本做一轮回归验证。',
+    confirmButtonText: '去试算中心'
+  })
+  if (goNext) {
+    router.push({ path: COST_MENU_ROUTES.simulation, query: publishForm.sceneId ? { sceneId: publishForm.sceneId } : {} })
+  }
 }
 
 async function handleDetail(row) {

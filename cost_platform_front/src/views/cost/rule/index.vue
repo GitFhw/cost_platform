@@ -779,9 +779,11 @@ import useSettingsStore from '@/store/modules/settings'
 import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { confirmCostNextAction } from '@/utils/costNextAction'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 
+const route = useRoute()
 const router = useRouter()
 const { proxy } = getCurrentInstance()
 const settingsStore = useSettingsStore()
@@ -1180,7 +1182,11 @@ async function loadBaseOptions() {
   intervalModeOptions.value = dictMap.cost_rule_interval_mode || []
   unitCodeOptions.value = dictMap.cost_unit_code || []
   sceneOptions.value = sceneResponse?.data || []
-  queryParams.value.sceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.value.sceneId)
+  queryParams.value.sceneId = resolveWorkingCostSceneId(
+    sceneOptions.value,
+    queryParams.value.sceneId,
+    route.query.sceneId ? Number(route.query.sceneId) : undefined
+  )
 }
 
 async function loadFees() {
@@ -1609,11 +1615,21 @@ function submitForm() {
       return
     }
     const payload = normalizeSubmitData()
-    const request = payload.ruleId ? updateRule(payload) : addRule(payload)
+    const isCreate = !payload.ruleId
+    const request = isCreate ? addRule(payload) : updateRule(payload)
     await request
-    proxy.$modal.msgSuccess(payload.ruleId ? '修改成功' : '新增成功')
+    proxy.$modal.msgSuccess(isCreate ? '新增成功' : '修改成功')
     open.value = false
     getList()
+    if (isCreate) {
+      const goNext = await confirmCostNextAction({
+        message: '规则已新增。建议继续做发布前检查并生成版本，让本次配置进入可试算的发布快照。',
+        confirmButtonText: '去发布中心'
+      })
+      if (goNext) {
+        router.push({ path: COST_MENU_ROUTES.publish, query: payload.sceneId ? { sceneId: payload.sceneId } : {} })
+      }
+    }
   })
 }
 

@@ -779,6 +779,7 @@ import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { confirmCostNextAction } from '@/utils/costNextAction'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
@@ -1251,6 +1252,22 @@ async function handleSubmit() {
   detailData.value = resp.data || {}
   detailOpen.value = true
   getList()
+  const task = detailData.value.task || detailData.value
+  const goNext = await confirmCostNextAction({
+    message: '正式核算任务已提交。建议继续到结果中心跟踪本次任务的入账结果和异常明细。',
+    confirmButtonText: '去结果中心'
+  })
+  if (goNext) {
+    router.push({
+      path: COST_MENU_ROUTES.result,
+      query: {
+        sceneId: task.sceneId || form.sceneId,
+        versionId: task.versionId || form.versionId,
+        billMonth: task.billMonth || form.billMonth,
+        taskId: task.taskId
+      }
+    })
+  }
 }
 
 function openBatchLedger() {
