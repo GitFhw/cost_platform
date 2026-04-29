@@ -21,6 +21,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.UUID;
+
 /**
  * 全局异常处理器
  *
@@ -29,6 +33,14 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final String ERROR_TYPE_TAG = "errorType";
+    private static final String TRACE_ID_TAG = "traceId";
+    private static final String ERROR_TYPE_PARAM = "PARAM";
+    private static final String ERROR_TYPE_PERMISSION = "PERMISSION";
+    private static final String ERROR_TYPE_BUSINESS = "BUSINESS";
+    private static final String ERROR_TYPE_DATA_CONSTRAINT = "DATA_CONSTRAINT";
+    private static final String ERROR_TYPE_SYSTEM = "SYSTEM";
+    private static final DateTimeFormatter TRACE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     /**
      * 权限校验异常
@@ -37,21 +49,21 @@ public class GlobalExceptionHandler {
     public AjaxResult handleAccessDeniedException(AccessDeniedException e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',权限校验失败'{}'", requestURI, e.getMessage());
-        return AjaxResult.error(HttpStatus.FORBIDDEN, "没有权限，请联系管理员授权");
+        return classifiedError(HttpStatus.FORBIDDEN, "没有权限，请联系管理员授权", ERROR_TYPE_PERMISSION);
     }
 
     @ExceptionHandler(DuplicateKeyException.class)
     public AjaxResult handleDuplicateKeyException(DuplicateKeyException e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',发生唯一约束冲突.", requestURI, e);
-        return AjaxResult.error(resolveDataIntegrityMessage(e));
+        return classifiedError(resolveDataIntegrityMessage(e), ERROR_TYPE_DATA_CONSTRAINT);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public AjaxResult handleDataIntegrityViolationException(DataIntegrityViolationException e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',发生数据完整性异常.", requestURI, e);
-        return AjaxResult.error(resolveDataIntegrityMessage(e));
+        return classifiedError(resolveDataIntegrityMessage(e), ERROR_TYPE_DATA_CONSTRAINT);
     }
 
     /**
@@ -62,7 +74,7 @@ public class GlobalExceptionHandler {
                                                           HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',不支持'{}'请求", requestURI, e.getMethod());
-        return AjaxResult.error(e.getMessage());
+        return classifiedError(e.getMessage(), ERROR_TYPE_PARAM);
     }
 
     /**
@@ -72,7 +84,9 @@ public class GlobalExceptionHandler {
     public AjaxResult handleServiceException(ServiceException e, HttpServletRequest request) {
         log.error(e.getMessage(), e);
         Integer code = e.getCode();
-        return StringUtils.isNotNull(code) ? AjaxResult.error(code, e.getMessage()) : AjaxResult.error(e.getMessage());
+        return StringUtils.isNotNull(code)
+                ? classifiedError(code, e.getMessage(), ERROR_TYPE_BUSINESS)
+                : classifiedError(e.getMessage(), ERROR_TYPE_BUSINESS);
     }
 
     /**
@@ -82,21 +96,23 @@ public class GlobalExceptionHandler {
     public AjaxResult handleMissingPathVariableException(MissingPathVariableException e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         log.error("请求路径中缺少必需的路径变量'{}',发生系统异常.", requestURI, e);
-        return AjaxResult.error(String.format("请求路径中缺少必需的路径变量[%s]", e.getVariableName()));
+        return classifiedError(String.format("请求路径中缺少必需的路径变量[%s]", e.getVariableName()), ERROR_TYPE_PARAM);
     }
 
     /**
      * 请求参数类型不匹配
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public AjaxResult handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException e, HttpServletRequest request) {
+    public AjaxResult handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException e,
+                                                               HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         String value = Convert.toStr(e.getValue());
         if (StringUtils.isNotEmpty(value)) {
             value = EscapeUtil.clean(value);
         }
         log.error("请求参数类型不匹配'{}',发生系统异常.", requestURI, e);
-        return AjaxResult.error(String.format("请求参数类型不匹配，参数[%s]要求类型为：'%s'，但输入值为：'%s'", e.getName(), e.getRequiredType().getName(), value));
+        return classifiedError(String.format("请求参数类型不匹配，参数[%s]要求类型为：'%s'，但输入值为：'%s'",
+                e.getName(), e.getRequiredType().getName(), value), ERROR_TYPE_PARAM);
     }
 
     /**
@@ -105,8 +121,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RuntimeException.class)
     public AjaxResult handleRuntimeException(RuntimeException e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
-        log.error("请求地址'{}',发生未知异常.", requestURI, e);
-        return AjaxResult.error(e.getMessage());
+        return systemError("请求地址'" + requestURI + "',发生未知异常.", e);
     }
 
     /**
@@ -115,8 +130,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public AjaxResult handleException(Exception e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
-        log.error("请求地址'{}',发生系统异常.", requestURI, e);
-        return AjaxResult.error(e.getMessage());
+        return systemError("请求地址'" + requestURI + "',发生系统异常.", e);
     }
 
     /**
@@ -126,7 +140,7 @@ public class GlobalExceptionHandler {
     public AjaxResult handleBindException(BindException e) {
         log.error(e.getMessage(), e);
         String message = e.getAllErrors().get(0).getDefaultMessage();
-        return AjaxResult.error(message);
+        return classifiedError(message, ERROR_TYPE_PARAM);
     }
 
     /**
@@ -136,7 +150,7 @@ public class GlobalExceptionHandler {
     public Object handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
         log.error(e.getMessage(), e);
         String message = e.getBindingResult().getFieldError().getDefaultMessage();
-        return AjaxResult.error(message);
+        return classifiedError(message, ERROR_TYPE_PARAM);
     }
 
     /**
@@ -144,7 +158,28 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(DemoModeException.class)
     public AjaxResult handleDemoModeException(DemoModeException e) {
-        return AjaxResult.error("演示模式，不允许操作");
+        return classifiedError("演示模式，不允许操作", ERROR_TYPE_BUSINESS);
+    }
+
+    private AjaxResult classifiedError(String message, String errorType) {
+        return AjaxResult.error(message).put(ERROR_TYPE_TAG, errorType);
+    }
+
+    private AjaxResult classifiedError(int code, String message, String errorType) {
+        return AjaxResult.error(code, message).put(ERROR_TYPE_TAG, errorType);
+    }
+
+    private AjaxResult systemError(String logMessage, Throwable throwable) {
+        String traceId = buildTraceId();
+        log.error("{} traceId={}", logMessage, traceId, throwable);
+        return AjaxResult.error("系统处理失败，请联系管理员并提供追踪编号：" + traceId)
+                .put(ERROR_TYPE_TAG, ERROR_TYPE_SYSTEM)
+                .put(TRACE_ID_TAG, traceId);
+    }
+
+    static String buildTraceId() {
+        return "ERR-" + TRACE_TIME_FORMATTER.format(LocalDateTime.now()) + "-"
+                + UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
     }
 
     static String resolveDataIntegrityMessage(Throwable throwable) {
