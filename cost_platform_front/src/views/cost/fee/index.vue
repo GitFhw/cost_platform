@@ -162,6 +162,10 @@
           <el-col :span="12">
             <el-form-item label="费用分类" prop="feeCategory">
               <el-input v-model="form.feeCategory" placeholder="如：港杂费、固定薪资" />
+              <div class="fee-center__field-tip">
+                <strong>{{ currentFeeCategoryHint.title }}</strong>
+                <span>{{ currentFeeCategoryHint.description }}</span>
+              </div>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -202,7 +206,19 @@
           </el-col>
           <el-col :span="24">
             <el-form-item label="影响因素摘要" prop="factorSummary">
-              <el-input v-model="form.factorSummary" placeholder="补充费用依赖的关键变量因素" />
+              <el-input v-model="form.factorSummary" placeholder="补充费用依赖的关键变量因素，如重量、作业次数、班次、里程" />
+              <div class="fee-center__example-tags">
+                <span>常用示例</span>
+                <el-tag
+                  v-for="item in factorSummaryExamples"
+                  :key="item"
+                  size="small"
+                  effect="plain"
+                  @click="applyFactorSummaryExample(item)"
+                >
+                  {{ item }}
+                </el-tag>
+              </div>
             </el-form-item>
           </el-col>
           <el-col :span="24">
@@ -275,6 +291,29 @@ const businessDomainOptions = ref([])
 const feeStatusOptions = ref([])
 const unitCodeOptions = ref([])
 const objectDimensionOptions = ['协力队', '协力单位', '班组', '人员', '设备', '船舶', '库区', '订单']
+const factorSummaryExamples = ['重量 / 件数 / 作业类型', '班次 / 工时 / 人员级别', '里程 / 车型 / 线路', '设备台时 / 能耗 / 维修类型']
+const feeCategoryHints = [
+  {
+    keyword: '港',
+    title: '港杂类费用',
+    description: '适合港口作业、堆存、装卸、理货等费用，后续规则通常会依赖重量、箱量、作业类型或库区。'
+  },
+  {
+    keyword: '薪',
+    title: '人力薪资类费用',
+    description: '适合固定薪资、绩效、补贴等人力成本，后续规则通常会依赖人员、班次、工时或岗位等级。'
+  },
+  {
+    keyword: '设备',
+    title: '设备作业类费用',
+    description: '适合设备台班、能耗、维修等成本，后续规则通常会依赖设备、台时、能耗或维修类型。'
+  },
+  {
+    keyword: '运输',
+    title: '运输配送类费用',
+    description: '适合干线、短驳、配送等成本，后续规则通常会依赖里程、车型、线路或装载量。'
+  }
+]
 const open = ref(false)
 const loading = ref(true)
 const showSearch = ref(true)
@@ -352,6 +391,14 @@ const currentObjectDimensionHint = computed(() => {
   return {
     title: '建议场景内统一维度口径',
     description: '推荐优先使用：协力队、协力单位、班组、人员、设备、船舶、库区、订单。'
+  }
+})
+const currentFeeCategoryHint = computed(() => {
+  const category = form.value?.feeCategory || ''
+  const matched = feeCategoryHints.find(item => category.includes(item.keyword))
+  return matched || {
+    title: '费用分类用于业务归口和后续看板汇总',
+    description: '建议填写业务能理解的分类，例如港杂费、固定薪资、设备台班、运输配送，避免只填技术编码。'
   }
 })
 
@@ -437,6 +484,10 @@ function handleFeeRowCommand(command, row) {
   if (command === 'delete') {
     handleDelete(row)
   }
+}
+
+function applyFactorSummaryExample(value) {
+  form.value.factorSummary = value
 }
 
 function handleQuery() {
@@ -647,6 +698,8 @@ getList()
 .fee-center__unit-cell small { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.4; }
 .fee-center__field-tip { margin-top: 8px; display: grid; gap: 4px; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.5; }
 .fee-center__field-tip strong { color: var(--el-color-primary-dark-2); font-size: 13px; }
+.fee-center__example-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; color: var(--el-text-color-secondary); font-size: 12px; }
+.fee-center__example-tags .el-tag { cursor: pointer; }
 
 .fee-center__metrics {
   display: grid;
