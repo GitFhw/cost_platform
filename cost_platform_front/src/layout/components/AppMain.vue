@@ -2,9 +2,11 @@
   <section class="app-main">
     <router-view v-slot="{ Component, route }">
       <transition name="fade-transform" mode="out-in">
-        <keep-alive :include="tagsViewStore.cachedViews">
-          <component v-if="!route.meta.link" :is="Component" :key="route.path"/>
-        </keep-alive>
+        <RouteErrorBoundary :route-key="route.fullPath" @retry="reloadRouteView">
+          <keep-alive :include="tagsViewStore.cachedViews">
+            <component v-if="!route.meta.link" :is="Component" :key="`${route.path}:${routeReloadKey}`"/>
+          </keep-alive>
+        </RouteErrorBoundary>
       </transition>
     </router-view>
     <iframe-toggle />
@@ -15,10 +17,12 @@
 <script setup>
 import copyright from "./Copyright/index"
 import iframeToggle from "./IframeToggle/index"
+import RouteErrorBoundary from '@/components/RouteErrorBoundary'
 import useTagsViewStore from '@/store/modules/tagsView'
 
 const route = useRoute()
 const tagsViewStore = useTagsViewStore()
+const routeReloadKey = ref(0)
 
 onMounted(() => {
   addIframe()
@@ -32,6 +36,10 @@ function addIframe() {
   if (route.meta.link) {
     useTagsViewStore().addIframeView(route)
   }
+}
+
+function reloadRouteView() {
+  routeReloadKey.value += 1
 }
 </script>
 
