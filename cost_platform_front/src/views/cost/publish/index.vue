@@ -159,12 +159,21 @@
               <el-table-column label="发布时间" width="180" align="center">
                 <template #default="scope">{{ parseTime(scope.row.publishedTime) }}</template>
               </el-table-column>
-              <el-table-column label="操作" width="320" fixed="right" align="center">
+              <el-table-column label="操作" width="230" fixed="right" align="center">
                 <template #default="scope">
-                  <el-button link type="primary" icon="View" @click="handleDetail(scope.row)">详情</el-button>
-                  <el-button link type="primary" icon="Tickets" @click="handleDiff(scope.row)">差异</el-button>
-                  <el-button link type="primary" icon="Select" @click="handleActivate(scope.row)" v-hasPermi="['cost:publish:activate']">设为生效</el-button>
-                  <el-button link type="warning" icon="RefreshLeft" @click="handleRollback(scope.row)" v-hasPermi="['cost:publish:rollback']">回滚</el-button>
+                  <div class="cost-row-actions">
+                    <el-button link type="primary" icon="View" @click="handleDetail(scope.row)">详情</el-button>
+                    <el-button link type="primary" icon="Tickets" @click="handleDiff(scope.row)">差异</el-button>
+                    <el-dropdown trigger="click" @command="command => handlePublishRowCommand(command, scope.row)">
+                      <el-button link type="primary" icon="MoreFilled">更多</el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="activate" icon="Select" v-hasPermi="['cost:publish:activate']">设为生效</el-dropdown-item>
+                          <el-dropdown-item command="rollback" icon="RefreshLeft" v-hasPermi="['cost:publish:rollback']">回滚到此版本</el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </div>
                 </template>
               </el-table-column>
               <template #empty>
@@ -721,6 +730,14 @@ function buildSceneSnapshotFromDiffs(rows = [], valueKey) {
     }
     return result
   }, {})
+}
+
+function handlePublishRowCommand(command, row) {
+  const handlers = {
+    activate: handleActivate,
+    rollback: handleRollback
+  }
+  handlers[command]?.(row)
 }
 
 async function handleActivate(row) {
