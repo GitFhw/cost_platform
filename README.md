@@ -46,29 +46,20 @@
 - 线程一基础治理增量脚本：`cost_platform_back/sql/cost_thread1_governance_20260330.sql`
 - 平台必要初始化快照：`cost_platform_back/cost_admin/src/main/resources/db/cost_init.sql`
 - 带测试配置初始化快照：`cost_platform_back/cost_admin/src/main/resources/db/cost_init_demo.sql`
-- 初始化快照生成脚本：`cost_platform_back/bin/build-cost-init.ps1`
-
-## Flyway 迁移
-
-- Flyway 迁移目录：`cost_platform_back/cost_admin/src/main/resources/db/migration`
-- `B20260330_000__platform_baseline.sql`：整合若依基础库和核算平台业务表基线，面向空库初始化
-- `V20260330_001__thread1_governance.sql`：线程一基础治理增量，包含核算菜单前置、若依官网默认隐藏
-- `V20260330_002__demo_configuration_examples.sql`：面向业务熟悉场景配置的示例数据，包含示例场景、费用、变量、规则和阶梯
-- `V20260330_003__quartz_schema.sql`：Quartz 调度表迁移，对应 `cost_platform_back/sql/quartz.sql`
+## 上线初始化
 
 推荐使用方式：
 
-- 全新测试库或培训库：直接创建空库，启动应用后由 Flyway 自动完成基线和增量迁移
-- 已有开发库：先确认库内已经具备若依基础表和核算平台业务表基线，再让 Flyway 做 baseline 和后续增量
-- 不要只手工导入若依原始库后再执行 Flyway。当前基线脚本把若依基础表和核算平台业务表放在同一个 baseline 里，只导若依原始库会导致 Flyway 跳过业务表基线
+- 正式上线包不再包含 Flyway 运行期迁移能力。
+- 全新测试库、培训库或生产空库：先执行一次性初始化 SQL，再启动应用。
+- 已有库升级：由实施人员按发布说明确认结构、菜单、字典、权限和基础数据差异后执行补库脚本。
 - 如果需要交付“一次性初始化 SQL”给空库环境，可使用：
 - `cost_init.sql`：只包含支撑核算平台运行的必要表、菜单、字典、治理配置等
 - `cost_init_demo.sql`：在 `cost_init.sql` 基础上，额外带测试场景、费用、变量、公式、规则等配置数据，但不带发布版本、账期、试算、任务、结果、告警等运行态记录
-- 两份快照都由 `build-cost-init.ps1` 从当前 migration 快照统一生成，生成后应与最新 migration 目录一起复核
 
 补充说明：
 
-- `cost_platform_back/sql/cost_thread1_governance_20260330.sql` 仍保留为历史参考和人工补库兜底脚本，但后续新增 SQL 以 Flyway migration 为主
+- `cost_platform_back/sql/cost_thread1_governance_20260330.sql` 仍保留为历史参考和人工补库兜底脚本
 - 示例数据主要用于帮助业务人员熟悉场景中心的配置方式，建议优先投放到测试、培训或演示环境
 
 ## 说明

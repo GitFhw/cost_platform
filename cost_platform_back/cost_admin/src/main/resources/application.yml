@@ -65,15 +65,6 @@ spring:
     restart:
       # 热部署开关
       enabled: true
-  flyway:
-    enabled: false
-    locations: classpath:db/migration
-    baseline-on-migrate: true
-    baseline-version: 20260330.000
-    baseline-description: Legacy cost_platform baseline
-    validate-migration-naming: true
-    validate-on-migrate: true
-    clean-disabled: true
   data:
     # redis 配置
     redis:
