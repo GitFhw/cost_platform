@@ -240,11 +240,14 @@ import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import { addFee, delFee, getFee, getFeeGovernance, getFeeStats, listFee, updateFee } from '@/api/cost/fee'
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
+import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { confirmCostNextAction } from '@/utils/costNextAction'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const { proxy } = getCurrentInstance()
+const router = useRouter()
 const settingsStore = useSettingsStore()
 const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 
@@ -466,11 +469,22 @@ function submitForm() {
     if (!allowed) {
       return
     }
-    const request = form.value.feeId ? updateFee(form.value) : addFee(form.value)
+    const isCreate = !form.value.feeId
+    const nextSceneId = form.value.sceneId || queryParams.value.sceneId
+    const request = isCreate ? addFee(form.value) : updateFee(form.value)
     await request
-    proxy.$modal.msgSuccess(form.value.feeId ? '修改成功' : '新增成功')
+    proxy.$modal.msgSuccess(isCreate ? '新增成功' : '修改成功')
     open.value = false
     getList()
+    if (isCreate) {
+      const goNext = await confirmCostNextAction({
+        message: '费用已新增。建议继续为该费用配置规则，否则费用无法进入完整核算链路。',
+        confirmButtonText: '去新增规则'
+      })
+      if (goNext) {
+        router.push({ path: COST_MENU_ROUTES.rule, query: nextSceneId ? { sceneId: nextSceneId } : {} })
+      }
+    }
   })
 }
 
