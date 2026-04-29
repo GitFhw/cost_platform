@@ -7,6 +7,7 @@
       <logo v-show="settingsStore.sidebarLogo" :collapse="false"></logo>
       <top-bar id="topbar-container" class="topbar-container" />
     </template>
+    <cost-work-context-bar />
 
     <div class="right-menu">
       <template v-if="appStore.device !== 'mobile'">
@@ -86,6 +87,7 @@ import useUserStore from '@/store/modules/user'
 import useLockStore from '@/store/modules/lock'
 import useSettingsStore from '@/store/modules/settings'
 import HeaderNotice from './HeaderNotice'
+import CostWorkContextBar from './CostWorkContextBar.vue'
 
 const route = useRoute()
 const router = useRouter()
