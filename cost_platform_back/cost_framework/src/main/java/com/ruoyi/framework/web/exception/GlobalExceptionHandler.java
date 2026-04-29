@@ -10,6 +10,8 @@ import com.ruoyi.common.utils.html.EscapeUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -36,6 +38,20 @@ public class GlobalExceptionHandler {
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',权限校验失败'{}'", requestURI, e.getMessage());
         return AjaxResult.error(HttpStatus.FORBIDDEN, "没有权限，请联系管理员授权");
+    }
+
+    @ExceptionHandler(DuplicateKeyException.class)
+    public AjaxResult handleDuplicateKeyException(DuplicateKeyException e, HttpServletRequest request) {
+        String requestURI = request.getRequestURI();
+        log.error("请求地址'{}',发生唯一约束冲突.", requestURI, e);
+        return AjaxResult.error(resolveDataIntegrityMessage(e));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public AjaxResult handleDataIntegrityViolationException(DataIntegrityViolationException e, HttpServletRequest request) {
+        String requestURI = request.getRequestURI();
+        log.error("请求地址'{}',发生数据完整性异常.", requestURI, e);
+        return AjaxResult.error(resolveDataIntegrityMessage(e));
     }
 
     /**
@@ -129,5 +145,47 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DemoModeException.class)
     public AjaxResult handleDemoModeException(DemoModeException e) {
         return AjaxResult.error("演示模式，不允许操作");
+    }
+
+    static String resolveDataIntegrityMessage(Throwable throwable) {
+        Throwable rootCause = getRootCause(throwable);
+        String detail = rootCause == null ? throwable.getMessage() : rootCause.getMessage();
+        String normalized = detail == null ? "" : detail.toLowerCase();
+
+        if (hasCause(throwable, DuplicateKeyException.class) || normalized.contains("duplicate entry")) {
+            return "数据保存失败：编码、名称或业务唯一标识已存在，请调整后重试。";
+        }
+        if (normalized.contains("foreign key constraint fails") || normalized.contains("constraint fails")) {
+            return "当前数据已被其他业务记录引用，不能直接删除或修改，请先解除关联后重试。";
+        }
+        if (normalized.contains("cannot be null") || normalized.contains("not null")) {
+            return "数据保存失败：存在必填字段为空，请补齐后重试。";
+        }
+        if (normalized.contains("data too long") || normalized.contains("value too long")) {
+            return "数据保存失败：字段内容过长，请缩短后重试。";
+        }
+        if (normalized.contains("out of range")) {
+            return "数据保存失败：数字超出允许范围，请调整后重试。";
+        }
+        return "数据保存失败：当前数据不满足数据库约束，请检查编码、引用关系和必填项后重试。";
+    }
+
+    private static Throwable getRootCause(Throwable throwable) {
+        Throwable result = throwable;
+        while (result != null && result.getCause() != null && result.getCause() != result) {
+            result = result.getCause();
+        }
+        return result;
+    }
+
+    private static boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }
