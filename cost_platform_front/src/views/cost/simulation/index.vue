@@ -479,6 +479,7 @@ import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
@@ -533,6 +534,7 @@ const detailDrawerOpen = ref(false)
 const activeDetail = ref(createEmptyDetail())
 const activeResultSourceLabel = ref('最近单笔试算结果')
 const initialized = ref(false)
+const lastSceneId = ref(undefined)
 const stats = reactive({
   simulationCount: 0,
   successCount: 0,
@@ -828,6 +830,7 @@ async function loadBaseOptions() {
   sceneOptions.value = sceneResp?.data || []
   const fallbackSceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.sceneId) || sceneOptions.value[0]?.sceneId
   queryParams.sceneId = fallbackSceneId
+  lastSceneId.value = queryParams.sceneId
 }
 
 async function loadVersionOptions(sceneId) {
@@ -876,14 +879,26 @@ async function resetQuery() {
   queryParams.status = undefined
   queryParams.billMonth = resolveWorkingBillMonth(route.query.billMonth)
   queryParams.sceneId = resolveWorkingCostSceneId(sceneOptions.value, route.query.sceneId ? Number(route.query.sceneId) : undefined) || sceneOptions.value[0]?.sceneId
+  lastSceneId.value = queryParams.sceneId
   await loadVersionOptions(queryParams.sceneId)
   await fillTemplates()
   await getList()
 }
 
 async function handleSceneChange(sceneId) {
+  const confirmed = await confirmCostSceneSwitch({
+    currentSceneId: lastSceneId.value,
+    nextSceneId: sceneId,
+    sceneOptions: sceneOptions.value,
+    scope: '试算上下文'
+  })
+  if (!confirmed) {
+    queryParams.sceneId = lastSceneId.value
+    return
+  }
   queryParams.sceneId = sceneId
   queryParams.versionId = undefined
+  lastSceneId.value = sceneId
   clearCostWorkContext(['versionId'])
   await loadVersionOptions(sceneId)
   await fillTemplates()
