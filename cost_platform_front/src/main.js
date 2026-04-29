@@ -43,6 +43,7 @@ import ImageUpload from "@/components/ImageUpload"
 import ImagePreview from "@/components/ImagePreview"
 // 字典标签组件
 import DictTag from '@/components/DictTag'
+import CostTableEmpty from '@/components/cost/CostTableEmpty.vue'
 
 const app = createApp(App)
 
@@ -59,6 +60,7 @@ app.config.globalProperties.selectDictLabels = selectDictLabels
 
 // 全局组件挂载
 app.component('DictTag', DictTag)
+app.component('CostTableEmpty', CostTableEmpty)
 app.component('Pagination', Pagination)
 app.component('FileUpload', FileUpload)
 app.component('ImageUpload', ImageUpload)

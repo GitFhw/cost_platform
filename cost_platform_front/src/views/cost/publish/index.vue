@@ -167,6 +167,16 @@
                   <el-button link type="warning" icon="RefreshLeft" @click="handleRollback(scope.row)" v-hasPermi="['cost:publish:rollback']">回滚</el-button>
                 </template>
               </el-table-column>
+              <template #empty>
+                <cost-table-empty
+                  title="当前没有发布版本"
+                  description="发布版本会固化场景下的费用、变量和规则快照。可以先完成发布前检查，再生成首个版本。"
+                >
+                  <el-button type="primary" icon="CircleCheck" @click="handlePrecheck">发布前检查</el-button>
+                  <el-button type="success" icon="Promotion" @click="handlePublish" v-hasPermi="['cost:publish:add']">生成版本</el-button>
+                  <el-button icon="Refresh" @click="resetQuery">清空筛选</el-button>
+                </cost-table-empty>
+              </template>
             </el-table>
 
             <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />

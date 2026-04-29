@@ -110,6 +110,15 @@
           <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['cost:fee:remove']">删除</el-button>
         </template>
       </el-table-column>
+      <template #empty>
+        <cost-table-empty
+          title="当前没有费用数据"
+          description="费用是规则、发布和核算结果的主线。可以先新增费用，或清空筛选条件查看全部费用。"
+        >
+          <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['cost:fee:add']">新增费用</el-button>
+          <el-button icon="Refresh" @click="resetQuery">清空筛选</el-button>
+        </cost-table-empty>
+      </template>
     </el-table>
 
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />

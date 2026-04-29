@@ -150,6 +150,15 @@
             </el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <cost-table-empty
+            title="当前没有结果记录"
+            description="结果台账只展示正式核算落库结果。可以先去正式核算提交任务，或清空筛选条件查看全部结果。"
+          >
+            <el-button type="primary" plain icon="Promotion" @click="$router.push('/cost/task')">去正式核算</el-button>
+            <el-button icon="Refresh" @click="resetQuery">清空筛选</el-button>
+          </cost-table-empty>
+        </template>
       </el-table>
 
       <pagination
