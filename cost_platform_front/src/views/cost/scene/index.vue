@@ -713,6 +713,7 @@ const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
 const sceneList = ref([])
 const deptOptions = ref([])
 const deptLabelMap = ref({})
+const deptLoadDegraded = ref(false)
 const businessDomainOptions = ref([])
 const sceneStatusOptions = ref([])
 const sceneTypeOptions = ref([])
@@ -881,9 +882,19 @@ async function loadSceneDictOptions() {
 }
 
 async function loadDeptOptions() {
-  const response = await deptTreeSelect()
-  deptOptions.value = normalizeDeptTreeOptions(response.data || [])
-  deptLabelMap.value = buildDeptLabelMap(deptOptions.value)
+  try {
+    const response = await deptTreeSelect()
+    deptOptions.value = normalizeDeptTreeOptions(response.data || [])
+    deptLabelMap.value = buildDeptLabelMap(deptOptions.value)
+    deptLoadDegraded.value = false
+  } catch (error) {
+    deptOptions.value = []
+    deptLabelMap.value = {}
+    if (!deptLoadDegraded.value) {
+      proxy.$modal.msgWarning('适用组织树加载失败，已按空树降级处理，不影响场景中心台账查看。')
+      deptLoadDegraded.value = true
+    }
+  }
 }
 
 async function getList() {
