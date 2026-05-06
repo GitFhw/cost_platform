@@ -136,6 +136,34 @@
               </div>
             </div>
 
+            <div class="formula-lab__save-aid">
+              <div class="formula-lab__save-aid-head">
+                <div>
+                  <strong>保存前辅助</strong>
+                  <span>变量选择、语法校验和示例上下文在保存前统一预览。</span>
+                </div>
+                <div class="formula-lab__save-aid-actions">
+                  <el-button link type="primary" @click="scrollToResourceWorkbench">选择变量</el-button>
+                  <el-button link type="success" @click="handleGenerateSample(false)">预览示例</el-button>
+                  <el-button link type="warning" @click="activeWorkbenchTab = 'testing'">试算验证</el-button>
+                </div>
+              </div>
+              <div class="formula-lab__save-aid-grid">
+                <div v-for="item in formulaAssistCards" :key="item.label" class="formula-lab__save-aid-item" :class="`is-${item.status}`">
+                  <span>{{ item.label }}</span>
+                  <strong>{{ item.value }}</strong>
+                  <small>{{ item.desc }}</small>
+                </div>
+              </div>
+              <div class="formula-lab__sample-preview">
+                <div class="formula-lab__sample-preview-head">
+                  <strong>示例上下文预览</strong>
+                  <span>{{ testInputJson ? '已使用当前试算上下文' : '按当前引用即时生成预览' }}</span>
+                </div>
+                <pre>{{ samplePreviewJson }}</pre>
+              </div>
+            </div>
+
             <el-alert
               v-if="formulaValidationMessages.length"
               title="公式编译或预校验未通过"
@@ -951,6 +979,31 @@ const workbenchStatusCards = computed(() => {
       desc: testStatus === '已回算' ? '可切到试算验证页查看本次结果' : '保存前建议先走一次试算验证'
     }
   ]
+})
+
+const formulaAssistCards = computed(() => [
+  {
+    label: '变量选择',
+    value: referenceDetails.value.length ? `${referenceDetails.value.length} 项引用` : '待选择',
+    desc: referenceDetails.value.length ? '变量与上下文费用已形成引用映射' : '可从资源工作台点选变量、费用或函数',
+    status: referenceDetails.value.length ? 'done' : 'active'
+  },
+  {
+    label: '语法校验',
+    value: formulaValidationMessages.value.length ? `${formulaValidationMessages.value.length} 项问题` : (activeFormulaExpression.value ? '通过' : '待生成'),
+    desc: formulaValidationMessages.value[0] || (activeFormulaExpression.value ? '标准表达式可保存、可试算' : '请先编排中文公式或结构助手公式'),
+    status: formulaValidationMessages.value.length ? 'warning' : (activeFormulaExpression.value ? 'done' : 'active')
+  },
+  {
+    label: '示例预览',
+    value: testInputJson.value ? '已生成' : '即时预览',
+    desc: testInputJson.value ? '当前试算上下文会随公式一起保存' : '按引用自动生成 V/I/F/C/T 示例上下文',
+    status: testInputJson.value ? 'done' : 'active'
+  }
+])
+
+const samplePreviewJson = computed(() => {
+  return testInputJson.value || buildSampleInputJson() || '公式形成引用后，这里会显示 V/I/F/C/T 示例上下文。'
 })
 
 const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) => {
@@ -1959,11 +2012,9 @@ function handleSelectionChange(selection) {
   ids.value = selection.map(item => item.formulaId)
 }
 
-async function handleGenerateSample() {
-  activeWorkbenchTab.value = 'testing'
+function buildSampleInputJson() {
   if (!form.sceneId) {
-    proxy.$modal.msgWarning('请先选择场景，再按引用生成示例')
-    return
+    return ''
   }
   const V = {}
   const I = {}
@@ -1995,7 +2046,18 @@ async function handleGenerateSample() {
   ;(formulaValidationResult.value.feeRefs || []).forEach(code => {
     F[code] = 100
   })
-  testInputJson.value = JSON.stringify({ V, C: {}, I, F, T: {} }, null, 2)
+  return JSON.stringify({ V, C: {}, I, F, T: {} }, null, 2)
+}
+
+async function handleGenerateSample(switchToTesting = true) {
+  if (switchToTesting) {
+    activeWorkbenchTab.value = 'testing'
+  }
+  if (!form.sceneId) {
+    proxy.$modal.msgWarning('请先选择场景，再按引用生成示例')
+    return
+  }
+  testInputJson.value = buildSampleInputJson()
 }
 
 async function handleWorkbenchSceneChange(sceneId) {
@@ -2346,6 +2408,109 @@ onActivated(async () => {
 .formula-lab__status-item strong {
   color: var(--el-text-color-primary);
   font-size: 18px;
+}
+
+.formula-lab__save-aid {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  background: var(--el-bg-color-overlay);
+}
+
+.formula-lab__save-aid-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.formula-lab__save-aid-head strong,
+.formula-lab__sample-preview-head strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+}
+
+.formula-lab__save-aid-head span,
+.formula-lab__sample-preview-head span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.formula-lab__save-aid-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.formula-lab__save-aid-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.formula-lab__save-aid-item {
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  background: var(--el-fill-color-extra-light);
+}
+
+.formula-lab__save-aid-item span,
+.formula-lab__save-aid-item small {
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
+
+.formula-lab__save-aid-item strong {
+  color: var(--el-text-color-primary);
+  font-size: 16px;
+}
+
+.formula-lab__save-aid-item.is-done {
+  border-color: color-mix(in srgb, var(--el-color-success) 28%, var(--el-border-color-light));
+  background: color-mix(in srgb, var(--el-color-success-light-9) 32%, var(--el-bg-color-overlay));
+}
+
+.formula-lab__save-aid-item.is-active {
+  border-color: color-mix(in srgb, var(--el-color-info) 26%, var(--el-border-color-light));
+}
+
+.formula-lab__save-aid-item.is-warning {
+  border-color: color-mix(in srgb, var(--el-color-warning) 34%, var(--el-border-color-light));
+  background: color-mix(in srgb, var(--el-color-warning-light-9) 30%, var(--el-bg-color-overlay));
+}
+
+.formula-lab__sample-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.formula-lab__sample-preview-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.formula-lab__sample-preview pre {
+  max-height: 170px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-regular);
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .formula-lab__workbench-tabs :deep(.el-tabs__header) {
@@ -2765,7 +2930,8 @@ onActivated(async () => {
   .formula-lab__metrics,
   .formula-lab__overview-grid,
   .formula-lab__composer-grid,
-  .formula-lab__guide-grid {
+  .formula-lab__guide-grid,
+  .formula-lab__save-aid-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2779,7 +2945,9 @@ onActivated(async () => {
 @media (max-width: 768px) {
   .formula-lab__hero,
   .formula-lab__panel-head,
-  .formula-lab__pattern-head {
+  .formula-lab__pattern-head,
+  .formula-lab__save-aid-head,
+  .formula-lab__sample-preview-head {
     flex-direction: column;
   }
 
