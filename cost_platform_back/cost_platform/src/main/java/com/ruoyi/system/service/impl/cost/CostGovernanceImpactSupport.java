@@ -151,6 +151,29 @@ public class CostGovernanceImpactSupport {
         return impacts;
     }
 
+    public List<CostGovernanceImpactVo> buildFormulaImpacts(CostFormulaGovernanceCheckVo check) {
+        List<CostGovernanceImpactVo> impacts = new ArrayList<>();
+        if (positive(check.getVariableRefCount())) {
+            impacts.add(impact("FORMULA_VARIABLE_REF", "变量中心", "变量引用当前公式", check.getVariableRefCount(), true, false,
+                    "删除公式前必须先替换这些变量的公式编码，否则公式变量会失去计算来源。",
+                    "停用公式后，变量仍保留引用关系，但后续发布前需要替换为可用公式。",
+                    "进入变量中心按场景筛选，定位公式来源为当前公式的变量并替换公式编码。", sampleVariablesByFormula(check.getSceneId(), check.getFormulaCode())));
+        }
+        if (positive(check.getRuleRefCount())) {
+            impacts.add(impact("FORMULA_RULE_REF", "规则中心", "规则引用当前公式", check.getRuleRefCount(), true, false,
+                    "删除公式前必须先替换这些公式规则的金额公式，否则规则无法计算金额。",
+                    "停用公式后，相关规则仍可能引用它，发布前需要重新选择可用公式。",
+                    "进入规则中心按场景筛选，定位公式计价规则并替换金额公式。", sampleRulesByFormula(check.getSceneId(), check.getFormulaCode())));
+        }
+        if (positive(check.getPublishedVersionCount())) {
+            impacts.add(impact("FORMULA_PUBLISH_SNAPSHOT", "发布中心", "发布版本快照引用当前公式", check.getPublishedVersionCount(), true, true,
+                    "公式已进入发布快照，删除会影响历史版本复现和公式差异对比。",
+                    "公式已进入发布快照，停用前需要发布替代版本或确认历史保留口径。",
+                    "进入发布中心查看包含该公式的版本，发布替代公式后再处理。", sampleSnapshots(check.getSceneId(), "FORMULA", check.getFormulaCode())));
+        }
+        return impacts;
+    }
+
     public List<CostGovernanceImpactVo> buildRuleImpacts(CostRuleGovernanceCheckVo check) {
         List<CostGovernanceImpactVo> impacts = new ArrayList<>();
         if (positive(check.getConditionCount())) {
@@ -332,6 +355,24 @@ public class CostGovernanceImpactSupport {
         return ruleMapper.selectList(Wrappers.<CostRule>lambdaQuery()
                         .eq(CostRule::getSceneId, sceneId)
                         .eq(CostRule::getQuantityVariableCode, variableCode)
+                        .orderByDesc(CostRule::getPriority)
+                        .last("limit " + SAMPLE_LIMIT))
+                .stream().map(rule -> label(rule.getRuleName(), rule.getRuleCode())).collect(Collectors.toList());
+    }
+
+    private List<String> sampleVariablesByFormula(Long sceneId, String formulaCode) {
+        return variableMapper.selectList(Wrappers.<CostVariable>lambdaQuery()
+                        .eq(CostVariable::getSceneId, sceneId)
+                        .eq(CostVariable::getFormulaCode, formulaCode)
+                        .orderByAsc(CostVariable::getSortNo)
+                        .last("limit " + SAMPLE_LIMIT))
+                .stream().map(variable -> label(variable.getVariableName(), variable.getVariableCode())).collect(Collectors.toList());
+    }
+
+    private List<String> sampleRulesByFormula(Long sceneId, String formulaCode) {
+        return ruleMapper.selectList(Wrappers.<CostRule>lambdaQuery()
+                        .eq(CostRule::getSceneId, sceneId)
+                        .eq(CostRule::getAmountFormulaCode, formulaCode)
                         .orderByDesc(CostRule::getPriority)
                         .last("limit " + SAMPLE_LIMIT))
                 .stream().map(rule -> label(rule.getRuleName(), rule.getRuleCode())).collect(Collectors.toList());

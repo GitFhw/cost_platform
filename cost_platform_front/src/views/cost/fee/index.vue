@@ -258,7 +258,7 @@
         </div>
         <el-alert :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon />
         <el-alert :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon />
-        <GovernanceImpactList :impacts="governanceInfo.impactItems" />
+        <GovernanceImpactList :impacts="governanceInfo.impactItems" :context="governanceInfo" />
         <div class="fee-governance__advice">
           <p>删除建议：{{ governanceInfo.removeAdvice }}</p>
           <p>停用建议：{{ governanceInfo.disableAdvice }}</p>
@@ -613,6 +613,7 @@ async function fetchFeeGovernance(feeId) {
 function normalizeGovernanceInfo(data = {}) {
   return {
     feeId: data.feeId,
+    sceneId: data.sceneId,
     feeCode: data.feeCode || '',
     feeName: data.feeName || '',
     sceneCode: data.sceneCode || '',

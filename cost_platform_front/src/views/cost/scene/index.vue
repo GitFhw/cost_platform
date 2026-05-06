@@ -677,7 +677,7 @@
             :closable="false"
             show-icon
           />
-          <GovernanceImpactList :impacts="governanceInfo.impactItems" />
+          <GovernanceImpactList :impacts="governanceInfo.impactItems" :context="governanceInfo" />
 
           <div class="scene-governance__advice">
             <div class="scene-governance__advice-title">治理建议</div>

@@ -59,6 +59,9 @@ public class CostFormulaServiceImpl implements ICostFormulaService {
     @Autowired
     private ICostExpressionService expressionService;
 
+    @Autowired
+    private CostGovernanceImpactSupport governanceImpactSupport;
+
     @Override
     public List<CostFormula> selectFormulaList(CostFormula formula) {
         return formulaMapper.selectFormulaList(formula);
@@ -111,6 +114,7 @@ public class CostFormulaServiceImpl implements ICostFormulaService {
         check.setCanDisable(publishedVersionCount == 0);
         check.setRemoveBlockingReason(check.getCanDelete() ? "" : buildRemoveBlockingReason(variableRefCount, ruleRefCount, publishedVersionCount));
         check.setDisableBlockingReason(check.getCanDisable() ? "" : "当前公式已进入发布版本快照，请先替换并发布新版本后再停用。");
+        check.setImpactItems(governanceImpactSupport.buildFormulaImpacts(check));
         return check;
     }
 

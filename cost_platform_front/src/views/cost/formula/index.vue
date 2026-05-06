@@ -620,7 +620,7 @@
       <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
     </section>
 
-    <el-drawer v-model="governanceOpen" title="公式治理检查" size="520px" append-to-body>
+    <el-drawer v-model="governanceOpen" title="公式治理检查" size="640px" append-to-body>
       <div v-if="governanceInfo.formulaId">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="公式">{{ governanceInfo.formulaCode }} / {{ governanceInfo.formulaName }}</el-descriptions-item>
@@ -630,6 +630,7 @@
         </el-descriptions>
         <el-alert class="mt12" :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason || '当前公式未被变量、规则和发布快照引用。'" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon />
         <el-alert class="mt12" :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason || '当前公式未进入任何发布快照，可以停用。'" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon />
+        <GovernanceImpactList :impacts="governanceInfo.impactItems" :context="governanceInfo" />
       </div>
     </el-drawer>
 
@@ -672,6 +673,7 @@
 <script setup name="CostFormula">
 import { ElMessageBox } from 'element-plus'
 import ExpressionResourcePanel from '@/components/cost/ExpressionResourcePanel.vue'
+import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import JsonEditor from '@/components/cost/JsonEditor.vue'
 import {
   addFormula,

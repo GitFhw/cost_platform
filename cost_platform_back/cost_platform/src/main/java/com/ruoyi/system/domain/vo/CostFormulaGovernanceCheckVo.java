@@ -2,6 +2,9 @@ package com.ruoyi.system.domain.vo;
 
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 公式实验室治理检查结果。
  *
@@ -20,4 +23,5 @@ public class CostFormulaGovernanceCheckVo {
     private Boolean canDisable;
     private String removeBlockingReason;
     private String disableBlockingReason;
+    private List<CostGovernanceImpactVo> impactItems = new ArrayList<>();
 }

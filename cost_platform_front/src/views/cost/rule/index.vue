@@ -778,7 +778,7 @@
         </el-descriptions>
         <el-alert :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon class="mt12" />
         <el-alert :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon class="mt12" />
-        <GovernanceImpactList :impacts="governanceInfo.impactItems" />
+        <GovernanceImpactList :impacts="governanceInfo.impactItems" :context="governanceInfo" />
       </div>
     </el-drawer>
   </div>
