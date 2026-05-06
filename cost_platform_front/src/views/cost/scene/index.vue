@@ -700,6 +700,7 @@ import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listSc
 import { deptTreeSelect } from '@/api/system/user'
 import useSettingsStore from '@/store/modules/settings'
 import { getCostSceneContextId, setCostSceneContextId } from '@/utils/costSceneContext'
+import { confirmCostDeleteImpact, findFirstDeleteBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
 import { resolveCostChangeTypeLabel } from '@/utils/costDisplayLabels'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
@@ -1029,30 +1030,23 @@ async function handleDelete(row) {
     return
   }
   const checks = await Promise.all(targetRows.map(item => fetchSceneGovernance(item.sceneId)))
-  const blockedChecks = checks.filter(item => !item.canDelete)
-  if (blockedChecks.length) {
-    await ElMessageBox.alert(
-      blockedChecks.map(item => `${item.sceneName}：${item.removeBlockingReason}`).join('<br/>'),
-      '删除前治理检查',
-      {
-        type: 'warning',
-        dangerouslyUseHTMLString: true
-      }
-    )
-    if (blockedChecks[0]?.sceneId) {
-      openGovernanceDrawer(blockedChecks[0])
+  const allowed = await confirmCostDeleteImpact({
+    checks,
+    targetLabel: '场景',
+    targetNames: targetRows.map(item => item.sceneName)
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDeleteBlockedCheck(checks)
+    if (blockedCheck?.sceneId) {
+      openGovernanceDrawer(blockedCheck)
     }
     return
   }
 
   const sceneIds = row?.sceneId || ids.value
-  const sceneNames = targetRows.map(item => item.sceneName).join('、')
-  proxy.$modal.confirm(`是否确认删除场景"${sceneNames}"的数据项？`).then(function() {
-    return delScene(sceneIds)
-  }).then(() => {
-    getList()
-    proxy.$modal.msgSuccess('删除成功')
-  }).catch(() => {})
+  await delScene(sceneIds)
+  getList()
+  proxy.$modal.msgSuccess('删除成功')
 }
 
 function handleExport() {

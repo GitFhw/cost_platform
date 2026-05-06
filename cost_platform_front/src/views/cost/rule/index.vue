@@ -799,6 +799,7 @@ import useSettingsStore from '@/store/modules/settings'
 import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { confirmCostDeleteImpact, findFirstDeleteBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { confirmCostNextAction } from '@/utils/costNextAction'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
@@ -1728,21 +1729,23 @@ async function handleDelete(row) {
     return
   }
   const checks = await Promise.all(targetRows.map(item => fetchGovernance(item.ruleId)))
-  const blocked = checks.filter(item => !item.canDelete)
-  if (blocked.length) {
-    await ElMessageBox.alert(blocked.map(item => `${item.ruleCode}：${item.removeBlockingReason}`).join('<br/>'), '删除前治理检查', { type: 'warning', dangerouslyUseHTMLString: true })
-    governanceInfo.value = blocked[0]
-    governanceOpen.value = true
+  const allowed = await confirmCostDeleteImpact({
+    checks,
+    targetLabel: '规则',
+    targetNames: targetRows.map(item => item.ruleCode)
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDeleteBlockedCheck(checks)
+    if (blockedCheck) {
+      governanceInfo.value = blockedCheck
+      governanceOpen.value = true
+    }
     return
   }
   const ruleIds = row?.ruleId || ids.value
-  const ruleCodes = targetRows.map(item => item.ruleCode).join('、')
-  proxy.$modal.confirm(`是否确认删除规则"${ruleCodes}"的数据项？`).then(function() {
-    return delRule(ruleIds)
-  }).then(() => {
-    getList()
-    proxy.$modal.msgSuccess('删除成功')
-  }).catch(() => {})
+  await delRule(ruleIds)
+  getList()
+  proxy.$modal.msgSuccess('删除成功')
 }
 
 function handleExport() {

@@ -730,6 +730,7 @@ import { optionselectFormula } from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselect as getDictTypeOptionselect } from '@/api/system/dict/type'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { confirmCostDeleteImpact, findFirstDeleteBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import {
   addVariable,
   applyVariableTemplate,
@@ -1288,21 +1289,23 @@ async function handleDelete(row) {
   const targetRows = resolveTargetRows(row)
   if (!targetRows.length) return
   const checks = await Promise.all(targetRows.map(item => fetchGovernance(item.variableId)))
-  const blocked = checks.filter(item => !item.canDelete)
-  if (blocked.length) {
-    await ElMessageBox.alert(blocked.map(item => `${item.variableName}：${item.removeBlockingReason}`).join('<br/>'), '删除前治理检查', { type: 'warning', dangerouslyUseHTMLString: true })
-    governanceInfo.value = blocked[0]
-    governanceOpen.value = true
+  const allowed = await confirmCostDeleteImpact({
+    checks,
+    targetLabel: '变量',
+    targetNames: targetRows.map(item => item.variableName)
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDeleteBlockedCheck(checks)
+    if (blockedCheck) {
+      governanceInfo.value = blockedCheck
+      governanceOpen.value = true
+    }
     return
   }
   const variableIds = row?.variableId || ids.value
-  const variableNames = targetRows.map(item => item.variableName).join('、')
-  proxy.$modal.confirm(`是否确认删除变量"${variableNames}"的数据项？`).then(function() {
-    return delVariable(variableIds)
-  }).then(() => {
-    getList()
-    proxy.$modal.msgSuccess('删除成功')
-  }).catch(() => {})
+  await delVariable(variableIds)
+  getList()
+  proxy.$modal.msgSuccess('删除成功')
 }
 
 function handleExport() {

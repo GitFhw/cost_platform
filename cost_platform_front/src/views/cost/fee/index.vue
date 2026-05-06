@@ -275,6 +275,7 @@ import { addFee, delFee, getFee, getFeeGovernance, getFeeStats, listFee, updateF
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { confirmCostDeleteImpact, findFirstDeleteBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { confirmCostNextAction } from '@/utils/costNextAction'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
@@ -569,26 +570,24 @@ async function handleDelete(row) {
     return
   }
   const checks = await Promise.all(targetRows.map(item => fetchFeeGovernance(item.feeId)))
-  const blockedChecks = checks.filter(item => !item.canDelete)
-  if (blockedChecks.length) {
-    await ElMessageBox.alert(
-      blockedChecks.map(item => `${item.feeName}：${item.removeBlockingReason}`).join('<br/>'),
-      '删除前治理检查',
-      { type: 'warning', dangerouslyUseHTMLString: true }
-    )
-    governanceInfo.value = blockedChecks[0]
-    governanceOpen.value = true
+  const allowed = await confirmCostDeleteImpact({
+    checks,
+    targetLabel: '费用',
+    targetNames: targetRows.map(item => item.feeName)
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDeleteBlockedCheck(checks)
+    if (blockedCheck) {
+      governanceInfo.value = blockedCheck
+      governanceOpen.value = true
+    }
     return
   }
 
   const feeIds = row?.feeId || ids.value
-  const feeNames = targetRows.map(item => item.feeName).join('、')
-  proxy.$modal.confirm(`是否确认删除费用"${feeNames}"的数据项？`).then(function() {
-    return delFee(feeIds)
-  }).then(() => {
-    getList()
-    proxy.$modal.msgSuccess('删除成功')
-  }).catch(() => {})
+  await delFee(feeIds)
+  getList()
+  proxy.$modal.msgSuccess('删除成功')
 }
 
 function handleExport() {

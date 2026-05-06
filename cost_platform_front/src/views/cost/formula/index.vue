@@ -697,6 +697,7 @@ import { compileCostBusinessFormula } from '@/utils/costBusinessFormulaCompiler'
 import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { optionselectVariable } from '@/api/cost/variable'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { confirmCostDeleteImpact, findFirstDeleteBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -2003,11 +2004,25 @@ async function handleRollbackVersion(row) {
 }
 
 async function handleDelete(row) {
-  await ElMessageBox.confirm(`确认删除公式 ${row.formulaCode} 吗？`, '删除确认', { type: 'warning' })
+  const response = await getFormulaGovernance(row.formulaId)
+  const checks = [response?.data || {}]
+  const allowed = await confirmCostDeleteImpact({
+    checks,
+    targetLabel: '公式',
+    targetNames: [`${row.formulaCode} / ${row.formulaName}`]
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDeleteBlockedCheck(checks)
+    if (blockedCheck) {
+      governanceInfo.value = blockedCheck
+      governanceOpen.value = true
+    }
+    return
+  }
   await delFormula(row.formulaId)
   proxy.$modal.msgSuccess('删除成功')
   await getList()
-  await loadSceneAssets(form.sceneId)
+  await loadSceneAssets(row.sceneId || form.sceneId)
 }
 
 function handleSelectionChange(selection) {
