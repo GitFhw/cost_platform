@@ -158,6 +158,25 @@
           show-icon
           class="mb16"
         />
+        <div class="rule-center__wizard">
+          <div
+            v-for="item in ruleWizardSteps"
+            :key="item.step"
+            class="rule-center__wizard-step"
+            :class="`is-${item.status}`"
+          >
+            <span>{{ item.step }}</span>
+            <strong>{{ item.title }}</strong>
+            <small>{{ item.desc }}</small>
+          </div>
+        </div>
+        <div class="rule-center__form-section-head">
+          <span>01</span>
+          <div>
+            <strong>费用与规则类型</strong>
+            <small>先确认费用归属、规则身份、规则类型、计量变量和基础定价方式。</small>
+          </div>
+        </div>
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="规则编码" prop="ruleCode">
@@ -355,8 +374,9 @@
           </el-col>
         </el-row>
 
-        <div class="rule-center__section-title">
-          <span>条件编辑区</span>
+        <div class="rule-center__section-title rule-center__section-title--guided">
+          <span><em>02</em>条件编辑区</span>
+          <small>先配置命中条件，再进入组合定价或阶梯定价。</small>
           <div class="rule-center__section-actions">
             <el-button type="success" plain icon="Plus" @click="handleAddConditionGroup">新增组合组</el-button>
             <el-button type="primary" plain icon="Plus" @click="handleAddCondition">新增条件</el-button>
@@ -431,8 +451,8 @@
         </div>
         <el-empty v-else description="当前还没有条件组合，先新增一个组合组开始配置" :image-size="72" />
         <div v-if="['FIXED_RATE', 'FIXED_AMOUNT'].includes(form.ruleType) && form.pricingMode === 'GROUPED'" class="rule-center__group-pricing">
-          <div class="rule-center__section-title">
-            <span>组合定价区</span>
+          <div class="rule-center__section-title rule-center__section-title--guided">
+            <span><em>03</em>组合定价区</span>
             <small>每个组合组分别维护自己的{{ form.ruleType === 'FIXED_RATE' ? '费率/单价' : '固定金额' }}。</small>
           </div>
           <el-alert
@@ -470,8 +490,8 @@
         </div>
 
         <template v-if="form.ruleType === 'TIER_RATE'">
-          <div class="rule-center__section-title">
-            <span>阶梯工作区</span>
+          <div class="rule-center__section-title rule-center__section-title--guided">
+            <span><em>03</em>阶梯工作区</span>
             <small>阶梯依据变量：{{ resolveVariableName(form.quantityVariableCode) || '未选择' }}</small>
           </div>
           <div class="rule-center__tier-basis" v-if="selectedTierVariableMeta">
@@ -997,6 +1017,39 @@ const groupPricingRows = computed(() => {
       value: form.value.ruleType === 'FIXED_RATE' ? matched.rateValue : matched.amountValue
     }
   })
+})
+const ruleWizardSteps = computed(() => {
+  const conditionCount = (form.value.conditions || []).length
+  const ruleTypeLabel = resolveTagLabel(ruleTypeOptions.value, form.value.ruleType) || '未选择规则类型'
+  const pricingDesc = form.value.ruleType === 'TIER_RATE'
+    ? `阶梯 ${form.value.tiers?.length || 0} 档`
+    : form.value.ruleType === 'FORMULA'
+      ? (form.value.amountFormulaCode ? `公式 ${form.value.amountFormulaCode}` : '待选择金额公式')
+      : isGroupedPricing.value
+        ? `组合定价 ${groupPricingRows.value.length} 组`
+        : form.value.ruleType === 'FIXED_AMOUNT'
+          ? '统一固定金额'
+          : '统一费率/单价'
+  return [
+    {
+      step: '01',
+      title: '费用与规则类型',
+      desc: selectedFeeId.value ? `${currentFeeTitle.value} / ${ruleTypeLabel}` : '请先选择费用',
+      status: selectedFeeId.value && form.value.ruleType ? 'done' : 'active'
+    },
+    {
+      step: '02',
+      title: '条件配置',
+      desc: conditionCount ? `${conditionGroups.value.length} 个组合组，${conditionCount} 个条件` : '可为空，或新增组合组',
+      status: conditionCount ? 'done' : 'active'
+    },
+    {
+      step: '03',
+      title: '计价与阶梯',
+      desc: pricingDesc,
+      status: form.value.ruleType === 'TIER_RATE' && tierValidationIssues.value.length ? 'active' : 'done'
+    }
+  ]
 })
 const metricItems = computed(() => [
   { label: '规则总数', value: statistics.ruleCount, desc: '当前检索条件下规则数量' },
@@ -1936,6 +1989,108 @@ getList()
   background: color-mix(in srgb, var(--el-color-primary-light-9) 32%, var(--el-bg-color-overlay));
 }
 
+.rule-center__wizard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.rule-center__wizard-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  align-items: start;
+  min-height: 86px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 12px;
+  background: var(--el-fill-color-extra-light);
+}
+
+.rule-center__wizard-step span {
+  grid-row: span 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.rule-center__wizard-step strong {
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+}
+
+.rule-center__wizard-step small {
+  grid-column: 2;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+
+.rule-center__wizard-step.is-done {
+  border-color: color-mix(in srgb, var(--el-color-success) 34%, var(--el-border-color-light));
+  background: color-mix(in srgb, var(--el-color-success-light-9) 28%, var(--el-bg-color-overlay));
+}
+
+.rule-center__wizard-step.is-done span {
+  background: var(--el-color-success);
+  color: #fff;
+}
+
+.rule-center__wizard-step.is-active {
+  border-color: color-mix(in srgb, var(--el-color-warning) 42%, var(--el-border-color-light));
+  background: color-mix(in srgb, var(--el-color-warning-light-9) 30%, var(--el-bg-color-overlay));
+}
+
+.rule-center__wizard-step.is-active span {
+  background: var(--el-color-warning);
+  color: #fff;
+}
+
+.rule-center__form-section-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 6px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  background: var(--el-bg-color-overlay);
+}
+
+.rule-center__form-section-head > span,
+.rule-center__section-title--guided em {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--el-color-warning);
+  color: #fff;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.rule-center__form-section-head strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+}
+
+.rule-center__form-section-head small {
+  color: var(--el-text-color-secondary);
+  line-height: 1.7;
+}
+
 .rule-center__section-title {
   display: flex;
   align-items: center;
@@ -1943,6 +2098,25 @@ getList()
   gap: 12px;
   margin: 16px 0 12px;
   font-weight: 700;
+}
+
+.rule-center__section-title--guided {
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  background: var(--el-bg-color-overlay);
+}
+
+.rule-center__section-title--guided > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rule-center__section-title--guided small {
+  color: var(--el-text-color-secondary);
+  font-weight: 400;
+  line-height: 1.6;
 }
 
 .rule-center__section-actions {
@@ -2274,6 +2448,10 @@ getList()
 @media (max-width: 1200px) {
   .rule-center__metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rule-center__wizard {
+    grid-template-columns: 1fr;
   }
 
   .rule-center__workspace {
