@@ -725,6 +725,101 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     @Override
+    public Map<String, Object> precheckTask(CostCalcTaskSubmitBo bo) {
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        List<Map<String, Object>> blockingItems = new ArrayList<>();
+        List<Map<String, Object>> warningItems = new ArrayList<>();
+        RuntimeSnapshot snapshot = null;
+        List<Map<String, Object>> inputs = Collections.emptyList();
+
+        if (bo == null) {
+            blockingItems.add(buildTaskPrecheckItem("BLOCKING", "REQUEST_EMPTY", "请求为空",
+                    "请先填写正式核算任务参数。"));
+        } else {
+            if (bo.getSceneId() == null) {
+                blockingItems.add(buildTaskPrecheckItem("BLOCKING", "SCENE_EMPTY", "缺少运行场景",
+                        "请选择正式核算要执行的成本场景。"));
+            }
+            if (StringUtils.isEmpty(bo.getTaskType())) {
+                blockingItems.add(buildTaskPrecheckItem("BLOCKING", "TASK_TYPE_EMPTY", "缺少任务类型",
+                        "请选择单笔正式核算或批量正式核算。"));
+            }
+            if (StringUtils.isEmpty(bo.getBillMonth())) {
+                blockingItems.add(buildTaskPrecheckItem("BLOCKING", "BILL_MONTH_EMPTY", "缺少账期",
+                        "请选择本次正式核算的账期。"));
+            } else {
+                try {
+                    validateBillMonth(bo.getBillMonth());
+                } catch (ServiceException ex) {
+                    blockingItems.add(buildTaskPrecheckItem("BLOCKING", "BILL_MONTH_INVALID", "账期格式错误",
+                            ex.getMessage()));
+                }
+            }
+
+            if (bo.getSceneId() != null) {
+                try {
+                    snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), true);
+                    result.put("sceneId", snapshot.sceneId);
+                    result.put("sceneCode", snapshot.sceneCode);
+                    result.put("sceneName", snapshot.sceneName);
+                    result.put("versionId", snapshot.versionId);
+                    result.put("versionNo", snapshot.versionNo);
+                    result.put("snapshotSource", snapshot.snapshotSource);
+                    if (snapshot.fees.isEmpty()) {
+                        blockingItems.add(buildTaskPrecheckItem("BLOCKING", "FEE_EMPTY", "发布版本缺少费用",
+                                "当前执行版本没有可运行费用，请先发布包含费用、规则和变量的版本。"));
+                    }
+                } catch (ServiceException ex) {
+                    blockingItems.add(buildTaskPrecheckItem("BLOCKING", "VERSION_INVALID", "执行版本不可用",
+                            ex.getMessage()));
+                }
+            }
+
+            if (snapshot != null && StringUtils.isNotEmpty(bo.getBillMonth())) {
+                appendBillPeriodPrecheck(snapshot.sceneId, snapshot.versionId, bo.getBillMonth(), blockingItems, warningItems);
+            }
+            if (INPUT_SOURCE_BATCH.equals(resolveInputSourceType(bo))) {
+                appendInputBatchPrecheck(bo, snapshot, blockingItems, warningItems);
+            } else if (StringUtils.isEmpty(bo.getInputJson())) {
+                blockingItems.add(buildTaskPrecheckItem("BLOCKING", "INPUT_JSON_EMPTY", "缺少输入 JSON",
+                        "JSON 直传模式下必须填写正式核算输入。"));
+            }
+            if (canParseTaskInputForPrecheck(bo, blockingItems)) {
+                try {
+                    inputs = parseTaskInput(bo);
+                    if (inputs.isEmpty()) {
+                        blockingItems.add(buildTaskPrecheckItem("BLOCKING", "INPUT_EMPTY", "输入数据为空",
+                                "正式核算至少需要 1 条输入数据。"));
+                    }
+                } catch (ServiceException ex) {
+                    blockingItems.add(buildTaskPrecheckItem("BLOCKING", "INPUT_INVALID", "输入数据不可用",
+                            ex.getMessage()));
+                }
+            }
+            if (snapshot != null && !inputs.isEmpty()) {
+                appendVariableCompletenessPrecheck(snapshot, inputs, blockingItems);
+            }
+        }
+
+        List<Map<String, Object>> items = new ArrayList<>();
+        items.addAll(blockingItems);
+        items.addAll(warningItems);
+        result.put("passed", blockingItems.isEmpty());
+        result.put("blockingCount", blockingItems.size());
+        result.put("warningCount", warningItems.size());
+        result.put("blockingItems", blockingItems);
+        result.put("warningItems", warningItems);
+        result.put("items", items);
+        result.put("inputCount", inputs.size());
+        result.put("inputSourceType", bo == null ? "" : resolveInputSourceType(bo));
+        result.put("billMonth", bo == null ? "" : bo.getBillMonth());
+        result.put("message", blockingItems.isEmpty()
+                ? (warningItems.isEmpty() ? "任务创建前预检通过" : "任务创建前预检通过，但存在提醒项")
+                : "任务创建前预检存在阻断项");
+        return result;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> submitTask(CostCalcTaskSubmitBo bo) {
         return distributedLockSupport.executeTaskSubmitLock(bo.getSceneId(), bo.getVersionId(), bo.getBillMonth(),
@@ -732,6 +827,7 @@ public class CostRunServiceImpl implements ICostRunService {
                 "当前账期的核算任务正在提交处理中，请稍后重试", () ->
                 {
                     RuntimeSnapshot snapshot = loadRuntimeSnapshot(bo.getSceneId(), bo.getVersionId(), true);
+                    validateInputBatchMatchesSnapshot(bo, snapshot);
                     List<Map<String, Object>> inputs = parseTaskInput(bo);
                     validateBillMonth(bo.getBillMonth());
                     CostBillPeriod period = ensureBillPeriodAvailable(snapshot.sceneId, bo.getBillMonth(), snapshot.versionId);
@@ -3122,6 +3218,169 @@ public class CostRunServiceImpl implements ICostRunService {
                 result.setPricingSource(stringValue(pricing.get("pricingSource")));
             }
         }
+    }
+
+    private void appendBillPeriodPrecheck(Long sceneId, Long versionId, String billMonth,
+                                          List<Map<String, Object>> blockingItems,
+                                          List<Map<String, Object>> warningItems) {
+        CostBillPeriod period = billPeriodMapper.selectOne(Wrappers.<CostBillPeriod>lambdaQuery()
+                .eq(CostBillPeriod::getSceneId, sceneId)
+                .eq(CostBillPeriod::getBillMonth, billMonth)
+                .last("limit 1"));
+        if (period == null) {
+            warningItems.add(buildTaskPrecheckItem("WARNING", "BILL_PERIOD_NEW", "账期将自动创建",
+                    "当前账期尚未初始化，提交后会自动创建账期并进入核算中。"));
+            return;
+        }
+        if (PERIOD_STATUS_SEALED.equals(period.getPeriodStatus())) {
+            blockingItems.add(buildTaskPrecheckItem("BLOCKING", "BILL_PERIOD_SEALED", "账期已封存",
+                    "当前账期已封存，禁止提交正式核算任务。"));
+        }
+        if (period.getActiveVersionId() != null && versionId != null && !Objects.equals(period.getActiveVersionId(), versionId)) {
+            warningItems.add(buildTaskPrecheckItem("WARNING", "BILL_PERIOD_VERSION_CHANGED", "账期版本将更新",
+                    "账期当前版本与本次执行版本不同，提交后会同步为本次执行版本。"));
+        }
+    }
+
+    private void appendInputBatchPrecheck(CostCalcTaskSubmitBo bo, RuntimeSnapshot snapshot,
+                                          List<Map<String, Object>> blockingItems,
+                                          List<Map<String, Object>> warningItems) {
+        if (StringUtils.isEmpty(bo.getSourceBatchNo())) {
+            blockingItems.add(buildTaskPrecheckItem("BLOCKING", "INPUT_BATCH_EMPTY", "缺少导入批次",
+                    "导入批次模式下必须选择或填写批次号。"));
+            return;
+        }
+        CostCalcInputBatch batch = selectInputBatchByNo(bo.getSourceBatchNo());
+        if (batch == null) {
+            blockingItems.add(buildTaskPrecheckItem("BLOCKING", "INPUT_BATCH_NOT_FOUND", "导入批次不存在",
+                    "未找到对应导入批次，请刷新或重新选择批次。"));
+            return;
+        }
+        if (!Objects.equals(batch.getSceneId(), bo.getSceneId())) {
+            blockingItems.add(buildTaskPrecheckItem("BLOCKING", "INPUT_BATCH_SCENE_MISMATCH", "批次场景不匹配",
+                    "导入批次所属场景与当前运行场景不一致。"));
+        }
+        if (StringUtils.isNotEmpty(bo.getBillMonth()) && !Objects.equals(batch.getBillMonth(), bo.getBillMonth())) {
+            blockingItems.add(buildTaskPrecheckItem("BLOCKING", "INPUT_BATCH_BILL_MONTH_MISMATCH", "批次账期不匹配",
+                    "导入批次账期与当前任务账期不一致。"));
+        }
+        if (snapshot != null && batch.getVersionId() != null && !Objects.equals(batch.getVersionId(), snapshot.versionId)) {
+            blockingItems.add(buildTaskPrecheckItem("BLOCKING", "INPUT_BATCH_VERSION_MISMATCH", "批次版本不匹配",
+                    "导入批次版本与本次执行版本不一致，请重新选择批次或调整执行版本。"));
+        }
+        if (batch.getTotalCount() == null || batch.getTotalCount() <= 0) {
+            blockingItems.add(buildTaskPrecheckItem("BLOCKING", "INPUT_BATCH_EMPTY_ITEMS", "批次无有效明细",
+                    "导入批次没有可用于正式核算的输入明细。"));
+        }
+        if (batch.getErrorCount() != null && batch.getErrorCount() > 0) {
+            warningItems.add(buildTaskPrecheckItem("WARNING", "INPUT_BATCH_HAS_ERRORS", "批次存在错误记录",
+                    "导入批次包含错误记录，建议先治理后再提交正式核算。"));
+        }
+        if (StringUtils.isNotEmpty(batch.getBatchStatus()) && !INPUT_BATCH_STATUS_READY.equals(batch.getBatchStatus())) {
+            warningItems.add(buildTaskPrecheckItem("WARNING", "INPUT_BATCH_STATUS", "批次状态需确认",
+                    "导入批次当前状态为 " + batch.getBatchStatus() + "，请确认是否继续引用。"));
+        }
+    }
+
+    private boolean canParseTaskInputForPrecheck(CostCalcTaskSubmitBo bo, List<Map<String, Object>> blockingItems) {
+        if (bo == null || bo.getSceneId() == null || StringUtils.isEmpty(bo.getTaskType()) || StringUtils.isEmpty(bo.getBillMonth())) {
+            return false;
+        }
+        boolean hasInputBlocking = blockingItems.stream()
+                .map(item -> stringValue(item.get("code")))
+                .anyMatch(code -> code.startsWith("INPUT_BATCH") || "INPUT_JSON_EMPTY".equals(code));
+        return !hasInputBlocking;
+    }
+
+    private void appendVariableCompletenessPrecheck(RuntimeSnapshot snapshot, List<Map<String, Object>> inputs,
+                                                    List<Map<String, Object>> blockingItems) {
+        List<RuntimeVariable> requiredVariables = snapshot.variables.stream()
+                .filter(item -> !SOURCE_TYPE_FORMULA.equals(item.sourceType))
+                .filter(item -> StringUtils.isNotEmpty(resolveTemplatePath(item)))
+                .filter(item -> !hasUsableDefaultValue(item.defaultValue))
+                .collect(Collectors.toList());
+        if (requiredVariables.isEmpty()) {
+            return;
+        }
+        Map<String, Integer> missingCounts = new LinkedHashMap<>();
+        List<String> samples = new ArrayList<>();
+        for (int i = 0; i < inputs.size(); i++) {
+            Map<String, Object> input = inputs.get(i);
+            for (RuntimeVariable variable : requiredVariables) {
+                String path = resolveTemplatePath(variable);
+                if (!isMissingInputValue(resolvePathValue(input, path))) {
+                    continue;
+                }
+                missingCounts.merge(variable.variableCode, 1, Integer::sum);
+                if (samples.size() < 8) {
+                    samples.add("第 " + (i + 1) + " 条缺少 " + firstNonBlank(variable.variableName, variable.variableCode)
+                            + "(" + path + ")");
+                }
+            }
+        }
+        if (missingCounts.isEmpty()) {
+            return;
+        }
+        String summary = missingCounts.entrySet().stream()
+                .limit(8)
+                .map(item -> item.getKey() + " 缺失 " + item.getValue() + " 条")
+                .collect(Collectors.joining("；"));
+        if (missingCounts.size() > 8) {
+            summary = summary + "；等 " + missingCounts.size() + " 个变量";
+        }
+        blockingItems.add(buildTaskPrecheckItem("BLOCKING", "VARIABLE_INPUT_MISSING", "输入变量不完整",
+                "存在必填变量缺失：" + summary + "。样例：" + String.join("；", samples)));
+    }
+
+    private Map<String, Object> buildTaskPrecheckItem(String level, String code, String title, String description) {
+        LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+        item.put("level", level);
+        item.put("code", code);
+        item.put("title", title);
+        item.put("description", description);
+        return item;
+    }
+
+    private CostCalcInputBatch selectInputBatchByNo(String batchNo) {
+        if (StringUtils.isEmpty(batchNo)) {
+            return null;
+        }
+        return calcInputBatchMapper.selectOne(Wrappers.<CostCalcInputBatch>lambdaQuery()
+                .eq(CostCalcInputBatch::getBatchNo, batchNo)
+                .last("limit 1"));
+    }
+
+    private void validateInputBatchMatchesSnapshot(CostCalcTaskSubmitBo bo, RuntimeSnapshot snapshot) {
+        if (!INPUT_SOURCE_BATCH.equals(resolveInputSourceType(bo))) {
+            return;
+        }
+        CostCalcInputBatch batch = selectInputBatchByNo(bo.getSourceBatchNo());
+        if (batch != null && batch.getVersionId() != null && snapshot != null
+                && !Objects.equals(batch.getVersionId(), snapshot.versionId)) {
+            throw new ServiceException("来源导入批次与当前执行版本不匹配，请重新选择批次或调整执行版本");
+        }
+    }
+
+    private boolean hasUsableDefaultValue(Object value) {
+        return value != null && StringUtils.isNotEmpty(String.valueOf(value));
+    }
+
+    private Object resolvePathValue(Map<String, Object> input, String path) {
+        if (input == null || StringUtils.isEmpty(path)) {
+            return null;
+        }
+        Object current = input;
+        for (String piece : path.split("\\.")) {
+            if (!(current instanceof Map)) {
+                return null;
+            }
+            current = castMap(current).get(piece);
+        }
+        return current;
+    }
+
+    private boolean isMissingInputValue(Object value) {
+        return value == null || (value instanceof String && StringUtils.isEmpty((String) value));
     }
 
     private List<Map<String, Object>> parseTaskInput(CostCalcTaskSubmitBo bo) {

@@ -270,6 +270,27 @@
             :type="submissionStrategy.type"
             :closable="false"
           />
+          <el-alert
+            v-if="taskPrecheck"
+            class="run-page__precheck-alert"
+            :type="taskPrecheck.passed ? (taskPrecheck.warningCount ? 'warning' : 'success') : 'error'"
+            :title="taskPrecheck.message"
+            :closable="true"
+            @close="taskPrecheck = null"
+          >
+            <div class="run-page__precheck-meta">
+              <span>输入 {{ taskPrecheck.inputCount || 0 }} 条</span>
+              <span>阻断 {{ taskPrecheck.blockingCount || 0 }} 项</span>
+              <span>提醒 {{ taskPrecheck.warningCount || 0 }} 项</span>
+              <span v-if="taskPrecheck.versionNo">版本 {{ taskPrecheck.versionNo }}</span>
+            </div>
+            <ul v-if="taskPrecheckItems.length" class="run-page__precheck-list">
+              <li v-for="item in taskPrecheckItems" :key="`${item.level}-${item.code}-${item.title}`">
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.description }}</span>
+              </li>
+            </ul>
+          </el-alert>
           <el-form-item label="备注">
             <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" show-word-limit />
           </el-form-item>
@@ -344,7 +365,7 @@
         </el-form>
 
         <div class="run-page__action-row">
-          <el-button type="primary" icon="Promotion" @click="handleSubmit" v-hasPermi="['cost:task:execute']">提交任务</el-button>
+          <el-button type="primary" icon="Promotion" :loading="taskPrechecking" @click="handleSubmit" v-hasPermi="['cost:task:execute']">提交任务</el-button>
           <el-button icon="RefreshLeft" @click="fillExample">按配置生成模板</el-button>
           <el-button v-if="form.inputSourceType === 'INPUT_BATCH'" icon="View" :disabled="!form.sourceBatchNo" @click="loadBatchPreviewByBatchNo(form.sourceBatchNo)">
             刷新批次预览
@@ -806,6 +827,7 @@ import {
   listTask,
   listTaskInputBatch,
   listVersionOptions,
+  precheckTask,
   retryTaskDetail,
   retryTaskPartition,
   submitTask
@@ -877,6 +899,8 @@ const routeTaskContext = reactive({
 const lastOpenedRouteTaskKey = ref('')
 const lastQuerySceneId = ref(undefined)
 const lastFormSceneId = ref(undefined)
+const taskPrechecking = ref(false)
+const taskPrecheck = ref(null)
 
 const queryParams = reactive({
   pageNum: 1,
@@ -946,6 +970,11 @@ const submissionStrategy = computed(() => {
     description: 'JSON 直传更适合联调、补录和小批量验证；生产批量任务建议先创建导入批次，再由任务中心提交正式核算。'
   }
 })
+
+const taskPrecheckItems = computed(() => [
+  ...(taskPrecheck.value?.blockingItems || []),
+  ...(taskPrecheck.value?.warningItems || [])
+])
 
 const inlineInputInsight = computed(() => {
   if (form.inputSourceType !== 'INLINE_JSON') return null
@@ -1279,9 +1308,10 @@ async function handleSubmit() {
     proxy.$modal.msgWarning('请选择导入批次')
     return
   }
-  const payload = { ...form }
-  if (payload.inputSourceType === 'INPUT_BATCH') {
-    payload.inputJson = ''
+  const payload = buildTaskSubmitPayload()
+  const precheckPassed = await runTaskSubmitPrecheck(payload)
+  if (!precheckPassed) {
+    return
   }
   const resp = await submitTask(payload)
   proxy.$modal.msgSuccess('任务已提交')
@@ -1304,6 +1334,47 @@ async function handleSubmit() {
       }
     })
   }
+}
+
+function buildTaskSubmitPayload() {
+  const payload = { ...form }
+  if (payload.inputSourceType === 'INPUT_BATCH') {
+    payload.inputJson = ''
+  }
+  return payload
+}
+
+async function runTaskSubmitPrecheck(payload) {
+  taskPrechecking.value = true
+  try {
+    const resp = await precheckTask(payload)
+    taskPrecheck.value = resp.data || {}
+  } finally {
+    taskPrechecking.value = false
+  }
+  if (!taskPrecheck.value?.passed) {
+    proxy.$modal.msgWarning('任务创建前预检存在阻断项，请先处理后再提交')
+    return false
+  }
+  if ((taskPrecheck.value.warningCount || 0) > 0) {
+    try {
+      await ElMessageBox.confirm(buildTaskPrecheckConfirmMessage(taskPrecheck.value), '任务创建前预检', {
+        type: 'warning',
+        confirmButtonText: '继续提交',
+        cancelButtonText: '返回检查'
+      })
+    } catch {
+      return false
+    }
+  }
+  return true
+}
+
+function buildTaskPrecheckConfirmMessage(precheck) {
+  const items = (precheck.warningItems || []).slice(0, 5)
+  const detail = items.map(item => `${item.title}：${item.description}`).join('\n')
+  const suffix = (precheck.warningItems || []).length > items.length ? `\n等 ${precheck.warningItems.length} 项提醒` : ''
+  return `预检已通过，但存在提醒项。\n输入 ${precheck.inputCount || 0} 条，版本 ${precheck.versionNo || '-'}。\n${detail}${suffix}`
 }
 
 function openBatchLedger() {
@@ -1712,6 +1783,27 @@ onActivated(async () => {
 }
 .run-page__action-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .run-page__strategy-alert { margin-bottom: 18px; }
+.run-page__precheck-alert { margin-bottom: 18px; }
+.run-page__precheck-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.run-page__precheck-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--el-text-color-regular);
+  line-height: 1.6;
+}
+.run-page__precheck-list strong {
+  margin-right: 8px;
+  color: var(--el-text-color-primary);
+}
 .run-page__template-alert { margin-top: 14px; }
 .run-page__template-table { margin-top: 12px; }
 .run-page__summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }

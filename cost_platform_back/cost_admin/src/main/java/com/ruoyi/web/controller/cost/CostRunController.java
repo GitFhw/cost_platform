@@ -151,6 +151,13 @@ public class CostRunController extends BaseController {
      */
     @PreAuthorize("@ss.hasPermi('cost:task:execute')")
     @Log(title = "正式核算", businessType = BusinessType.INSERT)
+    @PostMapping("/task/precheck")
+    public AjaxResult precheckTask(@RequestBody CostCalcTaskSubmitBo bo) {
+        return success(runService.precheckTask(bo));
+    }
+
+    @PreAuthorize("@ss.hasPermi('cost:task:execute')")
+    @Log(title = "正式核算", businessType = BusinessType.INSERT)
     @PostMapping("/task/submit")
     public AjaxResult submitTask(@Validated @RequestBody CostCalcTaskSubmitBo bo) {
         return success(runService.submitTask(bo));

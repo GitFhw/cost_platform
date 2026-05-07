@@ -35,6 +35,8 @@ public interface ICostRunService {
 
     List<CostCalcTask> selectTaskList(CostCalcTask query);
 
+    Map<String, Object> precheckTask(CostCalcTaskSubmitBo bo);
+
     Map<String, Object> submitTask(CostCalcTaskSubmitBo bo);
 
     Map<String, Object> createInputBatch(CostCalcInputBatchCreateBo bo);

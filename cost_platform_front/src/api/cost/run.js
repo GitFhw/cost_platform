@@ -73,6 +73,14 @@ export function submitTask(data) {
   })
 }
 
+export function precheckTask(data) {
+  return request({
+    url: '/cost/run/task/precheck',
+    method: 'post',
+    data
+  })
+}
+
 export function createTaskInputBatch(data) {
   return request({
     url: '/cost/run/task/input-batch',
