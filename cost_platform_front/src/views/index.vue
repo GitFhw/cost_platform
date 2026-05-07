@@ -27,6 +27,71 @@
       </button>
     </section>
 
+    <section class="dashboard-ops-grid" v-loading="loading">
+      <button
+        v-for="item in opsMetrics"
+        :key="item.key"
+        type="button"
+        class="dashboard-ops-card"
+        @click="openRoute(item.route)"
+      >
+        <el-icon><component :is="item.icon" /></el-icon>
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+        <small>{{ item.desc }}</small>
+      </button>
+    </section>
+
+    <section class="dashboard-insight-grid" v-loading="loading">
+      <div class="dashboard-panel">
+        <div class="dashboard-panel__head">
+          <div>
+            <h2>金额分布</h2>
+            <p>按费用汇总正式核算金额，快速定位主要成本贡献项。</p>
+          </div>
+          <el-button link type="primary" @click="openRoute(COST_MENU_ROUTES.result)">结果台账</el-button>
+        </div>
+        <div class="dashboard-ranking">
+          <button
+            v-for="item in feeDistribution"
+            :key="item.feeCode || item.feeName"
+            type="button"
+            class="dashboard-ranking-item"
+            @click="openRoute(COST_MENU_ROUTES.result, item.feeCode ? { feeCode: item.feeCode } : {})"
+          >
+            <div class="dashboard-ranking-item__main">
+              <div>
+                <strong>{{ item.feeName || item.feeCode || '-' }}</strong>
+                <small>{{ item.feeCode || '-' }} · {{ formatNumber(item.resultCount) }} 条</small>
+              </div>
+              <span>{{ formatAmount(item.amountTotal) }}</span>
+            </div>
+            <el-progress :percentage="resolveFeePercentage(item)" :show-text="false" />
+          </button>
+          <el-empty v-if="!feeDistribution.length" description="暂无金额分布" :image-size="72" />
+        </div>
+      </div>
+
+      <div class="dashboard-panel">
+        <div class="dashboard-panel__head">
+          <div>
+            <h2>性能趋势</h2>
+            <p>近 7 天任务量、异常量与分片耗时，辅助判断核算性能波动。</p>
+          </div>
+          <el-button link type="primary" @click="openRoute(COST_MENU_ROUTES.task)">任务中心</el-button>
+        </div>
+        <el-table :data="performanceTrend" size="small" border>
+          <el-table-column label="日期" prop="date" width="110" />
+          <el-table-column label="任务" prop="taskCount" width="80" align="center" />
+          <el-table-column label="异常" prop="failedCount" width="80" align="center" />
+          <el-table-column label="分片" prop="partitionCount" width="80" align="center" />
+          <el-table-column label="平均耗时" min-width="110" align="right">
+            <template #default="scope">{{ formatMilliseconds(scope.row.avgDurationMs) }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </section>
+
     <section class="dashboard-layout">
       <div class="dashboard-panel dashboard-panel--wide">
         <div class="dashboard-panel__head">
@@ -114,9 +179,9 @@
 </template>
 
 <script setup name="Index">
-import { Aim, Bell, Files, Histogram, MagicStick, Promotion, Refresh, Setting, Tickets } from '@element-plus/icons-vue'
+import { Aim, Bell, Files, Histogram, MagicStick, Money, Odometer, Promotion, Refresh, Setting, Tickets, Warning } from '@element-plus/icons-vue'
 import { getPublishStats, listPublish } from '@/api/cost/publish'
-import { getTaskOverview, getTaskStats } from '@/api/cost/run'
+import { getResultStats, getTaskOverview, getTaskStats } from '@/api/cost/run'
 import { getAlarmStats } from '@/api/cost/governance'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 
@@ -124,6 +189,8 @@ const router = useRouter()
 const loading = ref(false)
 const publishStats = ref({})
 const taskStats = ref({})
+const taskOverview = ref({})
+const resultStats = ref({})
 const alarmStats = ref({})
 const latestVersions = ref([])
 const topRiskTasks = ref([])
@@ -174,6 +241,60 @@ const shortcuts = [
   { title: '告警', desc: '处理运行异常', route: COST_MENU_ROUTES.alert, icon: Bell }
 ]
 
+const opsMetrics = computed(() => [
+  {
+    key: 'amount',
+    label: '核算金额',
+    value: formatAmount(resultStats.value.amountTotal),
+    desc: `${formatNumber(resultStats.value.resultCount)} 条正式结果`,
+    route: COST_MENU_ROUTES.result,
+    icon: Money
+  },
+  {
+    key: 'resultAbnormal',
+    label: '结果异常',
+    value: formatNumber(resultStats.value.abnormalCount),
+    desc: '非成功结果记录需要追溯处理',
+    route: COST_MENU_ROUTES.result,
+    icon: Warning
+  },
+  {
+    key: 'taskTrend',
+    label: '近 7 天任务',
+    value: formatNumber(resolveTrendTotal(taskOverview.value.recentTaskTrend, 'count')),
+    desc: `问题任务 ${formatNumber(resolveTrendTotal(taskOverview.value.recentTaskTrend, 'failedCount'))}`,
+    route: COST_MENU_ROUTES.task,
+    icon: Histogram
+  },
+  {
+    key: 'performance',
+    label: '分片平均耗时',
+    value: formatMilliseconds(resolveLatestDuration()),
+    desc: `运行分片 ${formatNumber(resolveTrendTotal(taskOverview.value.recentPartitionTrend, 'count'))}`,
+    route: COST_MENU_ROUTES.task,
+    icon: Odometer
+  }
+])
+
+const feeDistribution = computed(() => resultStats.value.feeDistribution || [])
+const maxFeeAmount = computed(() => Math.max(...feeDistribution.value.map(item => resolveNumber(item.amountTotal)), 0))
+const performanceTrend = computed(() => {
+  const taskTrendMap = new Map((taskOverview.value.recentTaskTrend || []).map(item => [item.date, item]))
+  const partitionTrendMap = new Map((taskOverview.value.recentPartitionTrend || []).map(item => [item.date, item]))
+  const dates = [...new Set([...taskTrendMap.keys(), ...partitionTrendMap.keys()])].sort()
+  return dates.map(date => {
+    const taskTrend = taskTrendMap.get(date) || {}
+    const partitionTrend = partitionTrendMap.get(date) || {}
+    return {
+      date,
+      taskCount: resolveNumber(taskTrend.count),
+      failedCount: resolveNumber(taskTrend.failedCount) + resolveNumber(partitionTrend.failedCount),
+      partitionCount: resolveNumber(partitionTrend.count),
+      avgDurationMs: partitionTrend.avgDurationMs
+    }
+  })
+})
+
 const adviceItems = computed(() => [
   {
     title: resolvePublishTodoCount() > 0 ? '先补齐发布治理' : '发布状态基本稳定',
@@ -202,17 +323,20 @@ onMounted(() => {
 async function loadDashboard() {
   loading.value = true
   try {
-    const [publishStatsResult, publishListResult, taskStatsResult, taskOverviewResult, alarmStatsResult] = await Promise.allSettled([
+    const [publishStatsResult, publishListResult, taskStatsResult, taskOverviewResult, resultStatsResult, alarmStatsResult] = await Promise.allSettled([
       getPublishStats({}),
       listPublish({ pageNum: 1, pageSize: 5 }),
       getTaskStats({}),
       getTaskOverview({}),
+      getResultStats({}),
       getAlarmStats({})
     ])
     publishStats.value = resolveResultData(publishStatsResult)
     latestVersions.value = resolveResultRows(publishListResult)
     taskStats.value = resolveResultData(taskStatsResult)
-    topRiskTasks.value = resolveResultData(taskOverviewResult).topRiskTasks || []
+    taskOverview.value = resolveResultData(taskOverviewResult)
+    topRiskTasks.value = taskOverview.value.topRiskTasks || []
+    resultStats.value = resolveResultData(resultStatsResult)
     alarmStats.value = resolveResultData(alarmStatsResult)
   } finally {
     loading.value = false
@@ -250,6 +374,42 @@ function formatNumber(value) {
   return resolveNumber(value).toLocaleString('zh-CN')
 }
 
+function formatAmount(value) {
+  return `¥${resolveNumber(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`
+}
+
+function formatMilliseconds(value) {
+  const numberValue = resolveNumber(value)
+  if (numberValue <= 0) {
+    return '0 ms'
+  }
+  if (numberValue >= 1000) {
+    return `${(numberValue / 1000).toFixed(2)} s`
+  }
+  return `${Math.round(numberValue)} ms`
+}
+
+function resolveTrendTotal(rows, field) {
+  return (rows || []).reduce((sum, item) => sum + resolveNumber(item[field]), 0)
+}
+
+function resolveLatestDuration() {
+  const latest = [...(taskOverview.value.recentPartitionTrend || [])]
+    .reverse()
+    .find(item => resolveNumber(item.avgDurationMs) > 0)
+  return latest?.avgDurationMs || 0
+}
+
+function resolveFeePercentage(item) {
+  if (maxFeeAmount.value <= 0) {
+    return 0
+  }
+  return Math.round((resolveNumber(item.amountTotal) / maxFeeAmount.value) * 100)
+}
+
 function openRoute(path, query = {}) {
   router.push({ path, query: clearEmptyQuery(query) })
 }
@@ -268,9 +428,11 @@ function clearEmptyQuery(query) {
 .dashboard-head,
 .dashboard-panel,
 .dashboard-work-item,
+.dashboard-ops-card,
 .dashboard-shortcut,
 .dashboard-list-item,
-.dashboard-advice-item {
+.dashboard-advice-item,
+.dashboard-ranking-item {
   border: 1px solid var(--el-border-color);
   background: var(--el-bg-color-overlay);
 }
@@ -323,10 +485,26 @@ function clearEmptyQuery(query) {
   gap: 12px;
 }
 
+.dashboard-ops-grid,
+.dashboard-insight-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-ops-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-insight-grid {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
 .dashboard-work-item,
+.dashboard-ops-card,
 .dashboard-shortcut,
 .dashboard-list-item,
-.dashboard-advice-item {
+.dashboard-advice-item,
+.dashboard-ranking-item {
   display: grid;
   min-width: 0;
   border-radius: 6px;
@@ -342,9 +520,11 @@ function clearEmptyQuery(query) {
 }
 
 .dashboard-work-item:hover,
+.dashboard-ops-card:hover,
 .dashboard-shortcut:hover,
 .dashboard-list-item:hover,
-.dashboard-advice-item:hover {
+.dashboard-advice-item:hover,
+.dashboard-ranking-item:hover {
   border-color: var(--el-color-primary);
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
 }
@@ -363,6 +543,36 @@ function clearEmptyQuery(query) {
 .dashboard-work-item.is-success strong { color: var(--el-color-success); }
 .dashboard-work-item.is-warning strong { color: var(--el-color-warning); }
 .dashboard-work-item.is-danger strong { color: var(--el-color-danger); }
+
+.dashboard-ops-card {
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 6px 10px;
+  min-height: 116px;
+  padding: 14px;
+}
+
+.dashboard-ops-card .el-icon {
+  grid-row: span 2;
+  color: var(--el-color-primary);
+  font-size: 22px;
+}
+
+.dashboard-ops-card span {
+  color: var(--el-text-color-regular);
+  font-size: 14px;
+}
+
+.dashboard-ops-card strong {
+  color: var(--el-text-color-primary);
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.dashboard-ops-card small {
+  grid-column: 1 / -1;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
 
 .dashboard-layout {
   display: grid;
@@ -419,6 +629,7 @@ function clearEmptyQuery(query) {
 }
 
 .dashboard-list,
+.dashboard-ranking,
 .dashboard-advice {
   display: grid;
   gap: 10px;
@@ -439,6 +650,33 @@ function clearEmptyQuery(query) {
   color: var(--el-text-color-primary);
 }
 
+.dashboard-ranking-item {
+  gap: 8px;
+  padding: 12px;
+}
+
+.dashboard-ranking-item__main {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-ranking-item__main strong,
+.dashboard-ranking-item__main span {
+  color: var(--el-text-color-primary);
+}
+
+.dashboard-ranking-item__main span {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.dashboard-ranking-item__main small {
+  display: block;
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+}
+
 .dashboard-advice {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -451,11 +689,13 @@ function clearEmptyQuery(query) {
 
 @media (max-width: 1280px) {
   .dashboard-workbench,
+  .dashboard-ops-grid,
   .dashboard-shortcuts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dashboard-layout,
+  .dashboard-insight-grid,
   .dashboard-advice {
     grid-template-columns: 1fr;
   }
@@ -473,6 +713,7 @@ function clearEmptyQuery(query) {
   }
 
   .dashboard-workbench,
+  .dashboard-ops-grid,
   .dashboard-shortcuts {
     grid-template-columns: 1fr;
   }
