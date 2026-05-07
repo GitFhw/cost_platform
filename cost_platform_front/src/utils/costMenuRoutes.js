@@ -16,5 +16,6 @@ export const COST_MENU_ROUTES = Object.freeze({
   result: '/cost/execution/result',
   period: '/cost/ops/period',
   alert: '/cost/ops/alert',
-  audit: '/cost/ops/audit'
+  audit: '/cost/ops/audit',
+  mobileDashboard: '/cost/mobile/dashboard'
 })

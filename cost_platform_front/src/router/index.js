@@ -81,6 +81,19 @@ export const constantRoutes = [
     ]
   },
   {
+    path: '/cost/mobile',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: 'dashboard',
+        component: () => import('@/views/cost/mobile/dashboard.vue'),
+        name: 'CostMobileDashboard',
+        meta: { title: '移动看板', activeMenu: '/index' }
+      }
+    ]
+  },
+  {
     path: '/lock',
     component: () => import('@/views/lock'),
     hidden: true,

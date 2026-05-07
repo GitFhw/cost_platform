@@ -8,6 +8,7 @@
       </div>
       <div class="dashboard-head__actions">
         <el-button icon="Refresh" :loading="loading" @click="loadDashboard">刷新</el-button>
+        <el-button icon="Cellphone" @click="openRoute(COST_MENU_ROUTES.mobileDashboard)">移动看板</el-button>
         <el-button type="primary" icon="Aim" @click="openRoute(COST_MENU_ROUTES.scene)">工作场景</el-button>
       </div>
     </section>
@@ -179,7 +180,7 @@
 </template>
 
 <script setup name="Index">
-import { Aim, Bell, Files, Histogram, MagicStick, Money, Odometer, Promotion, Refresh, Setting, Tickets, Warning } from '@element-plus/icons-vue'
+import { Aim, Bell, Cellphone, Files, Histogram, MagicStick, Money, Odometer, Promotion, Refresh, Setting, Tickets, Warning } from '@element-plus/icons-vue'
 import { getPublishStats, listPublish } from '@/api/cost/publish'
 import { getResultStats, getTaskOverview, getTaskStats } from '@/api/cost/run'
 import { getAlarmStats } from '@/api/cost/governance'
