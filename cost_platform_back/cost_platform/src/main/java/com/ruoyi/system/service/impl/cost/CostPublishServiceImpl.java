@@ -135,6 +135,7 @@ public class CostPublishServiceImpl implements ICostPublishService {
         result.put("activeVersionNo", activeVersion == null ? null : activeVersion.getVersionNo());
         result.put("latestVersionId", latestVersion == null ? null : latestVersion.getVersionId());
         result.put("latestVersionNo", latestVersion == null ? null : latestVersion.getVersionNo());
+        result.put("diffPreview", buildDraftDiffPreview(latestVersion, draftBundle));
         result.put("draftSnapshotHash", draftBundle.snapshotHash);
         result.put("activeSnapshotHash", activeVersion == null ? null : activeVersion.getSnapshotHash());
         result.put("publishable", blockingCount <= 0);
@@ -150,6 +151,57 @@ public class CostPublishServiceImpl implements ICostPublishService {
         result.put("impactedFees", impactedFees);
         result.put("suggestActivateNow", activeVersion == null);
         return result;
+    }
+
+    private Map<String, Object> buildDraftDiffPreview(CostPublishVersion previousVersion, PublishSnapshotBundle draftBundle) {
+        PublishSnapshotBundle previousBundle = snapshotViewService.normalizeBundle(previousVersion == null ? null : loadSnapshotBundle(previousVersion.getVersionId()));
+        boolean sameSnapshot = previousVersion != null && snapshotViewService.isSnapshotEquivalent(previousBundle, draftBundle);
+        List<Map<String, Object>> feeDiffs = sameSnapshot
+                ? Collections.emptyList()
+                : snapshotViewService.buildObjectDiffSummary(previousBundle.feesByCode, draftBundle.feesByCode,
+                "feeCode", "feeName", "feeCode", "feeName");
+        List<Map<String, Object>> variableDiffs = sameSnapshot
+                ? Collections.emptyList()
+                : snapshotViewService.buildObjectDiffSummary(previousBundle.variablesByCode, draftBundle.variablesByCode,
+                "variableCode", "variableName", "variableCode", "variableName");
+        List<Map<String, Object>> ruleDiffs = sameSnapshot
+                ? Collections.emptyList()
+                : snapshotViewService.buildRuleDiffSummary(previousBundle, draftBundle, null);
+
+        LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
+        putChangeCounts(summary, "fee", feeDiffs);
+        putChangeCounts(summary, "variable", variableDiffs);
+        putChangeCounts(summary, "rule", ruleDiffs);
+        summary.put("totalChangeCount", feeDiffs.size() + variableDiffs.size() + ruleDiffs.size());
+
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("previousVersionId", previousVersion == null ? null : previousVersion.getVersionId());
+        result.put("previousVersionNo", previousVersion == null ? null : previousVersion.getVersionNo());
+        result.put("draftSnapshotHash", draftBundle.snapshotHash);
+        result.put("previousSnapshotHash", previousVersion == null ? null : previousVersion.getSnapshotHash());
+        result.put("summary", summary);
+        result.put("feeDiffs", feeDiffs);
+        result.put("variableDiffs", variableDiffs);
+        result.put("ruleDiffs", ruleDiffs);
+        return result;
+    }
+
+    private void putChangeCounts(Map<String, Object> summary, String prefix, List<Map<String, Object>> diffs) {
+        summary.put(prefix + "ChangeCount", diffs.size());
+        summary.put("added" + capitalize(prefix) + "Count", countChangeType(diffs, "ADDED"));
+        summary.put("removed" + capitalize(prefix) + "Count", countChangeType(diffs, "REMOVED"));
+        summary.put("changed" + capitalize(prefix) + "Count", countChangeType(diffs, "CHANGED"));
+    }
+
+    private long countChangeType(List<Map<String, Object>> diffs, String changeType) {
+        return diffs.stream().filter(item -> changeType.equals(item.get("changeType"))).count();
+    }
+
+    private String capitalize(String text) {
+        if (StringUtils.isEmpty(text)) {
+            return "";
+        }
+        return text.substring(0, 1).toUpperCase(Locale.ROOT) + text.substring(1);
     }
 
     private PublishValidationContext buildPublishValidationContext(Long sceneId,

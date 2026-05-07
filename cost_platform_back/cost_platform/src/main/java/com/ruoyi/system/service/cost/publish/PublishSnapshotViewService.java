@@ -147,6 +147,39 @@ public class PublishSnapshotViewService {
         return result;
     }
 
+    public List<Map<String, Object>> buildObjectDiffSummary(Map<String, Map<String, Object>> fromObjects,
+                                                            Map<String, Map<String, Object>> toObjects,
+                                                            String codeKey,
+                                                            String nameKey,
+                                                            String codeProperty,
+                                                            String nameProperty) {
+        Map<String, Map<String, Object>> normalizedFrom = fromObjects == null ? Collections.emptyMap() : fromObjects;
+        Map<String, Map<String, Object>> normalizedTo = toObjects == null ? Collections.emptyMap() : toObjects;
+        Set<String> objectCodes = new TreeSet<>();
+        objectCodes.addAll(normalizedFrom.keySet());
+        objectCodes.addAll(normalizedTo.keySet());
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (String objectCode : objectCodes) {
+            Map<String, Object> fromObject = normalizedFrom.get(objectCode);
+            Map<String, Object> toObject = normalizedTo.get(objectCode);
+            String changeType = determineChangeType(fromObject, toObject);
+            if ("UNCHANGED".equals(changeType)) {
+                continue;
+            }
+            LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+            item.put(codeProperty, objectCode);
+            item.put(nameProperty, firstNonBlank(
+                    stringValue(firstNonNull(fromObject == null ? null : fromObject.get(nameKey), toObject == null ? null : toObject.get(nameKey))),
+                    stringValue(firstNonNull(fromObject == null ? null : fromObject.get(codeKey), toObject == null ? null : toObject.get(codeKey)))));
+            item.put("changeType", changeType);
+            item.put("changedFields", compareChangedFields(fromObject, toObject));
+            item.put("fromObject", fromObject);
+            item.put("toObject", toObject);
+            result.add(item);
+        }
+        return result;
+    }
+
     public Map<String, Object> buildSnapshotCounts(PublishSnapshotBundle bundle, String feeCode) {
         bundle = normalizeBundle(bundle);
         LinkedHashMap<String, Object> counts = new LinkedHashMap<>();

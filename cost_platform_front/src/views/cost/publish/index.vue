@@ -93,6 +93,75 @@
               show-empty
               impact-subtitle="发布中心只展示本次发布真正影响到的费用、规则和变量口径。"
             />
+
+            <div v-if="precheck.sceneId" class="publish-center__draft-diff">
+              <div class="publish-center__draft-diff-head">
+                <div>
+                  <h4>发布前差异预览</h4>
+                  <p>{{ publishDraftDiffBaselineText }}</p>
+                </div>
+                <el-tag :type="hasPublishDraftDiff ? 'warning' : 'success'">{{ hasPublishDraftDiff ? '存在变化' : '无变化' }}</el-tag>
+              </div>
+              <el-alert
+                v-if="!hasPublishDraftDiff"
+                title="当前草稿与上一发布版本快照一致，本次不会产生费用、变量或规则差异。"
+                type="success"
+                :closable="false"
+                class="publish-center__diff-tip"
+              />
+              <template v-else>
+                <el-descriptions :column="3" border>
+                  <el-descriptions-item label="费用变化">{{ publishDraftDiff.summary?.feeChangeCount || 0 }}（新增 {{ publishDraftDiff.summary?.addedFeeCount || 0 }} / 修改 {{ publishDraftDiff.summary?.changedFeeCount || 0 }} / 删除 {{ publishDraftDiff.summary?.removedFeeCount || 0 }}）</el-descriptions-item>
+                  <el-descriptions-item label="变量变化">{{ publishDraftDiff.summary?.variableChangeCount || 0 }}（新增 {{ publishDraftDiff.summary?.addedVariableCount || 0 }} / 修改 {{ publishDraftDiff.summary?.changedVariableCount || 0 }} / 删除 {{ publishDraftDiff.summary?.removedVariableCount || 0 }}）</el-descriptions-item>
+                  <el-descriptions-item label="规则变化">{{ publishDraftDiff.summary?.ruleChangeCount || 0 }}（新增 {{ publishDraftDiff.summary?.addedRuleCount || 0 }} / 修改 {{ publishDraftDiff.summary?.changedRuleCount || 0 }} / 删除 {{ publishDraftDiff.summary?.removedRuleCount || 0 }}）</el-descriptions-item>
+                </el-descriptions>
+                <el-tabs class="publish-center__draft-diff-tabs">
+                  <el-tab-pane label="费用">
+                    <el-table :data="publishDraftDiff.feeDiffs || []" size="small">
+                      <el-table-column label="费用编码" prop="feeCode" width="160" />
+                      <el-table-column label="费用名称" prop="feeName" min-width="180" />
+                      <el-table-column label="变化类型" width="110" align="center">
+                        <template #default="scope">
+                          <el-tag :type="resolveCostChangeTypeMeta(scope.row.changeType).type">{{ resolveCostChangeTypeLabel(scope.row.changeType) }}</el-tag>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="字段变化" min-width="220">
+                        <template #default="scope">{{ formatChangedFields(scope.row.changedFields) }}</template>
+                      </el-table-column>
+                    </el-table>
+                  </el-tab-pane>
+                  <el-tab-pane label="变量">
+                    <el-table :data="publishDraftDiff.variableDiffs || []" size="small">
+                      <el-table-column label="变量编码" prop="variableCode" width="180" />
+                      <el-table-column label="变量名称" prop="variableName" min-width="180" />
+                      <el-table-column label="变化类型" width="110" align="center">
+                        <template #default="scope">
+                          <el-tag :type="resolveCostChangeTypeMeta(scope.row.changeType).type">{{ resolveCostChangeTypeLabel(scope.row.changeType) }}</el-tag>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="字段变化" min-width="220">
+                        <template #default="scope">{{ formatChangedFields(scope.row.changedFields) }}</template>
+                      </el-table-column>
+                    </el-table>
+                  </el-tab-pane>
+                  <el-tab-pane label="规则">
+                    <el-table :data="publishDraftDiff.ruleDiffs || []" size="small">
+                      <el-table-column label="规则编码" prop="ruleCode" width="180" />
+                      <el-table-column label="规则名称" prop="ruleName" min-width="180" />
+                      <el-table-column label="费用编码" prop="feeCode" width="160" />
+                      <el-table-column label="变化类型" width="110" align="center">
+                        <template #default="scope">
+                          <el-tag :type="resolveCostChangeTypeMeta(scope.row.changeType).type">{{ resolveCostChangeTypeLabel(scope.row.changeType) }}</el-tag>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="明细变化" min-width="220">
+                        <template #default="scope">字段 {{ formatChangedFields(scope.row.changedFields) }}；条件 {{ scope.row.conditionChangeCount || 0 }}；阶梯 {{ scope.row.tierChangeCount || 0 }}</template>
+                      </el-table-column>
+                    </el-table>
+                  </el-tab-pane>
+                </el-tabs>
+              </template>
+            </div>
           </div>
         </el-tab-pane>
 
@@ -494,6 +563,14 @@ const metricItems = computed(() => [
   { label: '生效版本数', value: stats.activeVersionCount, desc: '当前处于生效中的版本数' },
   { label: '已回滚版本', value: stats.rolledBackVersionCount, desc: '历史上被回滚替换的版本数' }
 ])
+const publishDraftDiff = computed(() => precheck.value.diffPreview || { summary: {}, feeDiffs: [], variableDiffs: [], ruleDiffs: [] })
+const hasPublishDraftDiff = computed(() => Number(publishDraftDiff.value.summary?.totalChangeCount || 0) > 0)
+const publishDraftDiffBaselineText = computed(() => {
+  const versionNo = publishDraftDiff.value.previousVersionNo
+  return versionNo
+    ? `相对上一发布版本 ${versionNo} 展示本次草稿的费用、变量、规则增删改。`
+    : '当前场景暂无上一发布版本，本次发布会把现有费用、变量、规则作为首版新增快照。'
+})
 const detailValidation = computed(() => parseValidationResult(detailData.value.validationResult))
 const detailValidationMeta = computed(() => resolveValidationMeta(detailData.value.validationResult))
 const hasAnyDiff = computed(() => {
@@ -641,6 +718,7 @@ async function handlePublish() {
     proxy.$modal.msgWarning('当前仍存在阻断项，请先处理后再发布')
     return
   }
+  await confirmPublishDraftDiff()
   await addPublishVersion({ ...publishForm })
   proxy.$modal.msgSuccess('发布版本生成成功')
   publishTab.value = 'ledger'
@@ -653,6 +731,13 @@ async function handlePublish() {
   if (goNext) {
     router.push({ path: COST_MENU_ROUTES.simulation, query: publishForm.sceneId ? { sceneId: publishForm.sceneId } : {} })
   }
+}
+
+async function confirmPublishDraftDiff() {
+  const summary = publishDraftDiff.value.summary || {}
+  const baseline = publishDraftDiff.value.previousVersionNo ? `上一发布版本 ${publishDraftDiff.value.previousVersionNo}` : '空白首版'
+  const message = `本次将基于${baseline}生成新版本。费用变化 ${summary.feeChangeCount || 0} 项，变量变化 ${summary.variableChangeCount || 0} 项，规则变化 ${summary.ruleChangeCount || 0} 项。确认继续发布吗？`
+  await ElMessageBox.confirm(message, '发布差异确认', { type: hasPublishDraftDiff.value ? 'warning' : 'info' })
 }
 
 async function handleDetail(row) {
@@ -795,6 +880,13 @@ function buildValidationNote(value) {
     return '未记录检查快照'
   }
   return `阻断 ${meta.blockingCount} / 告警 ${meta.warningCount}`
+}
+
+function formatChangedFields(fields) {
+  if (!Array.isArray(fields) || fields.length === 0) {
+    return '新增或删除整体对象'
+  }
+  return fields.slice(0, 6).join('、') + (fields.length > 6 ? ` 等 ${fields.length} 项` : '')
 }
 
 function resolveFeeImpactSummary(item = {}) {
@@ -1454,6 +1546,38 @@ getList()
 
 .publish-center__diff-tip {
   margin-bottom: 12px;
+}
+
+.publish-center__draft-diff {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+
+.publish-center__draft-diff-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.publish-center__draft-diff-head h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.publish-center__draft-diff-head p {
+  margin: 6px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.publish-center__draft-diff-tabs {
+  margin-top: 4px;
 }
 
 .publish-center__diff-detail {
