@@ -281,6 +281,89 @@
           </div>
         </div>
 
+        <section class="result-page__trace-grid">
+          <div class="result-page__trace-panel">
+            <div class="result-page__trace-head">
+              <h4>命中规则</h4>
+              <el-tag type="success" effect="plain">Rule #{{ traceData.ruleId || '-' }}</el-tag>
+            </div>
+            <div class="result-page__trace-kv">
+              <span>阶梯ID</span><strong>{{ traceData.tierId || '-' }}</strong>
+              <span>定价模式</span><strong>{{ tracePricingSummary.pricingMode || '-' }}</strong>
+              <span>定价来源</span><strong>{{ tracePricingSummary.pricingSource || '-' }}</strong>
+              <span>组合组</span><strong>{{ tracePricingSummary.matchedGroupNo || '-' }}</strong>
+              <span>阶梯范围</span><strong>{{ tracePricingSummary.tierRange || '-' }}</strong>
+              <span>公式编码</span><strong>{{ tracePricingSummary.formulaCode || '-' }}</strong>
+            </div>
+          </div>
+
+          <div class="result-page__trace-panel">
+            <div class="result-page__trace-head">
+              <h4>公式/定价过程</h4>
+              <el-tag type="warning" effect="plain">{{ tracePricingSummary.amountValue ? `金额 ${tracePricingSummary.amountValue}` : '定价解释' }}</el-tag>
+            </div>
+            <div class="result-page__trace-kv">
+              <span>数量</span><strong>{{ tracePricingSummary.quantityValue || '-' }}</strong>
+              <span>单价</span><strong>{{ tracePricingSummary.unitPrice || '-' }}</strong>
+              <span>阶梯号</span><strong>{{ tracePricingSummary.tierNo || '-' }}</strong>
+              <span>结果金额</span><strong>{{ tracePricingSummary.amountValue || '-' }}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="result-page__trace-panel">
+          <div class="result-page__trace-head">
+            <h4>输入变量</h4>
+            <el-tag effect="plain">{{ traceVariables.length }} 项</el-tag>
+          </div>
+          <el-table :data="traceVariables" size="small" border>
+            <el-table-column label="变量" min-width="180">
+              <template #default="scope">{{ scope.row.variableName || scope.row.variableCode || scope.row.key || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="来源" width="120">
+              <template #default="scope">{{ scope.row.sourceType || scope.row.source || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="取值" min-width="220" show-overflow-tooltip>
+              <template #default="scope">{{ resolveTraceValue(scope.row) }}</template>
+            </el-table-column>
+          </el-table>
+        </section>
+
+        <section class="result-page__trace-panel">
+          <div class="result-page__trace-head">
+            <h4>条件命中</h4>
+            <el-tag effect="plain">{{ traceConditions.length }} 项</el-tag>
+          </div>
+          <el-table :data="traceConditions" size="small" border>
+            <el-table-column label="条件" min-width="220">
+              <template #default="scope">{{ scope.row.conditionName || scope.row.variableCode || scope.row.key || scope.row.conditionType || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="比较" min-width="180" show-overflow-tooltip>
+              <template #default="scope">{{ resolveConditionCompare(scope.row) }}</template>
+            </el-table-column>
+            <el-table-column label="结果" width="100" align="center">
+              <template #default="scope">
+                <el-tag :type="resolveConditionMatched(scope.row) ? 'success' : 'info'" effect="plain">
+                  {{ resolveConditionMatched(scope.row) ? '命中' : '未命中' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+
+        <section class="result-page__trace-panel">
+          <div class="result-page__trace-head">
+            <h4>执行时间线</h4>
+            <el-tag effect="plain">{{ traceTimeline.length }} 步</el-tag>
+          </div>
+          <el-timeline>
+            <el-timeline-item v-for="(item, index) in traceTimeline" :key="item.key || index" :timestamp="item.stepType || item.title || `步骤 ${index + 1}`">
+              <div class="result-page__timeline-title">{{ item.stepName || item.objectName || item.objectCode || item.key || '-' }}</div>
+              <p>{{ item.resultSummary || item.message || resolveTraceValue(item) }}</p>
+            </el-timeline-item>
+          </el-timeline>
+        </section>
+
         <el-tabs class="result-page__tabs">
           <el-tab-pane label="变量值">
             <JsonEditor :model-value="traceData.variables" title="变量值" readonly :rows="12" />
@@ -374,6 +457,11 @@ const traceMetricItems = computed(() => [
   { label: '定价过程', value: countTraceEntries(traceData.value.pricing), desc: '单价、阶梯或固定金额的取价过程' },
   { label: '执行步骤', value: countTraceEntries(traceData.value.timeline), desc: '从变量求值到结果落账的执行时间线' }
 ])
+
+const traceVariables = computed(() => normalizeTraceEntries(traceData.value.variables))
+const traceConditions = computed(() => normalizeTraceEntries(traceData.value.conditions))
+const traceTimeline = computed(() => normalizeTraceEntries(traceData.value.timeline))
+const tracePricingSummary = computed(() => normalizePricingSummary(traceData.value.pricing))
 
 const queryGuardTip = computed(() => (shouldBlockBroadResultQuery() ? resultQueryGuardMessage : ''))
 
@@ -528,6 +616,73 @@ function countTraceEntries(value) {
   if (Array.isArray(value)) return value.length
   if (typeof value === 'object') return Object.keys(value).length
   return 1
+}
+
+function normalizeTraceEntries(value) {
+  if (!value) {
+    return []
+  }
+  if (Array.isArray(value)) {
+    return value.map((item, index) => normalizeTraceEntry(item, `item${index + 1}`))
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value).map(([key, item]) => normalizeTraceEntry(item, key))
+  }
+  return [{ key: 'value', value }]
+}
+
+function normalizeTraceEntry(item, key) {
+  if (item && typeof item === 'object' && !Array.isArray(item)) {
+    return { key, ...item }
+  }
+  return { key, value: item }
+}
+
+function normalizePricingSummary(value) {
+  if (!value) {
+    return {}
+  }
+  if (Array.isArray(value)) {
+    return value.find(item => item && typeof item === 'object') || {}
+  }
+  return typeof value === 'object' ? value : { value }
+}
+
+function resolveTraceValue(row = {}) {
+  const value = row.value ?? row.actualValue ?? row.resolvedValue ?? row.variableValue ?? row.compareValue ?? row.result ?? row.amountValue
+  if (value === undefined || value === null || value === '') {
+    const keys = Object.keys(row).filter(key => !['key', 'variableCode', 'variableName', 'sourceType', 'source'].includes(key))
+    if (!keys.length) {
+      return '-'
+    }
+    return keys.map(key => `${key}=${formatTraceObject(row[key])}`).join('；')
+  }
+  return formatTraceObject(value)
+}
+
+function resolveConditionCompare(row = {}) {
+  const operator = row.operator || row.compareOperator || row.conditionOperator || row.conditionType || ''
+  const left = row.actualValue ?? row.leftValue ?? row.variableValue ?? row.value ?? '-'
+  const right = row.expectedValue ?? row.rightValue ?? row.compareValue ?? row.thresholdValue ?? '-'
+  return `${formatTraceObject(left)} ${operator} ${formatTraceObject(right)}`.trim()
+}
+
+function resolveConditionMatched(row = {}) {
+  if (row.matched !== undefined) return Boolean(row.matched)
+  if (row.hit !== undefined) return Boolean(row.hit)
+  if (row.passed !== undefined) return Boolean(row.passed)
+  if (row.result !== undefined) return Boolean(row.result)
+  return true
+}
+
+function formatTraceObject(value) {
+  if (value === undefined || value === null || value === '') {
+    return '-'
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+  return String(value)
 }
 
 function formatAmount(value) {
@@ -832,6 +987,69 @@ onActivated(async () => {
   margin: 0;
 }
 
+.result-page__trace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.result-page__trace-panel {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 16px;
+  background: var(--el-bg-color-overlay);
+}
+
+.result-page__trace-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.result-page__trace-head h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.result-page__trace-kv {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.result-page__trace-kv span {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.result-page__trace-kv strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--el-text-color-primary);
+}
+
+.result-page__timeline-title {
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.result-page__trace-panel :deep(.el-timeline) {
+  margin-top: 6px;
+  padding-left: 4px;
+}
+
+.result-page__trace-panel :deep(.el-timeline-item__content p) {
+  margin: 4px 0 0;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+
 .result-page__tabs {
   padding: 14px 16px 16px;
 }
@@ -862,6 +1080,7 @@ onActivated(async () => {
 @media (max-width: 1200px) {
   .result-page__metrics,
   .result-page__business-summary,
+  .result-page__trace-grid,
   .result-page__summary {
     grid-template-columns: 1fr;
   }
