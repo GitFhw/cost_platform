@@ -173,6 +173,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                v.variable_code as variableCode,
                v.variable_name as variableName,
                v.status as status,
+               v.source_type as sourceType,
+               v.formula_code as formulaCode,
+               fm.formula_name as formulaName,
                (select count(1) from cost_fee_variable_rel rel where rel.variable_id = v.variable_id) as feeRelCount,
                (select count(1) from cost_rule_condition cond where cond.scene_id = v.scene_id and cond.variable_code = v.variable_code) as ruleConditionCount,
                (select count(1) from cost_rule r where r.scene_id = v.scene_id and r.quantity_variable_code = v.variable_code) as ruleQuantityCount,
@@ -184,6 +187,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                   and snap.object_code = v.variable_code) as publishedVersionCount
         from cost_variable v
         left join cost_scene s on s.scene_id = v.scene_id
+        left join cost_formula fm on fm.scene_id = v.scene_id and fm.formula_code = v.formula_code
         where v.variable_id = #{variableId}
     </select>
 

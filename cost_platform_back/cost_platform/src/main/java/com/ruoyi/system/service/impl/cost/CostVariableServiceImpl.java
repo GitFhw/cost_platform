@@ -166,6 +166,7 @@ public class CostVariableServiceImpl implements ICostVariableService {
         check.setDisableAdvice(check.getCanDisable() ? "变量停用后将不再出现在新增配置中，历史配置保留。"
                 : "当前变量已进入发布版本，请先替换并发布新版本后再停用。");
         check.setImpactItems(governanceImpactSupport.buildVariableImpacts(check));
+        populateFormulaDependencies(check);
         return check;
     }
 
@@ -653,6 +654,135 @@ public class CostVariableServiceImpl implements ICostVariableService {
             log.warn("分析公式变量引用失败，formulaCode={}，variableCode={}", formula.getFormulaCode(), variableCode, e);
             return false;
         }
+    }
+
+    private void populateFormulaDependencies(CostVariableGovernanceCheckVo check) {
+        check.setFormulaDependencies(Collections.emptyList());
+        if (!"FORMULA".equalsIgnoreCase(check.getSourceType()) || check.getVariableId() == null) {
+            return;
+        }
+        CostVariable variable = variableMapper.selectById(check.getVariableId());
+        if (variable == null) {
+            return;
+        }
+        CostVariableFormulaDependencyVo root = buildFormulaDependencyNode(variable, new LinkedHashSet<>());
+        check.setFormulaDependencies(root.getChildren());
+    }
+
+    private CostVariableFormulaDependencyVo buildFormulaDependencyNode(CostVariable variable, LinkedHashSet<String> stack) {
+        CostVariableFormulaDependencyVo node = buildVariableDependencyNode(variable);
+        String variableCode = StringUtils.trim(variable.getVariableCode());
+        if (StringUtils.isEmpty(variableCode)) {
+            return node;
+        }
+        if (!stack.add(variableCode)) {
+            node.setCircular(true);
+            return node;
+        }
+        if ("FORMULA".equalsIgnoreCase(variable.getSourceType())) {
+            CostFormula formula = findFormulaByCode(variable.getSceneId(), variable.getFormulaCode());
+            if (formula != null) {
+                node.setFormulaName(formula.getFormulaName());
+                node.setChildren(resolveFormulaInputDependencies(variable.getSceneId(), formula, stack));
+            }
+        }
+        stack.remove(variableCode);
+        return node;
+    }
+
+    private List<CostVariableFormulaDependencyVo> resolveFormulaInputDependencies(Long sceneId, CostFormula formula, LinkedHashSet<String> stack) {
+        if (formula == null || StringUtils.isEmpty(formula.getFormulaExpr())) {
+            return Collections.emptyList();
+        }
+        LinkedHashSet<String> references = extractFormulaVariableReferences(formula);
+        if (references.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<CostVariableFormulaDependencyVo> children = new ArrayList<>();
+        for (String reference : references) {
+            CostVariable dependency = findVariableByCode(sceneId, reference);
+            if (dependency == null) {
+                children.add(buildMissingDependencyNode(reference));
+                continue;
+            }
+            if (stack.contains(reference)) {
+                CostVariableFormulaDependencyVo circularNode = buildVariableDependencyNode(dependency);
+                circularNode.setCircular(true);
+                children.add(circularNode);
+                continue;
+            }
+            children.add(buildFormulaDependencyNode(dependency, stack));
+        }
+        return children;
+    }
+
+    private LinkedHashSet<String> extractFormulaVariableReferences(CostFormula formula) {
+        LinkedHashSet<String> references = new LinkedHashSet<>();
+        try {
+            CostExpressionAnalysisVo analysis = expressionService.analyzeExpression(formula.getFormulaExpr(), formula.getNamespaceScope());
+            for (String reference : analysis.getVariableReferences()) {
+                String normalized = normalizeVariableReference(reference);
+                if (StringUtils.isNotEmpty(normalized)) {
+                    references.add(normalized);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("分析公式变量依赖失败，formulaCode={}", formula.getFormulaCode(), e);
+        }
+        return references;
+    }
+
+    private CostVariableFormulaDependencyVo buildVariableDependencyNode(CostVariable variable) {
+        CostVariableFormulaDependencyVo node = new CostVariableFormulaDependencyVo();
+        node.setVariableId(variable.getVariableId());
+        node.setVariableCode(variable.getVariableCode());
+        node.setVariableName(variable.getVariableName());
+        node.setSourceType(variable.getSourceType());
+        node.setStatus(variable.getStatus());
+        node.setFormulaCode(variable.getFormulaCode());
+        node.setFormulaName(variable.getFormulaName());
+        return node;
+    }
+
+    private CostVariableFormulaDependencyVo buildMissingDependencyNode(String variableCode) {
+        CostVariableFormulaDependencyVo node = new CostVariableFormulaDependencyVo();
+        node.setVariableCode(variableCode);
+        node.setVariableName("未维护变量");
+        node.setMissing(true);
+        return node;
+    }
+
+    private CostVariable findVariableByCode(Long sceneId, String variableCode) {
+        if (sceneId == null || StringUtils.isEmpty(variableCode)) {
+            return null;
+        }
+        return variableMapper.selectOne(Wrappers.<CostVariable>lambdaQuery()
+                .eq(CostVariable::getSceneId, sceneId)
+                .eq(CostVariable::getVariableCode, variableCode)
+                .last("limit 1"));
+    }
+
+    private CostFormula findFormulaByCode(Long sceneId, String formulaCode) {
+        if (sceneId == null || StringUtils.isEmpty(formulaCode)) {
+            return null;
+        }
+        return formulaMapper.selectOne(Wrappers.<CostFormula>lambdaQuery()
+                .eq(CostFormula::getSceneId, sceneId)
+                .eq(CostFormula::getFormulaCode, formulaCode)
+                .last("limit 1"));
+    }
+
+    private String normalizeVariableReference(String reference) {
+        String raw = StringUtils.trim(reference);
+        if (StringUtils.isEmpty(raw)) {
+            return "";
+        }
+        int dotIndex = raw.indexOf('.');
+        if (dotIndex <= 0 || dotIndex >= raw.length() - 1) {
+            return raw;
+        }
+        String namespace = raw.substring(0, dotIndex);
+        return "V".equalsIgnoreCase(namespace) ? raw.substring(dotIndex + 1) : "";
     }
 
     /**

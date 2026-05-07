@@ -48,6 +48,21 @@ public class CostVariableGovernanceCheckVo {
     private String status;
 
     /**
+     * 来源类型
+     */
+    private String sourceType;
+
+    /**
+     * 公式编码
+     */
+    private String formulaCode;
+
+    /**
+     * 公式名称
+     */
+    private String formulaName;
+
+    /**
      * 费用关系引用数量
      */
     private Long feeRelCount;
@@ -106,4 +121,9 @@ public class CostVariableGovernanceCheckVo {
      * 关联影响明细
      */
     private List<CostGovernanceImpactVo> impactItems = new ArrayList<>();
+
+    /**
+     * 公式变量输入依赖树
+     */
+    private List<CostVariableFormulaDependencyVo> formulaDependencies = new ArrayList<>();
 }

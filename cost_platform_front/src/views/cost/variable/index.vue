@@ -732,6 +732,33 @@
           <el-descriptions-item label="公式表达式引用">{{ governanceInfo.formulaRefCount }}</el-descriptions-item>
           <el-descriptions-item label="发布版本引用">{{ governanceInfo.publishedVersionCount }}</el-descriptions-item>
         </el-descriptions>
+        <div v-if="governanceInfo.sourceType === 'FORMULA'" class="variable-formula-tree">
+          <div class="variable-formula-tree__head">
+            <div>
+              <strong>公式输入依赖树</strong>
+              <span>{{ governanceInfo.formulaName || governanceInfo.formulaCode || '未绑定公式' }}</span>
+            </div>
+            <el-tag type="info" effect="light">FORMULA</el-tag>
+          </div>
+          <el-tree
+            v-if="hasFormulaDependencyTree"
+            :data="governanceInfo.formulaDependencies"
+            :props="formulaTreeProps"
+            node-key="nodeKey"
+            default-expand-all
+            class="variable-formula-tree__tree"
+          >
+            <template #default="{ data }">
+              <div class="variable-formula-tree__node">
+                <span>{{ data.label }}</span>
+                <el-tag v-if="data.missing" size="small" type="danger">缺失</el-tag>
+                <el-tag v-else-if="data.circular" size="small" type="warning">循环</el-tag>
+                <el-tag v-else size="small" effect="plain">{{ resolveDictLabel(sourceTypeOptions, data.sourceType) }}</el-tag>
+              </div>
+            </template>
+          </el-tree>
+          <el-empty v-else description="当前公式没有读取其他变量" :image-size="70" />
+        </div>
         <el-alert :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon class="mt12" />
         <el-alert :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon class="mt12" />
         <el-alert title="删除建议" :description="governanceInfo.removeAdvice" type="info" :closable="false" show-icon class="mt12" />
@@ -886,6 +913,7 @@ const templateImpact = ref({
 const lastTemplateApplyResult = ref({})
 const statistics = reactive({ variableCount: 0, enabledVariableCount: 0, remoteVariableCount: 0, formulaVariableCount: 0 })
 const selectedFormulaMeta = computed(() => formulaOptions.value.find(item => item.formulaCode === form.value.formulaCode) || {})
+const formulaTreeProps = { label: 'label', children: 'children' }
 const variableDependencyNodes = computed(() => {
   const info = governanceInfo.value || {}
   return [
@@ -919,6 +947,7 @@ const variableDependencyNodes = computed(() => {
     }
   ]
 })
+const hasFormulaDependencyTree = computed(() => Array.isArray(governanceInfo.value?.formulaDependencies) && governanceInfo.value.formulaDependencies.length > 0)
 const dictTypeOptionGroups = computed(() => {
   const groups = [
     {
@@ -1376,7 +1405,37 @@ function handleExport() {
 
 async function fetchGovernance(variableId) {
   const response = await getVariableGovernance(variableId)
-  return response.data || {}
+  return normalizeGovernanceInfo(response.data || {})
+}
+
+function normalizeGovernanceInfo(data = {}) {
+  return {
+    ...data,
+    formulaDependencies: normalizeFormulaDependencyNodes(data.formulaDependencies)
+  }
+}
+
+function normalizeFormulaDependencyNodes(nodes = [], path = 'dep') {
+  if (!Array.isArray(nodes)) {
+    return []
+  }
+  return nodes.map((item, index) => {
+    const nodePath = `${path}-${index}`
+    const code = item.variableCode || `MISSING_${index}`
+    return {
+      ...item,
+      nodeKey: `${nodePath}-${code}`,
+      label: formatFormulaDependencyLabel(item),
+      children: normalizeFormulaDependencyNodes(item.children, nodePath)
+    }
+  })
+}
+
+function formatFormulaDependencyLabel(item = {}) {
+  const name = item.variableName || '未维护变量'
+  const code = item.variableCode || '-'
+  const formula = item.formulaCode ? ` / 公式 ${item.formulaCode}` : ''
+  return `${name}（${code}）${formula}`
 }
 
 async function handleGovernance(row) {
@@ -1752,6 +1811,14 @@ getList()
 .variable-dependency-map__node p { margin: 8px 0; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
 .variable-dependency-map__node ul { margin: 0; padding-left: 16px; color: var(--el-text-color-regular); font-size: 12px; line-height: 1.7; }
 .variable-dependency-map__node small { color: var(--el-text-color-placeholder); }
+.variable-formula-tree { margin: 12px 0 0; padding: 12px; border: 1px solid var(--el-border-color-light); border-radius: 10px; background: var(--el-bg-color-overlay); }
+.variable-formula-tree__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.variable-formula-tree__head div { display: grid; gap: 4px; }
+.variable-formula-tree__head strong { color: var(--el-text-color-primary); }
+.variable-formula-tree__head span { color: var(--el-text-color-secondary); font-size: 12px; }
+.variable-formula-tree__tree { --el-tree-node-hover-bg-color: var(--el-fill-color-extra-light); }
+.variable-formula-tree__node { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-width: 0; }
+.variable-formula-tree__node span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .variable-template-toolbar { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; margin-bottom: 12px; }
 .variable-template-list { display: grid; gap: 12px; max-height: 420px; overflow: auto; }
 .variable-template-card { padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 12px; cursor: pointer; background: var(--el-bg-color-overlay); display: grid; gap: 8px; }
