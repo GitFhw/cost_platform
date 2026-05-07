@@ -919,6 +919,7 @@ const expressionOpen = ref(false)
 const expressionDraft = ref('')
 const copyOpen = ref(false)
 const copySourceRule = ref(undefined)
+const initialPriority = ref(undefined)
 const tierPreviewLoading = ref(false)
 const tierPreviewResult = ref(null)
 const ruleConflictLoading = ref(false)
@@ -1324,6 +1325,7 @@ function resetFormModel() {
     tiers: []
   }
   initialStatus.value = undefined
+  initialPriority.value = undefined
   resetTierPreview()
   resetRuleConflictWarnings()
   proxy.resetForm('ruleRef')
@@ -1523,6 +1525,7 @@ async function handleUpdate(row) {
   form.value = normalizeRuleDetail(response.data)
   hydratingRuleForm.value = false
   initialStatus.value = response.data?.status
+  initialPriority.value = response.data?.priority
   open.value = true
   title.value = '修改规则'
 }
@@ -1845,6 +1848,29 @@ async function confirmRuleConflictBeforeSubmit(payload) {
   return proxy.$modal.confirm(`检测到 ${warnings.length} 条规则冲突提示：\n${summary}\n是否继续保存？`).then(() => true).catch(() => false)
 }
 
+async function confirmRulePriorityChange(payload) {
+  if (!payload.ruleId || Number(payload.priority) === Number(initialPriority.value)) {
+    return true
+  }
+  const response = await listRule({
+    sceneId: payload.sceneId,
+    feeId: payload.feeId,
+    pageNum: 1,
+    pageSize: 1000
+  })
+  const low = Math.min(Number(initialPriority.value || 0), Number(payload.priority || 0))
+  const high = Math.max(Number(initialPriority.value || 0), Number(payload.priority || 0))
+  const affected = (response.rows || [])
+    .filter(item => item.ruleId !== payload.ruleId && String(item.status) === '0')
+    .filter(item => Number(item.priority || 0) >= low && Number(item.priority || 0) <= high)
+  const affectedText = affected.length
+    ? affected.slice(0, 5).map(item => `${item.ruleCode}(${item.priority ?? '-'})`).join('、')
+    : '未发现同费用启用规则落在新旧优先级区间内'
+  return proxy.$modal.confirm(
+    `规则优先级将从 ${initialPriority.value ?? '-'} 调整为 ${payload.priority ?? '-'}，可能影响同费用规则命中顺序。\n影响范围：${affectedText}${affected.length > 5 ? ' 等' : ''}\n是否继续保存？`
+  ).then(() => true).catch(() => false)
+}
+
 function submitForm() {
   proxy.$refs.ruleRef.validate(async valid => {
     if (!valid) {
@@ -1873,6 +1899,10 @@ function submitForm() {
     const payload = normalizeSubmitData()
     const conflictAllowed = await confirmRuleConflictBeforeSubmit(payload)
     if (!conflictAllowed) {
+      return
+    }
+    const priorityAllowed = await confirmRulePriorityChange(payload)
+    if (!priorityAllowed) {
       return
     }
     const isCreate = !payload.ruleId
