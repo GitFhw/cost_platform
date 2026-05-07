@@ -159,6 +159,20 @@
           show-icon
           class="mb16"
         />
+        <el-alert
+          v-if="ruleConflictWarnings.length"
+          title="检测到规则冲突提示"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="mb16"
+        >
+          <template #default>
+            <div v-for="item in ruleConflictWarnings" :key="`${item.conflictType}-${item.targetRuleId}`" class="rule-center__issue-item">
+              {{ item.message }}
+            </div>
+          </template>
+        </el-alert>
         <div class="rule-center__wizard">
           <div
             v-for="item in ruleWizardSteps"
@@ -379,6 +393,7 @@
           <span><em>02</em>条件编辑区</span>
           <small>先配置命中条件，再进入组合定价或阶梯定价。</small>
           <div class="rule-center__section-actions">
+            <el-button type="warning" plain icon="Warning" :loading="ruleConflictLoading" @click="handleRuleConflictPreview">检测冲突</el-button>
             <el-button type="success" plain icon="Plus" @click="handleAddConditionGroup">新增组合组</el-button>
             <el-button type="primary" plain icon="Plus" @click="handleAddCondition">新增条件</el-button>
           </div>
@@ -870,7 +885,7 @@ import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import RuleTierEditor from '@/components/cost/RuleTierEditor.vue'
 import { optionselectFee } from '@/api/cost/fee'
 import { optionselectFormula } from '@/api/cost/formula'
-import { addRule, copyRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, previewRuleTier, updateRule } from '@/api/cost/rule'
+import { addRule, copyRule, delRule, getRule, getRuleGovernance, getRuleStats, listRule, previewRuleConflict, previewRuleTier, updateRule } from '@/api/cost/rule'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselectVariable } from '@/api/cost/variable'
 import useSettingsStore from '@/store/modules/settings'
@@ -906,6 +921,8 @@ const copyOpen = ref(false)
 const copySourceRule = ref(undefined)
 const tierPreviewLoading = ref(false)
 const tierPreviewResult = ref(null)
+const ruleConflictLoading = ref(false)
+const ruleConflictWarnings = ref([])
 const hydratingRuleForm = ref(false)
 const tierPreviewInputs = reactive({})
 
@@ -1273,6 +1290,17 @@ watch(() => form.value.conditionLogic, value => {
   }
 })
 
+watch(() => JSON.stringify({
+  ruleType: form.value.ruleType,
+  conditionLogic: form.value.conditionLogic,
+  priority: form.value.priority,
+  conditions: form.value.conditions
+}), () => {
+  if (!hydratingRuleForm.value) {
+    resetRuleConflictWarnings()
+  }
+})
+
 function resetFormModel() {
   form.value = {
     ruleId: undefined,
@@ -1297,6 +1325,7 @@ function resetFormModel() {
   }
   initialStatus.value = undefined
   resetTierPreview()
+  resetRuleConflictWarnings()
   proxy.resetForm('ruleRef')
 }
 
@@ -1305,6 +1334,10 @@ function resetTierPreview() {
     delete tierPreviewInputs[key]
   })
   tierPreviewResult.value = null
+}
+
+function resetRuleConflictWarnings() {
+  ruleConflictWarnings.value = []
 }
 
 function syncGroupedPricingConfig() {
@@ -1770,6 +1803,48 @@ function formatPreviewResultTitle(result = {}) {
   return '已命中条件'
 }
 
+async function fetchRuleConflictWarnings(payload = normalizeSubmitData()) {
+  ruleConflictLoading.value = true
+  try {
+    const response = await previewRuleConflict(payload)
+    ruleConflictWarnings.value = response.data || []
+    return ruleConflictWarnings.value
+  } finally {
+    ruleConflictLoading.value = false
+  }
+}
+
+function formatRuleConflictSummary(warnings = []) {
+  return warnings.slice(0, 3).map(item => item.message).join('\n')
+}
+
+function handleRuleConflictPreview() {
+  if (!selectedFeeId.value) {
+    proxy.$modal.msgWarning('请先选择费用后再检测规则冲突')
+    return
+  }
+  proxy.$refs.ruleRef.validate(async valid => {
+    if (!valid) {
+      return
+    }
+    const warnings = await fetchRuleConflictWarnings()
+    if (warnings.length) {
+      proxy.$modal.msgWarning(`检测到 ${warnings.length} 条规则冲突提示`)
+      return
+    }
+    proxy.$modal.msgSuccess('未发现同费用规则优先级或条件重叠提示')
+  })
+}
+
+async function confirmRuleConflictBeforeSubmit(payload) {
+  const warnings = await fetchRuleConflictWarnings(payload)
+  if (!warnings.length) {
+    return true
+  }
+  const summary = formatRuleConflictSummary(warnings)
+  return proxy.$modal.confirm(`检测到 ${warnings.length} 条规则冲突提示：\n${summary}\n是否继续保存？`).then(() => true).catch(() => false)
+}
+
 function submitForm() {
   proxy.$refs.ruleRef.validate(async valid => {
     if (!valid) {
@@ -1796,6 +1871,10 @@ function submitForm() {
       return
     }
     const payload = normalizeSubmitData()
+    const conflictAllowed = await confirmRuleConflictBeforeSubmit(payload)
+    if (!conflictAllowed) {
+      return
+    }
     const isCreate = !payload.ruleId
     const request = isCreate ? addRule(payload) : updateRule(payload)
     await request

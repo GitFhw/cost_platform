@@ -142,6 +142,15 @@ public class CostRuleController extends BaseController {
     }
 
     /**
+     * 规则冲突预览
+     */
+    @PreAuthorize("@ss.hasPermi('cost:rule:list')")
+    @PostMapping("/conflictPreview")
+    public AjaxResult conflictPreview(@Validated @RequestBody CostRuleSaveBo request) {
+        return success(ruleService.previewRuleConflicts(request));
+    }
+
+    /**
      * 删除规则
      */
     @PreAuthorize("@ss.hasPermi('cost:rule:remove')")

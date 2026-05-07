@@ -4,6 +4,7 @@ import com.ruoyi.system.domain.cost.CostRule;
 import com.ruoyi.system.domain.cost.bo.CostRuleCopyBo;
 import com.ruoyi.system.domain.cost.bo.CostRuleSaveBo;
 import com.ruoyi.system.domain.cost.bo.CostRuleTierPreviewBo;
+import com.ruoyi.system.domain.vo.CostRuleConflictVo;
 import com.ruoyi.system.domain.vo.CostRuleGovernanceCheckVo;
 import com.ruoyi.system.domain.vo.CostRuleTierPreviewVo;
 
@@ -65,4 +66,9 @@ public interface ICostRuleService {
      * 阶梯命中预演
      */
     CostRuleTierPreviewVo previewTierHit(CostRuleTierPreviewBo request);
+
+    /**
+     * 规则冲突预览
+     */
+    List<CostRuleConflictVo> previewRuleConflicts(CostRuleSaveBo request);
 }

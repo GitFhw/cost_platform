@@ -11,6 +11,7 @@ import com.ruoyi.system.domain.cost.*;
 import com.ruoyi.system.domain.cost.bo.CostRuleCopyBo;
 import com.ruoyi.system.domain.cost.bo.CostRuleSaveBo;
 import com.ruoyi.system.domain.cost.bo.CostRuleTierPreviewBo;
+import com.ruoyi.system.domain.vo.CostRuleConflictVo;
 import com.ruoyi.system.domain.vo.CostRuleGovernanceCheckVo;
 import com.ruoyi.system.domain.vo.CostRuleTierPreviewVo;
 import com.ruoyi.system.mapper.cost.*;
@@ -312,6 +313,133 @@ public class CostRuleServiceImpl implements ICostRuleService {
         result.setPricingExplain(String.format("命中第 %d 档阶梯，按阶梯费率/单价乘以计量值。", matchedTier.getTierNo()));
         result.setSummary(String.format("当前样本通过条件校验，并命中第%d档阶梯，预估金额 %s。", matchedTier.getTierNo(), result.getAmountValue()));
         return result;
+    }
+
+    @Override
+    public List<CostRuleConflictVo> previewRuleConflicts(CostRuleSaveBo request) {
+        if (request == null) {
+            return Collections.emptyList();
+        }
+        Long sceneId = resolveSceneId(request);
+        request.setSceneId(sceneId);
+        List<CostRule> candidates = ruleMapper.selectList(Wrappers.<CostRule>lambdaQuery()
+                .eq(CostRule::getFeeId, request.getFeeId())
+                .eq(CostRule::getStatus, STATUS_ENABLED));
+        if (candidates == null || candidates.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<CostRuleCondition> currentConditions = request.getConditions() == null
+                ? Collections.emptyList() : request.getConditions();
+        List<CostRuleConflictVo> conflicts = new ArrayList<>();
+        for (CostRule target : candidates) {
+            if (target == null || Objects.equals(target.getRuleId(), request.getRuleId())) {
+                continue;
+            }
+            if (Objects.equals(target.getPriority(), request.getPriority())) {
+                conflicts.add(buildRuleConflict(request, target, "PRIORITY_DUPLICATE", "WARN",
+                        String.format("同费用下规则[%s]与当前规则优先级相同，命中顺序可能不清晰。", target.getRuleCode())));
+            }
+            List<CostRuleCondition> targetConditions = ruleMapper.selectConditionsByRuleId(target.getRuleId());
+            if (conditionsMayOverlap(currentConditions, targetConditions)) {
+                conflicts.add(buildRuleConflict(request, target, "CONDITION_OVERLAP", "WARN",
+                        String.format("同费用下规则[%s]与当前规则条件可能重叠，请确认优先级和命中口径。", target.getRuleCode())));
+            }
+        }
+        return conflicts;
+    }
+
+    private CostRuleConflictVo buildRuleConflict(CostRuleSaveBo current, CostRule target, String conflictType,
+                                                 String severity, String message) {
+        CostRuleConflictVo item = new CostRuleConflictVo();
+        item.setConflictType(conflictType);
+        item.setSeverity(severity);
+        item.setMessage(message);
+        item.setRuleCode(current.getRuleCode());
+        item.setTargetRuleId(target.getRuleId());
+        item.setTargetRuleCode(target.getRuleCode());
+        item.setTargetRuleName(target.getRuleName());
+        item.setTargetPriority(target.getPriority());
+        return item;
+    }
+
+    private boolean conditionsMayOverlap(List<CostRuleCondition> currentConditions, List<CostRuleCondition> targetConditions) {
+        List<CostRuleCondition> current = enabledConditions(currentConditions);
+        List<CostRuleCondition> target = enabledConditions(targetConditions);
+        if (current.isEmpty() || target.isEmpty()) {
+            return true;
+        }
+        if (conditionSignature(current).equals(conditionSignature(target))) {
+            return true;
+        }
+        boolean comparedSameVariable = false;
+        for (CostRuleCondition left : current) {
+            for (CostRuleCondition right : target) {
+                if (!Objects.equals(StringUtils.trim(left.getVariableCode()), StringUtils.trim(right.getVariableCode()))) {
+                    continue;
+                }
+                comparedSameVariable = true;
+                if (singleVariableConditionsMayOverlap(left, right)) {
+                    return true;
+                }
+            }
+        }
+        return !comparedSameVariable;
+    }
+
+    private List<CostRuleCondition> enabledConditions(List<CostRuleCondition> conditions) {
+        if (conditions == null || conditions.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<CostRuleCondition> result = new ArrayList<>();
+        for (CostRuleCondition condition : conditions) {
+            if (condition != null && !"1".equals(condition.getStatus()) && StringUtils.isNotEmpty(condition.getVariableCode())) {
+                result.add(condition);
+            }
+        }
+        return result;
+    }
+
+    private String conditionSignature(List<CostRuleCondition> conditions) {
+        List<String> items = new ArrayList<>();
+        for (CostRuleCondition condition : conditions) {
+            items.add(String.join("|",
+                    String.valueOf(condition.getGroupNo() == null ? 1 : condition.getGroupNo()),
+                    StringUtils.trim(condition.getVariableCode()),
+                    StringUtils.trim(condition.getOperatorCode()).toUpperCase(),
+                    normalizeCompareValue(condition.getCompareValue(), condition.getOperatorCode())));
+        }
+        Collections.sort(items);
+        return String.join(";", items);
+    }
+
+    private boolean singleVariableConditionsMayOverlap(CostRuleCondition left, CostRuleCondition right) {
+        String leftOperator = StringUtils.trim(left.getOperatorCode()).toUpperCase();
+        String rightOperator = StringUtils.trim(right.getOperatorCode()).toUpperCase();
+        Set<String> leftValues = discreteCompareValues(leftOperator, left.getCompareValue());
+        Set<String> rightValues = discreteCompareValues(rightOperator, right.getCompareValue());
+        if (!leftValues.isEmpty() && !rightValues.isEmpty()) {
+            for (String value : leftValues) {
+                if (rightValues.contains(value)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private Set<String> discreteCompareValues(String operatorCode, String compareValue) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        if ("EQ".equals(operatorCode)) {
+            String value = normalizeCompareValue(compareValue, operatorCode);
+            if (StringUtils.isNotEmpty(value)) {
+                values.add(value);
+            }
+        }
+        if ("IN".equals(operatorCode)) {
+            values.addAll(splitCompareValues(compareValue));
+        }
+        return values;
     }
 
     private void applyFixedRatePreview(CostRuleSaveBo rule, PreviewConditionResult conditionResult, BigDecimal quantityValue,

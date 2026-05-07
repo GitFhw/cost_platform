@@ -70,6 +70,15 @@ export function previewRuleTier(data) {
   })
 }
 
+// 规则冲突预览
+export function previewRuleConflict(data) {
+  return request({
+    url: '/cost/rule/conflictPreview',
+    method: 'post',
+    data
+  })
+}
+
 // 删除规则
 export function delRule(ruleId) {
   return request({
