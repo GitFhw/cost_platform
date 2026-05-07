@@ -722,7 +722,6 @@
 
 <script setup name="CostVariable">
 import { computed, getCurrentInstance, reactive, ref, toRefs, watch } from 'vue'
-import { ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import JsonEditor from '@/components/cost/JsonEditor.vue'
@@ -730,7 +729,7 @@ import { optionselectFormula } from '@/api/cost/formula'
 import { optionselectScene } from '@/api/cost/scene'
 import { optionselect as getDictTypeOptionselect } from '@/api/system/dict/type'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
-import { confirmCostDeleteImpact, findFirstDeleteBlockedCheck } from '@/utils/costGovernanceDeletePreview'
+import { confirmCostDeleteImpact, confirmCostDisableImpact, findFirstDeleteBlockedCheck, findFirstDisableBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import {
   addVariable,
   applyVariableTemplate,
@@ -1330,10 +1329,18 @@ async function handleGovernance(row) {
 async function ensureDisableAllowed() {
   if (!form.value.variableId || form.value.status !== '1' || initialStatus.value === '1') return true
   const check = await fetchGovernance(form.value.variableId)
-  if (!check.canDisable) {
-    governanceInfo.value = check
-    governanceOpen.value = true
-    await ElMessageBox.alert(check.disableBlockingReason, '停用前治理检查', { type: 'warning' })
+  const checks = [check]
+  const allowed = await confirmCostDisableImpact({
+    checks,
+    targetLabel: '变量',
+    targetNames: [form.value.variableName || check.variableName]
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDisableBlockedCheck(checks)
+    if (blockedCheck) {
+      governanceInfo.value = blockedCheck
+      governanceOpen.value = true
+    }
     return false
   }
   return true

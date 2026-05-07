@@ -691,7 +691,6 @@
 </template>
 
 <script setup name="CostScene">
-import { ElMessageBox } from 'element-plus'
 import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import JsonDiffViewer from '@/components/cost/JsonDiffViewer.vue'
 import PublishPrecheckPanel from '@/components/cost/publish/PublishPrecheckPanel.vue'
@@ -700,7 +699,7 @@ import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listSc
 import { deptTreeSelect } from '@/api/system/user'
 import useSettingsStore from '@/store/modules/settings'
 import { getCostSceneContextId, setCostSceneContextId } from '@/utils/costSceneContext'
-import { confirmCostDeleteImpact, findFirstDeleteBlockedCheck } from '@/utils/costGovernanceDeletePreview'
+import { confirmCostDeleteImpact, confirmCostDisableImpact, findFirstDeleteBlockedCheck, findFirstDisableBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
 import { resolveCostChangeTypeLabel } from '@/utils/costDisplayLabels'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
@@ -1492,26 +1491,18 @@ async function ensureDisableAllowed() {
     return true
   }
   const check = await fetchSceneGovernance(form.value.sceneId)
-  if (!check.canDisable) {
-    openGovernanceDrawer(check)
-    await ElMessageBox.alert(check.disableBlockingReason, '停用前治理检查', {
-      type: 'warning'
-    })
-    return false
-  }
-  if (check.totalConfigCount > 0) {
-    openGovernanceDrawer(check)
-    try {
-      await ElMessageBox.confirm(
-        `当前场景下已有 ${check.totalConfigCount} 项配置对象，停用后将从业务选择范围中移除，但配置数据会继续保留，是否继续？`,
-        '停用前治理检查',
-        {
-          type: 'warning'
-        }
-      )
-    } catch (error) {
-      return false
+  const checks = [check]
+  const allowed = await confirmCostDisableImpact({
+    checks,
+    targetLabel: '场景',
+    targetNames: [form.value.sceneName || check.sceneName]
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDisableBlockedCheck(checks)
+    if (blockedCheck) {
+      openGovernanceDrawer(blockedCheck)
     }
+    return false
   }
   return true
 }

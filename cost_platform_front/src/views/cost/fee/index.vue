@@ -269,13 +269,12 @@
 </template>
 
 <script setup name="CostFee">
-import { ElMessageBox } from 'element-plus'
 import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import { addFee, delFee, getFee, getFeeGovernance, getFeeStats, listFee, updateFee } from '@/api/cost/fee'
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
-import { confirmCostDeleteImpact, findFirstDeleteBlockedCheck } from '@/utils/costGovernanceDeletePreview'
+import { confirmCostDeleteImpact, confirmCostDisableImpact, findFirstDeleteBlockedCheck, findFirstDisableBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { confirmCostNextAction } from '@/utils/costNextAction'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
@@ -658,10 +657,18 @@ async function ensureDisableAllowed() {
     return true
   }
   const check = await fetchFeeGovernance(form.value.feeId)
-  if (!check.canDisable) {
-    governanceInfo.value = check
-    governanceOpen.value = true
-    await ElMessageBox.alert(check.disableBlockingReason, '停用前治理检查', { type: 'warning' })
+  const checks = [check]
+  const allowed = await confirmCostDisableImpact({
+    checks,
+    targetLabel: '费用',
+    targetNames: [form.value.feeName || check.feeName]
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDisableBlockedCheck(checks)
+    if (blockedCheck) {
+      governanceInfo.value = blockedCheck
+      governanceOpen.value = true
+    }
     return false
   }
   return true

@@ -785,7 +785,6 @@
 </template>
 
 <script setup name="CostRule">
-import { ElMessageBox } from 'element-plus'
 import ConditionValueEditor from '@/components/cost/ConditionValueEditor.vue'
 import ExpressionResourcePanel from '@/components/cost/ExpressionResourcePanel.vue'
 import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
@@ -799,7 +798,7 @@ import useSettingsStore from '@/store/modules/settings'
 import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
-import { confirmCostDeleteImpact, findFirstDeleteBlockedCheck } from '@/utils/costGovernanceDeletePreview'
+import { confirmCostDeleteImpact, confirmCostDisableImpact, findFirstDeleteBlockedCheck, findFirstDisableBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { confirmCostNextAction } from '@/utils/costNextAction'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
@@ -1772,10 +1771,18 @@ async function ensureDisableAllowed() {
     return true
   }
   const check = await fetchGovernance(form.value.ruleId)
-  if (!check.canDisable) {
-    governanceInfo.value = check
-    governanceOpen.value = true
-    await ElMessageBox.alert(check.disableBlockingReason, '停用前治理检查', { type: 'warning' })
+  const checks = [check]
+  const allowed = await confirmCostDisableImpact({
+    checks,
+    targetLabel: '规则',
+    targetNames: [form.value.ruleCode || check.ruleCode]
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDisableBlockedCheck(checks)
+    if (blockedCheck) {
+      governanceInfo.value = blockedCheck
+      governanceOpen.value = true
+    }
     return false
   }
   return true

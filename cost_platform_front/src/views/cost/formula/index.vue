@@ -697,7 +697,7 @@ import { compileCostBusinessFormula } from '@/utils/costBusinessFormulaCompiler'
 import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { optionselectVariable } from '@/api/cost/variable'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
-import { confirmCostDeleteImpact, findFirstDeleteBlockedCheck } from '@/utils/costGovernanceDeletePreview'
+import { confirmCostDeleteImpact, confirmCostDisableImpact, findFirstDeleteBlockedCheck, findFirstDisableBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -717,6 +717,7 @@ const businessDomainOptions = ref([])
 const statusOptions = ref([])
 const returnTypeOptions = ref([])
 const ids = ref([])
+const initialStatus = ref(undefined)
 const governanceOpen = ref(false)
 const governanceInfo = ref({})
 const versionOpen = ref(false)
@@ -1371,6 +1372,7 @@ function resetFormModel() {
   form.status = '0'
   form.sortNo = 10
   form.remark = undefined
+  initialStatus.value = undefined
   testInputJson.value = ''
   testResult.value = undefined
   resourceKeyword.value = ''
@@ -1891,6 +1893,10 @@ async function handleSave() {
     proxy.$modal.msgError(formulaValidationResult.value.issues[0].message)
     return
   }
+  const allowed = await ensureDisableAllowed(payload)
+  if (!allowed) {
+    return
+  }
   if (payload.formulaId) {
     await updateFormula(payload)
   } else {
@@ -1899,6 +1905,7 @@ async function handleSave() {
   proxy.$modal.msgSuccess(payload.formulaId ? '公式修改成功' : '公式新增成功')
   await getList()
   await loadSceneAssets(payload.sceneId)
+  initialStatus.value = payload.status
 }
 
 async function handleTest() {
@@ -1934,6 +1941,7 @@ async function handleEdit(row) {
   activeWorkbenchTab.value = 'builder'
   const response = await getFormula(row.formulaId)
   Object.assign(form, response.data || {})
+  initialStatus.value = form.status
   queryParams.sceneId = form.sceneId
   testInputJson.value = form.testCaseJson || ''
   testResult.value = response.data?.sampleResultJson ? safeJsonParse(response.data.sampleResultJson) : undefined
@@ -1973,6 +1981,7 @@ async function handleLoadVersion(row) {
   activeWorkbenchTab.value = 'builder'
   const response = await getFormulaVersion(row.versionId)
   Object.assign(form, response.data || {})
+  initialStatus.value = form.status
   queryParams.sceneId = form.sceneId
   resourceKeyword.value = ''
   selectedDraftKey.value = ''
@@ -1994,6 +2003,7 @@ async function handleRollbackVersion(row) {
     getList()
   ])
   Object.assign(form, formulaResponse.data || {})
+  initialStatus.value = form.status
   queryParams.sceneId = form.sceneId
   await loadSceneAssets(form.sceneId)
   restoreWorkbench(formulaResponse.data)
@@ -2023,6 +2033,28 @@ async function handleDelete(row) {
   proxy.$modal.msgSuccess('删除成功')
   await getList()
   await loadSceneAssets(row.sceneId || form.sceneId)
+}
+
+async function ensureDisableAllowed(payload = form) {
+  if (!payload.formulaId || payload.status !== '1' || initialStatus.value === '1') {
+    return true
+  }
+  const response = await getFormulaGovernance(payload.formulaId)
+  const checks = [response?.data || {}]
+  const allowed = await confirmCostDisableImpact({
+    checks,
+    targetLabel: '公式',
+    targetNames: [`${payload.formulaCode || checks[0].formulaCode} / ${payload.formulaName || checks[0].formulaName}`]
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDisableBlockedCheck(checks)
+    if (blockedCheck) {
+      governanceInfo.value = blockedCheck
+      governanceOpen.value = true
+    }
+    return false
+  }
+  return true
 }
 
 function handleSelectionChange(selection) {
