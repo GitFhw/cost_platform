@@ -8,6 +8,8 @@ import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostVariable;
 import com.ruoyi.system.domain.vo.CostVariableCopyRequest;
+import com.ruoyi.system.domain.vo.CostVariableImportIssueVo;
+import com.ruoyi.system.domain.vo.CostVariableImportPreviewVo;
 import com.ruoyi.system.domain.vo.CostVariableImportRow;
 import com.ruoyi.system.domain.vo.CostVariableTemplateApplyRequest;
 import com.ruoyi.system.service.cost.ICostVariableService;
@@ -97,8 +99,20 @@ public class CostVariableController extends BaseController {
      */
     @PreAuthorize("@ss.hasPermi('cost:variable:add')")
     @PostMapping("/importPreview")
-    public AjaxResult importPreview(MultipartFile file) throws Exception {
-        return success(variableService.previewImport(file));
+    public AjaxResult importPreview(MultipartFile file, boolean updateSupport) throws Exception {
+        return success(variableService.previewImport(file, updateSupport));
+    }
+
+    /**
+     * 瀵煎嚭瀵煎叆澶辫触鎶ュ憡銆?
+     */
+    @Log(title = "鍙橀噺涓績", businessType = BusinessType.EXPORT)
+    @PreAuthorize("@ss.hasPermi('cost:variable:add')")
+    @PostMapping("/importIssueExport")
+    public void importIssueExport(HttpServletResponse response, MultipartFile file, boolean updateSupport) throws Exception {
+        CostVariableImportPreviewVo preview = variableService.previewImport(file, updateSupport);
+        ExcelUtil<CostVariableImportIssueVo> util = new ExcelUtil<>(CostVariableImportIssueVo.class);
+        util.exportExcel(response, preview.getIssues(), "变量导入错误报告");
     }
 
     /**

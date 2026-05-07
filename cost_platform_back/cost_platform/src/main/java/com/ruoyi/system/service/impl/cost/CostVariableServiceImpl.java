@@ -219,6 +219,11 @@ public class CostVariableServiceImpl implements ICostVariableService {
     }
 
     @Override
+    public CostVariableImportPreviewVo previewImport(MultipartFile file, boolean updateSupport) throws Exception {
+        return parseImportFile(file, false, updateSupport, null);
+    }
+
+    @Override
     public CostVariableImportPreviewVo importVariables(MultipartFile file, boolean updateSupport, String operName) throws Exception {
         return parseImportFile(file, true, updateSupport, operName);
     }
@@ -442,10 +447,13 @@ public class CostVariableServiceImpl implements ICostVariableService {
         for (int index = 0; index < rows.size(); index++) {
             int rowNum = index + 2;
             CostVariableImportRow row = rows.get(index);
-            List<String> errors = validateImportRow(row, sceneCache, groupCache, fileUniqueKeys, updateSupport);
+            List<CostVariableImportIssueVo> errors = validateImportRow(row, sceneCache, groupCache, fileUniqueKeys, updateSupport);
             if (!errors.isEmpty()) {
                 failRows++;
-                preview.getIssues().add(buildImportIssue(rowNum, row, String.join("；", errors)));
+                for (CostVariableImportIssueVo issue : errors) {
+                    fillImportIssueContext(rowNum, row, issue);
+                    preview.getIssues().add(issue);
+                }
                 continue;
             }
 
@@ -484,41 +492,41 @@ public class CostVariableServiceImpl implements ICostVariableService {
     /**
      * 校验单行导入数据。
      */
-    private List<String> validateImportRow(CostVariableImportRow row, Map<String, CostScene> sceneCache,
+    private List<CostVariableImportIssueVo> validateImportRow(CostVariableImportRow row, Map<String, CostScene> sceneCache,
                                            Map<String, CostVariableGroup> groupCache, Set<String> fileUniqueKeys, boolean updateSupport) {
-        List<String> errors = new ArrayList<>();
+        List<CostVariableImportIssueVo> errors = new ArrayList<>();
         if (row == null) {
-            errors.add("导入行为空");
+            errors.add(buildImportIssue(null, null, null, "整行", null, "导入行为空"));
             return errors;
         }
         if (StringUtils.isEmpty(row.getSceneCode())) {
-            errors.add("场景编码不能为空");
+            errors.add(buildImportIssue(null, row, "sceneCode", "场景编码", row.getSceneCode(), "场景编码不能为空"));
             return errors;
         }
         if (StringUtils.isEmpty(row.getVariableCode())) {
-            errors.add("变量编码不能为空");
+            errors.add(buildImportIssue(null, row, "variableCode", "变量编码", row.getVariableCode(), "变量编码不能为空"));
         }
         if (StringUtils.isEmpty(row.getVariableName())) {
-            errors.add("变量名称不能为空");
+            errors.add(buildImportIssue(null, row, "variableName", "变量名称", row.getVariableName(), "变量名称不能为空"));
         }
 
         CostScene scene = resolveSceneByCode(row.getSceneCode(), sceneCache);
         if (scene == null) {
-            errors.add("场景编码不存在：" + row.getSceneCode());
+            errors.add(buildImportIssue(null, row, "sceneCode", "场景编码", row.getSceneCode(), "场景编码不存在：" + row.getSceneCode()));
             return errors;
         }
         if (!"0".equals(scene.getStatus())) {
-            errors.add("场景不是正常状态：" + row.getSceneCode());
+            errors.add(buildImportIssue(null, row, "sceneCode", "场景编码", row.getSceneCode(), "场景不是正常状态：" + row.getSceneCode()));
         }
 
         CostVariableGroup group = resolveGroupByCode(scene.getSceneId(), row.getGroupCode(), groupCache);
         if (StringUtils.isNotEmpty(row.getGroupCode()) && group == null) {
-            errors.add("变量分组编码不存在：" + row.getGroupCode());
+            errors.add(buildImportIssue(null, row, "groupCode", "变量分组编码", row.getGroupCode(), "变量分组编码不存在：" + row.getGroupCode()));
         }
 
         String uniqueKey = scene.getSceneId() + "::" + row.getVariableCode();
         if (!fileUniqueKeys.add(uniqueKey)) {
-            errors.add("导入文件中存在重复变量编码：" + row.getVariableCode());
+            errors.add(buildImportIssue(null, row, "variableCode", "变量编码", row.getVariableCode(), "导入文件中存在重复变量编码：" + row.getVariableCode()));
         }
 
         if (errors.isEmpty()) {
@@ -526,13 +534,13 @@ public class CostVariableServiceImpl implements ICostVariableService {
                 CostVariable variable = buildVariableFromImportRow(row, sceneCache, groupCache);
                 CostVariable existing = selectExistingVariable(variable.getSceneId(), variable.getVariableCode());
                 if (existing != null && !updateSupport) {
-                    errors.add("变量编码已存在，若需更新请勾选覆盖导入：" + row.getVariableCode());
+                    errors.add(buildImportIssue(null, row, "variableCode", "变量编码", row.getVariableCode(), "变量编码已存在，若需更新请勾选覆盖导入：" + row.getVariableCode()));
                 } else if (existing != null) {
                     variable.setVariableId(existing.getVariableId());
                 }
                 validateVariableConfig(variable);
             } catch (ServiceException ex) {
-                errors.add(ex.getMessage());
+                errors.add(buildImportConfigIssue(row, ex.getMessage()));
             }
         }
         return errors;
@@ -595,13 +603,67 @@ public class CostVariableServiceImpl implements ICostVariableService {
      * 构造导入问题。
      */
     private CostVariableImportIssueVo buildImportIssue(int rowNum, CostVariableImportRow row, String message) {
+        return buildImportIssue(rowNum, row, null, null, null, message);
+    }
+
+    private CostVariableImportIssueVo buildImportIssue(Integer rowNum, CostVariableImportRow row, String fieldName,
+                                                       String fieldLabel, Object rawValue, String message) {
         CostVariableImportIssueVo issue = new CostVariableImportIssueVo();
         issue.setRowNum(rowNum);
         issue.setSceneCode(row == null ? null : row.getSceneCode());
         issue.setVariableCode(row == null ? null : row.getVariableCode());
         issue.setVariableName(row == null ? null : row.getVariableName());
+        issue.setFieldName(fieldName);
+        issue.setFieldLabel(fieldLabel);
+        issue.setRawValue(rawValue == null ? null : String.valueOf(rawValue));
         issue.setMessage(message);
         return issue;
+    }
+
+    private void fillImportIssueContext(int rowNum, CostVariableImportRow row, CostVariableImportIssueVo issue) {
+        issue.setRowNum(rowNum);
+        if (row != null) {
+            issue.setSceneCode(row.getSceneCode());
+            issue.setVariableCode(row.getVariableCode());
+            issue.setVariableName(row.getVariableName());
+        }
+    }
+
+    private CostVariableImportIssueVo buildImportConfigIssue(CostVariableImportRow row, String message) {
+        if (message == null) {
+            return buildImportIssue(null, row, "config", "配置校验", null, "配置校验失败");
+        }
+        if (message.contains("变量类型")) {
+            return buildImportIssue(null, row, "variableType", "变量类型", row.getVariableType(), message);
+        }
+        if (message.contains("来源类型")) {
+            return buildImportIssue(null, row, "sourceType", "来源类型", row.getSourceType(), message);
+        }
+        if (message.contains("数据类型")) {
+            return buildImportIssue(null, row, "dataType", "数据类型", row.getDataType(), message);
+        }
+        if (message.contains("状态")) {
+            return buildImportIssue(null, row, "status", "状态", row.getStatus(), message);
+        }
+        if (message.contains("字典")) {
+            return buildImportIssue(null, row, "dictType", "字典类型", row.getDictType(), message);
+        }
+        if (message.contains("接口地址") || message.contains("http://") || message.contains("https://")) {
+            return buildImportIssue(null, row, "remoteApi", "第三方接口", row.getRemoteApi(), message);
+        }
+        if (message.contains("来源系统")) {
+            return buildImportIssue(null, row, "sourceSystem", "来源系统", row.getSourceSystem(), message);
+        }
+        if (message.contains("鉴权")) {
+            return buildImportIssue(null, row, "authConfigJson", "鉴权配置JSON", row.getAuthConfigJson(), message);
+        }
+        if (message.contains("映射")) {
+            return buildImportIssue(null, row, "mappingConfigJson", "字段映射JSON", row.getMappingConfigJson(), message);
+        }
+        if (message.contains("公式")) {
+            return buildImportIssue(null, row, "formulaExpr", "公式表达式", row.getFormulaExpr(), message);
+        }
+        return buildImportIssue(null, row, "config", "配置校验", null, message);
     }
 
     /**

@@ -63,6 +63,8 @@ public interface ICostVariableService {
      */
     CostVariableImportPreviewVo previewImport(MultipartFile file) throws Exception;
 
+    CostVariableImportPreviewVo previewImport(MultipartFile file, boolean updateSupport) throws Exception;
+
     /**
      * 执行变量导入。
      */

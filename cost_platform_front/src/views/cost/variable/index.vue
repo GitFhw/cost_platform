@@ -453,6 +453,10 @@
         <el-col :span="10">
           <el-table :data="importPreview.issues" size="small" max-height="260">
             <el-table-column prop="rowNum" label="行号" width="70" />
+            <el-table-column prop="fieldLabel" label="错误字段" width="120">
+              <template #default="scope">{{ scope.row.fieldLabel || scope.row.fieldName || '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="rawValue" label="原始值" width="120" show-overflow-tooltip />
             <el-table-column prop="variableCode" label="变量编码" width="120" />
             <el-table-column prop="message" label="校验问题" min-width="220" show-overflow-tooltip />
           </el-table>
@@ -461,6 +465,7 @@
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="submitImportPreview">导入预览</el-button>
+          <el-button type="warning" plain :disabled="!importPreview.failRows" @click="downloadImportIssueReport">下载失败报告</el-button>
           <el-button type="primary" :disabled="!importPreview.importable" @click="submitImportData">确认导入</el-button>
           <el-button @click="importOpen = false">取 消</el-button>
         </div>
@@ -1646,27 +1651,29 @@ function handleImportFileRemove() {
   importPreview.value = { totalRows: 0, passRows: 0, failRows: 0, importable: false, previewRows: [], issues: [] }
 }
 
-function buildImportFormData() {
+function buildImportFormData(includeUpdateSupport = false) {
   if (!importFile.value) {
     proxy.$modal.msgWarning('请先选择导入文件')
     return null
   }
   const formData = new FormData()
   formData.append('file', importFile.value)
+  if (includeUpdateSupport) {
+    formData.append('updateSupport', importForm.value.updateSupport)
+  }
   return formData
 }
 
 async function submitImportPreview() {
-  const formData = buildImportFormData()
+  const formData = buildImportFormData(true)
   if (!formData) return
   const response = await previewVariableImport(formData)
   importPreview.value = response.data || importPreview.value
 }
 
 async function submitImportData() {
-  const formData = buildImportFormData()
+  const formData = buildImportFormData(true)
   if (!formData) return
-  formData.append('updateSupport', importForm.value.updateSupport)
   const response = await importVariableData(formData)
   importPreview.value = response.data || importPreview.value
   proxy.$modal.msgSuccess(`导入完成：通过 ${importPreview.value.passRows} 行，失败 ${importPreview.value.failRows} 行`)
@@ -1675,6 +1682,15 @@ async function submitImportData() {
     resetImportState()
     getList()
   }
+}
+
+function downloadImportIssueReport() {
+  const formData = buildImportFormData(true)
+  if (!formData) return
+  proxy.download('cost/variable/importIssueExport', formData, `variable_import_errors_${new Date().getTime()}.xlsx`, {
+    transformRequest: [(data) => data],
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 }
 
 function downloadImportTemplate() {
