@@ -1164,6 +1164,23 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     @Override
+    public Map<String, Object> selectResultCompare(CostResultCompareBo query) {
+        if (query == null) {
+            throw new ServiceException("请补充对比条件");
+        }
+        ResultCompareSource left = buildResultCompareSource(query, true);
+        ResultCompareSource right = buildResultCompareSource(query, false);
+        List<Map<String, Object>> rows = buildResultCompareRows(left, right);
+
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("leftSource", buildResultCompareSourceMap(left));
+        result.put("rightSource", buildResultCompareSourceMap(right));
+        result.put("summary", buildResultCompareSummary(left, right, rows));
+        result.put("rows", rows);
+        return result;
+    }
+
+    @Override
     public List<CostResultLedger> selectResultList(CostResultLedger query) {
         validateResultQueryScope(query);
         List<CostResultLedger> results = selectResultListInternal(query);
@@ -2769,6 +2786,168 @@ public class CostRunServiceImpl implements ICostRunService {
                 .eq(StringUtils.isNotEmpty(query.getBizNo()), CostResultLedger::getBizNo, query.getBizNo())
                 .eq(StringUtils.isNotEmpty(query.getResultStatus()), CostResultLedger::getResultStatus, query.getResultStatus())
                 .orderByDesc(CostResultLedger::getResultId));
+    }
+
+    private ResultCompareSource buildResultCompareSource(CostResultCompareBo query, boolean leftSide) {
+        String sourceType = firstNonBlank(leftSide ? query.getLeftSourceType() : query.getRightSourceType(), "FORMAL").toUpperCase(Locale.ROOT);
+        if ("SIMULATION".equals(sourceType)) {
+            return buildSimulationCompareSource(leftSide ? query.getLeftSimulationId() : query.getRightSimulationId());
+        }
+        return buildFormalCompareSource(
+                leftSide ? query.getLeftTaskId() : query.getRightTaskId(),
+                leftSide ? query.getLeftSceneId() : query.getRightSceneId(),
+                leftSide ? query.getLeftVersionId() : query.getRightVersionId(),
+                leftSide ? query.getLeftBillMonth() : query.getRightBillMonth());
+    }
+
+    private ResultCompareSource buildFormalCompareSource(Long taskId, Long sceneId, Long versionId, String billMonth) {
+        boolean hasTaskScope = taskId != null;
+        boolean hasBusinessScope = StringUtils.isNotEmpty(billMonth) && (sceneId != null || versionId != null);
+        if (!hasTaskScope && !hasBusinessScope) {
+            throw new ServiceException("正式结果对比请补充任务ID，或选择账期并至少指定场景/版本");
+        }
+        List<CostResultLedger> results = resultLedgerMapper.selectList(Wrappers.<CostResultLedger>lambdaQuery()
+                .eq(taskId != null, CostResultLedger::getTaskId, taskId)
+                .eq(sceneId != null, CostResultLedger::getSceneId, sceneId)
+                .eq(versionId != null, CostResultLedger::getVersionId, versionId)
+                .eq(StringUtils.isNotEmpty(billMonth), CostResultLedger::getBillMonth, billMonth)
+                .orderByDesc(CostResultLedger::getResultId));
+        enrichResults(results);
+
+        ResultCompareSource source = new ResultCompareSource();
+        source.sourceType = "FORMAL";
+        source.sourceName = "正式结果";
+        source.taskId = taskId;
+        source.sceneId = sceneId;
+        source.versionId = versionId;
+        source.billMonth = billMonth;
+        source.resultCount = results.size();
+        for (CostResultLedger ledger : results) {
+            source.sceneName = firstNonBlank(source.sceneName, ledger.getSceneName());
+            source.versionNo = firstNonBlank(source.versionNo, ledger.getVersionNo());
+            source.sourceNo = firstNonBlank(source.sourceNo, ledger.getTaskNo());
+            source.billMonth = firstNonBlank(source.billMonth, ledger.getBillMonth());
+            source.addFee(ledger.getFeeCode(), ledger.getFeeName(), ledger.getAmountValue(), 1L);
+        }
+        source.amountTotal = source.fees.values().stream()
+                .map(item -> item.amountTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        return source;
+    }
+
+    private ResultCompareSource buildSimulationCompareSource(Long simulationId) {
+        if (simulationId == null) {
+            throw new ServiceException("试算结果对比请补充试算ID");
+        }
+        CostSimulationRecord record = simulationRecordMapper.selectById(simulationId);
+        if (record == null) {
+            throw new ServiceException("试算记录不存在，请刷新后重试");
+        }
+        enrichSimulationRecords(Collections.singletonList(record));
+        Map<String, Object> result = parseJsonObjectForExport(record.getResultJson());
+        List<Map<String, Object>> feeResults = castMapList(result.get("feeResults"));
+
+        ResultCompareSource source = new ResultCompareSource();
+        source.sourceType = "SIMULATION";
+        source.sourceName = "试算结果";
+        source.sourceNo = record.getSimulationNo();
+        source.simulationId = record.getSimulationId();
+        source.sceneId = record.getSceneId();
+        source.sceneName = record.getSceneName();
+        source.versionId = record.getVersionId();
+        source.versionNo = record.getVersionNo();
+        source.billMonth = record.getBillMonth();
+        for (Map<String, Object> fee : feeResults) {
+            source.addFee(stringValue(fee.get("feeCode")), stringValue(fee.get("feeName")), toBigDecimal(fee.get("amountValue")), 1L);
+        }
+        if (source.fees.isEmpty()) {
+            source.addFee("TOTAL", "试算合计", toBigDecimal(result.get("amountTotal")), 1L);
+        }
+        source.resultCount = feeResults.size();
+        source.amountTotal = defaultZero(toBigDecimal(result.get("amountTotal")));
+        if (source.amountTotal.compareTo(BigDecimal.ZERO) == 0) {
+            source.amountTotal = source.fees.values().stream()
+                    .map(item -> item.amountTotal)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+        source.amountTotal = source.amountTotal.setScale(2, RoundingMode.HALF_UP);
+        return source;
+    }
+
+    private List<Map<String, Object>> buildResultCompareRows(ResultCompareSource left, ResultCompareSource right) {
+        LinkedHashSet<String> feeCodes = new LinkedHashSet<>();
+        feeCodes.addAll(left.fees.keySet());
+        feeCodes.addAll(right.fees.keySet());
+        return feeCodes.stream().map(feeCode -> {
+                    CompareFeeAggregate leftFee = left.fees.get(feeCode);
+                    CompareFeeAggregate rightFee = right.fees.get(feeCode);
+                    BigDecimal leftAmount = leftFee == null ? BigDecimal.ZERO : leftFee.amountTotal;
+                    BigDecimal rightAmount = rightFee == null ? BigDecimal.ZERO : rightFee.amountTotal;
+                    BigDecimal diffAmount = rightAmount.subtract(leftAmount).setScale(2, RoundingMode.HALF_UP);
+                    LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+                    row.put("feeCode", feeCode);
+                    row.put("feeName", firstNonBlank(leftFee == null ? "" : leftFee.feeName, rightFee == null ? "" : rightFee.feeName));
+                    row.put("leftAmount", leftAmount.setScale(2, RoundingMode.HALF_UP));
+                    row.put("rightAmount", rightAmount.setScale(2, RoundingMode.HALF_UP));
+                    row.put("diffAmount", diffAmount);
+                    row.put("leftCount", leftFee == null ? 0L : leftFee.resultCount);
+                    row.put("rightCount", rightFee == null ? 0L : rightFee.resultCount);
+                    row.put("changeType", resolveResultCompareChangeType(leftFee, rightFee, diffAmount));
+                    return row;
+                })
+                .sorted((leftRow, rightRow) -> {
+                    BigDecimal leftDiff = defaultZero(toBigDecimal(leftRow.get("diffAmount"))).abs();
+                    BigDecimal rightDiff = defaultZero(toBigDecimal(rightRow.get("diffAmount"))).abs();
+                    return rightDiff.compareTo(leftDiff);
+                })
+                .collect(Collectors.toList());
+    }
+
+    private String resolveResultCompareChangeType(CompareFeeAggregate leftFee, CompareFeeAggregate rightFee, BigDecimal diffAmount) {
+        if (leftFee == null && rightFee != null) {
+            return "ADDED";
+        }
+        if (leftFee != null && rightFee == null) {
+            return "REMOVED";
+        }
+        return diffAmount.compareTo(BigDecimal.ZERO) == 0 ? "UNCHANGED" : "CHANGED";
+    }
+
+    private Map<String, Object> buildResultCompareSummary(ResultCompareSource left, ResultCompareSource right, List<Map<String, Object>> rows) {
+        LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
+        BigDecimal diffAmount = right.amountTotal.subtract(left.amountTotal).setScale(2, RoundingMode.HALF_UP);
+        summary.put("leftAmountTotal", left.amountTotal.setScale(2, RoundingMode.HALF_UP));
+        summary.put("rightAmountTotal", right.amountTotal.setScale(2, RoundingMode.HALF_UP));
+        summary.put("diffAmount", diffAmount);
+        summary.put("leftResultCount", left.resultCount);
+        summary.put("rightResultCount", right.resultCount);
+        summary.put("addedCount", countCompareRows(rows, "ADDED"));
+        summary.put("removedCount", countCompareRows(rows, "REMOVED"));
+        summary.put("changedCount", countCompareRows(rows, "CHANGED"));
+        summary.put("unchangedCount", countCompareRows(rows, "UNCHANGED"));
+        return summary;
+    }
+
+    private long countCompareRows(List<Map<String, Object>> rows, String changeType) {
+        return rows.stream().filter(row -> changeType.equals(row.get("changeType"))).count();
+    }
+
+    private Map<String, Object> buildResultCompareSourceMap(ResultCompareSource source) {
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("sourceType", source.sourceType);
+        result.put("sourceName", source.sourceName);
+        result.put("sourceNo", source.sourceNo);
+        result.put("taskId", source.taskId);
+        result.put("simulationId", source.simulationId);
+        result.put("sceneId", source.sceneId);
+        result.put("sceneName", source.sceneName);
+        result.put("versionId", source.versionId);
+        result.put("versionNo", source.versionNo);
+        result.put("billMonth", source.billMonth);
+        result.put("resultCount", source.resultCount);
+        result.put("amountTotal", source.amountTotal.setScale(2, RoundingMode.HALF_UP));
+        return result;
     }
 
     private List<Long> resolveResultRequestTaskIds(String requestNo) {
@@ -4652,6 +4831,42 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private String buildRuntimeCacheKey(Long versionId) {
         return RUNTIME_CACHE_PREFIX + versionId;
+    }
+
+    private static class ResultCompareSource {
+        private String sourceType;
+        private String sourceName;
+        private String sourceNo;
+        private Long taskId;
+        private Long simulationId;
+        private Long sceneId;
+        private String sceneName;
+        private Long versionId;
+        private String versionNo;
+        private String billMonth;
+        private long resultCount;
+        private BigDecimal amountTotal = BigDecimal.ZERO;
+        private final Map<String, CompareFeeAggregate> fees = new LinkedHashMap<>();
+
+        private void addFee(String feeCode, String feeName, BigDecimal amountValue, long count) {
+            String key = StringUtils.isNotEmpty(feeCode) ? feeCode : "UNKNOWN";
+            CompareFeeAggregate aggregate = fees.computeIfAbsent(key, code -> {
+                CompareFeeAggregate item = new CompareFeeAggregate();
+                item.feeCode = code;
+                item.feeName = StringUtils.isNotEmpty(feeName) ? feeName : code;
+                return item;
+            });
+            aggregate.feeName = StringUtils.isNotEmpty(aggregate.feeName) ? aggregate.feeName : feeName;
+            aggregate.amountTotal = aggregate.amountTotal.add(amountValue == null ? BigDecimal.ZERO : amountValue);
+            aggregate.resultCount += count;
+        }
+    }
+
+    private static class CompareFeeAggregate {
+        private String feeCode;
+        private String feeName;
+        private long resultCount;
+        private BigDecimal amountTotal = BigDecimal.ZERO;
     }
 
     public static class RuntimeSnapshot {

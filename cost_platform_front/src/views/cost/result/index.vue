@@ -66,6 +66,7 @@
           <p>正式结果建议按账期、任务或业务单号收敛查询范围，避免一次拉取过大的台账数据。</p>
         </div>
         <div class="result-page__section-actions">
+          <el-button type="primary" plain icon="DataLine" @click="openCompare">差异对比</el-button>
           <el-button type="warning" plain icon="Download" @click="handleExport">导出结果</el-button>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
         </div>
@@ -209,6 +210,116 @@
         @pagination="getList"
       />
     </div>
+
+    <el-drawer v-model="compareOpen" title="结果差异对比" size="1080px" append-to-body>
+      <div class="result-page__detail-workbench" v-loading="compareLoading">
+        <el-form :model="compareForm" label-width="96px" class="result-page__compare-form">
+          <section class="result-page__compare-panel">
+            <div class="result-page__compare-title">
+              <h4>左侧基准</h4>
+              <el-tag>{{ resolveCompareSourceLabel(compareForm.leftSourceType) }}</el-tag>
+            </div>
+            <el-form-item label="结果类型">
+              <el-select v-model="compareForm.leftSourceType" style="width: 100%">
+                <el-option label="正式结果" value="FORMAL" />
+                <el-option label="试算结果" value="SIMULATION" />
+              </el-select>
+            </el-form-item>
+            <template v-if="compareForm.leftSourceType === 'FORMAL'">
+              <el-form-item label="任务ID">
+                <el-input v-model="compareForm.leftTaskId" clearable placeholder="优先按任务ID对比" />
+              </el-form-item>
+              <el-form-item label="所属场景">
+                <el-select v-model="compareForm.leftSceneId" clearable filterable style="width: 100%" @change="handleCompareSceneChange('left')">
+                  <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="版本号">
+                <el-select v-model="compareForm.leftVersionId" clearable filterable style="width: 100%">
+                  <el-option v-for="item in leftCompareVersionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="账期">
+                <el-date-picker v-model="compareForm.leftBillMonth" clearable type="month" format="YYYY-MM" value-format="YYYY-MM" style="width: 100%" />
+              </el-form-item>
+            </template>
+            <el-form-item v-else label="试算ID">
+              <el-input v-model="compareForm.leftSimulationId" clearable placeholder="输入试算记录ID" />
+            </el-form-item>
+          </section>
+
+          <section class="result-page__compare-panel">
+            <div class="result-page__compare-title">
+              <h4>右侧目标</h4>
+              <el-tag>{{ resolveCompareSourceLabel(compareForm.rightSourceType) }}</el-tag>
+            </div>
+            <el-form-item label="结果类型">
+              <el-select v-model="compareForm.rightSourceType" style="width: 100%">
+                <el-option label="正式结果" value="FORMAL" />
+                <el-option label="试算结果" value="SIMULATION" />
+              </el-select>
+            </el-form-item>
+            <template v-if="compareForm.rightSourceType === 'FORMAL'">
+              <el-form-item label="任务ID">
+                <el-input v-model="compareForm.rightTaskId" clearable placeholder="优先按任务ID对比" />
+              </el-form-item>
+              <el-form-item label="所属场景">
+                <el-select v-model="compareForm.rightSceneId" clearable filterable style="width: 100%" @change="handleCompareSceneChange('right')">
+                  <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="版本号">
+                <el-select v-model="compareForm.rightVersionId" clearable filterable style="width: 100%">
+                  <el-option v-for="item in rightCompareVersionOptions" :key="item.versionId" :label="item.versionNo" :value="item.versionId" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="账期">
+                <el-date-picker v-model="compareForm.rightBillMonth" clearable type="month" format="YYYY-MM" value-format="YYYY-MM" style="width: 100%" />
+              </el-form-item>
+            </template>
+            <el-form-item v-else label="试算ID">
+              <el-input v-model="compareForm.rightSimulationId" clearable placeholder="输入试算记录ID" />
+            </el-form-item>
+          </section>
+        </el-form>
+
+        <div class="result-page__compare-actions">
+          <el-button type="primary" icon="DataAnalysis" :loading="compareLoading" @click="handleCompare">开始对比</el-button>
+          <el-button icon="Refresh" @click="resetCompareForm">重置</el-button>
+        </div>
+
+        <div v-if="compareData.summary" class="result-page__summary">
+          <div class="result-page__summary-card"><span>左侧金额</span><strong>{{ formatAmount(compareSummary.leftAmountTotal) }}</strong><small>{{ compareSourceText(compareData.leftSource) }}</small></div>
+          <div class="result-page__summary-card"><span>右侧金额</span><strong>{{ formatAmount(compareSummary.rightAmountTotal) }}</strong><small>{{ compareSourceText(compareData.rightSource) }}</small></div>
+          <div class="result-page__summary-card"><span>差异金额</span><strong>{{ formatSignedAmount(compareSummary.diffAmount) }}</strong><small>右侧 - 左侧</small></div>
+          <div class="result-page__summary-card"><span>变化费用</span><strong>{{ formatInteger(compareSummary.changedCount + compareSummary.addedCount + compareSummary.removedCount) }}</strong><small>新增 {{ compareSummary.addedCount || 0 }} / 移除 {{ compareSummary.removedCount || 0 }}</small></div>
+        </div>
+
+        <el-table v-if="compareData.summary" :data="compareRows" border max-height="460">
+          <el-table-column label="费用编码" prop="feeCode" width="160" />
+          <el-table-column label="费用名称" prop="feeName" min-width="180" :show-overflow-tooltip="true" />
+          <el-table-column label="左侧金额" prop="leftAmount" width="130" align="right">
+            <template #default="scope">{{ formatAmount(scope.row.leftAmount) }}</template>
+          </el-table-column>
+          <el-table-column label="右侧金额" prop="rightAmount" width="130" align="right">
+            <template #default="scope">{{ formatAmount(scope.row.rightAmount) }}</template>
+          </el-table-column>
+          <el-table-column label="差异金额" prop="diffAmount" width="130" align="right">
+            <template #default="scope">
+              <span :class="{ 'is-negative': Number(scope.row.diffAmount) < 0, 'is-positive': Number(scope.row.diffAmount) > 0 }">{{ formatSignedAmount(scope.row.diffAmount) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="结果数" width="120" align="center">
+            <template #default="scope">{{ scope.row.leftCount || 0 }} / {{ scope.row.rightCount || 0 }}</template>
+          </el-table-column>
+          <el-table-column label="变化类型" prop="changeType" width="120" align="center">
+            <template #default="scope">
+              <el-tag :type="resolveChangeTypeTag(scope.row.changeType)">{{ resolveChangeTypeLabel(scope.row.changeType) }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-drawer>
 
     <el-drawer v-model="detailOpen" title="结果详情工作台" size="1080px" append-to-body>
       <div class="result-page__detail-workbench">
@@ -385,7 +496,7 @@
 
 <script setup name="CostResult">
 import JsonEditor from '@/components/cost/JsonEditor.vue'
-import { getResultDetail, getResultStats, getTraceDetail, listResult, listVersionOptions } from '@/api/cost/run'
+import { getResultCompare, getResultDetail, getResultStats, getTraceDetail, listResult, listVersionOptions } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
@@ -408,8 +519,13 @@ const resultStatusOptions = ref([])
 const unitCodeOptions = ref([])
 const detailOpen = ref(false)
 const traceOpen = ref(false)
+const compareOpen = ref(false)
+const compareLoading = ref(false)
 const detailData = ref({})
 const traceData = ref({})
+const compareData = ref({})
+const leftCompareVersionOptions = ref([])
+const rightCompareVersionOptions = ref([])
 const stats = reactive({
   resultCount: 0,
   taskCount: 0,
@@ -438,6 +554,23 @@ const queryParams = reactive({
   resultStatus: undefined
 })
 
+const defaultCompareForm = () => ({
+  leftSourceType: 'FORMAL',
+  leftTaskId: queryParams.taskId,
+  leftSimulationId: undefined,
+  leftSceneId: queryParams.sceneId,
+  leftVersionId: queryParams.versionId,
+  leftBillMonth: queryParams.billMonth,
+  rightSourceType: 'FORMAL',
+  rightTaskId: undefined,
+  rightSimulationId: undefined,
+  rightSceneId: queryParams.sceneId,
+  rightVersionId: queryParams.versionId,
+  rightBillMonth: queryParams.billMonth
+})
+
+const compareForm = reactive(defaultCompareForm())
+
 const metricItems = computed(() => [
   { label: '结果条数', value: formatInteger(stats.resultCount), desc: '当前筛选范围内的结果台账条数' },
   { label: '任务数量', value: formatInteger(stats.taskCount), desc: '结果覆盖的正式核算任务数' },
@@ -462,6 +595,8 @@ const traceVariables = computed(() => normalizeTraceEntries(traceData.value.vari
 const traceConditions = computed(() => normalizeTraceEntries(traceData.value.conditions))
 const traceTimeline = computed(() => normalizeTraceEntries(traceData.value.timeline))
 const tracePricingSummary = computed(() => normalizePricingSummary(traceData.value.pricing))
+const compareRows = computed(() => compareData.value.rows || [])
+const compareSummary = computed(() => compareData.value.summary || {})
 
 const queryGuardTip = computed(() => (shouldBlockBroadResultQuery() ? resultQueryGuardMessage : ''))
 
@@ -551,6 +686,58 @@ function handleExport() {
     },
     `cost_result_${Date.now()}.xlsx`
   )
+}
+
+async function openCompare() {
+  await loadBaseOptions()
+  await resetCompareForm()
+  compareOpen.value = true
+}
+
+async function resetCompareForm() {
+  Object.assign(compareForm, defaultCompareForm())
+  compareData.value = {}
+  await Promise.all([
+    loadCompareVersionOptions('left', compareForm.leftSceneId),
+    loadCompareVersionOptions('right', compareForm.rightSceneId)
+  ])
+}
+
+async function handleCompareSceneChange(side) {
+  if (side === 'left') {
+    compareForm.leftVersionId = undefined
+    await loadCompareVersionOptions('left', compareForm.leftSceneId)
+  } else {
+    compareForm.rightVersionId = undefined
+    await loadCompareVersionOptions('right', compareForm.rightSceneId)
+  }
+}
+
+async function loadCompareVersionOptions(side, sceneId) {
+  if (!sceneId) {
+    if (side === 'left') {
+      leftCompareVersionOptions.value = []
+    } else {
+      rightCompareVersionOptions.value = []
+    }
+    return
+  }
+  const resp = await listVersionOptions(sceneId)
+  if (side === 'left') {
+    leftCompareVersionOptions.value = resp.data || []
+  } else {
+    rightCompareVersionOptions.value = resp.data || []
+  }
+}
+
+async function handleCompare() {
+  compareLoading.value = true
+  try {
+    const resp = await getResultCompare(compareForm)
+    compareData.value = resp.data || {}
+  } finally {
+    compareLoading.value = false
+  }
 }
 
 function resetQuery() {
@@ -692,8 +879,42 @@ function formatAmount(value) {
   return Number(value || 0).toFixed(2)
 }
 
+function formatSignedAmount(value) {
+  const numberValue = Number(value || 0)
+  return `${numberValue > 0 ? '+' : ''}${numberValue.toFixed(2)}`
+}
+
 function formatInteger(value) {
   return Number(value || 0).toLocaleString()
+}
+
+function resolveCompareSourceLabel(type) {
+  return type === 'SIMULATION' ? '试算结果' : '正式结果'
+}
+
+function compareSourceText(source = {}) {
+  const scope = source.simulationId ? `试算 #${source.simulationId}` : (source.taskId ? `任务 #${source.taskId}` : source.sourceNo)
+  return [scope, source.versionNo, source.billMonth].filter(Boolean).join(' / ') || '-'
+}
+
+function resolveChangeTypeLabel(type) {
+  const labelMap = {
+    ADDED: '新增',
+    REMOVED: '移除',
+    CHANGED: '变化',
+    UNCHANGED: '无变化'
+  }
+  return labelMap[type] || type || '-'
+}
+
+function resolveChangeTypeTag(type) {
+  const tagMap = {
+    ADDED: 'success',
+    REMOVED: 'danger',
+    CHANGED: 'warning',
+    UNCHANGED: 'info'
+  }
+  return tagMap[type] || 'info'
 }
 
 function formatQuantity(row) {
@@ -1039,6 +1260,49 @@ onActivated(async () => {
   color: var(--el-text-color-primary);
 }
 
+.result-page__compare-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.result-page__compare-panel {
+  min-width: 0;
+  padding: 14px 16px 4px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  background: var(--el-bg-color-overlay);
+}
+
+.result-page__compare-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.result-page__compare-title h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.result-page__compare-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.is-negative {
+  color: var(--el-color-danger);
+  font-weight: 700;
+}
+
+.is-positive {
+  color: var(--el-color-success);
+  font-weight: 700;
+}
+
 .result-page__trace-panel :deep(.el-timeline) {
   margin-top: 6px;
   padding-left: 4px;
@@ -1080,6 +1344,7 @@ onActivated(async () => {
 @media (max-width: 1200px) {
   .result-page__metrics,
   .result-page__business-summary,
+  .result-page__compare-form,
   .result-page__trace-grid,
   .result-page__summary {
     grid-template-columns: 1fr;

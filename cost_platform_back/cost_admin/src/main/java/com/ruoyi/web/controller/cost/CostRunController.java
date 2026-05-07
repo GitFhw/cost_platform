@@ -246,6 +246,15 @@ public class CostRunController extends BaseController {
     }
 
     /**
+     * Compare result ledgers.
+     */
+    @PreAuthorize("@ss.hasPermi('cost:result:list')")
+    @GetMapping("/result/compare")
+    public AjaxResult resultCompare(CostResultCompareBo query) {
+        return success(runService.selectResultCompare(query));
+    }
+
+    /**
      * 查询结果台账列表
      */
     @PreAuthorize("@ss.hasPermi('cost:result:list')")

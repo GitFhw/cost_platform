@@ -55,6 +55,8 @@ public interface ICostRunService {
 
     Map<String, Object> selectResultStats(CostResultLedger query);
 
+    Map<String, Object> selectResultCompare(CostResultCompareBo query);
+
     List<CostResultLedger> selectResultList(CostResultLedger query);
 
     Map<String, Object> selectResultDetail(Long resultId);

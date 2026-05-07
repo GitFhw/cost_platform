@@ -143,6 +143,14 @@ export function getResultStats(query) {
   })
 }
 
+export function getResultCompare(query) {
+  return request({
+    url: '/cost/run/result/compare',
+    method: 'get',
+    params: query
+  })
+}
+
 export function listResult(query) {
   return request({
     url: '/cost/run/result/list',
