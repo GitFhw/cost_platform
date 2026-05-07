@@ -57,6 +57,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="sceneId != null">
                 and f.scene_id = #{sceneId}
             </if>
+            <if test="feeIds != null and feeIds.length > 0">
+                and f.fee_id in
+                <foreach collection="feeIds" item="feeId" open="(" separator="," close=")">
+                    #{feeId}
+                </foreach>
+            </if>
             <if test="businessDomain != null and businessDomain != ''">
                 and s.business_domain = #{businessDomain}
             </if>

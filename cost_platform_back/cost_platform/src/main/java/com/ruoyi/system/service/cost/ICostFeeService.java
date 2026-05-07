@@ -85,6 +85,15 @@ public interface ICostFeeService {
     int updateFee(CostFeeItem feeItem);
 
     /**
+     * 批量停用费用
+     *
+     * @param feeIds 费用主键数组
+     *
+     * @return 结果
+     */
+    int disableFeeByIds(Long[] feeIds);
+
+    /**
      * 批量删除费用
      *
      * @param feeIds 费用主键数组

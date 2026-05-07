@@ -58,6 +58,9 @@
         <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete" v-hasPermi="['cost:fee:remove']">删除费用</el-button>
       </el-col>
       <el-col :span="1.5">
+        <el-button type="warning" plain icon="CircleClose" :disabled="multiple" @click="handleBatchDisable" v-hasPermi="['cost:fee:edit']">批量停用</el-button>
+      </el-col>
+      <el-col :span="1.5">
         <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['cost:fee:export']">导出</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
@@ -462,11 +465,11 @@
 
 <script setup name="CostFee">
 import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
-import { addFee, delFee, getFee, getFeeGovernance, getFeeStats, listFee, updateFee } from '@/api/cost/fee'
+import { addFee, delFee, disableFee, getFee, getFeeGovernance, getFeeStats, listFee, updateFee } from '@/api/cost/fee'
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
-import { confirmCostDeleteImpact, confirmCostDisableImpact, findFirstDeleteBlockedCheck, findFirstDisableBlockedCheck } from '@/utils/costGovernanceDeletePreview'
+import { confirmCostDeleteImpact, confirmCostDisableImpact, confirmCostExportImpact, findFirstDeleteBlockedCheck, findFirstDisableBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { confirmCostNextAction } from '@/utils/costNextAction'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
@@ -953,8 +956,47 @@ async function handleDelete(row) {
   proxy.$modal.msgSuccess('删除成功')
 }
 
-function handleExport() {
-  proxy.download('cost/fee/export', { ...queryParams.value }, `fee_${new Date().getTime()}.xlsx`)
+async function handleBatchDisable() {
+  const targetRows = resolveTargetRows()
+  if (!targetRows.length) {
+    return
+  }
+  const checks = await Promise.all(targetRows.map(item => fetchFeeGovernance(item.feeId)))
+  const allowed = await confirmCostDisableImpact({
+    checks,
+    targetLabel: '费用',
+    targetNames: targetRows.map(item => item.feeName)
+  })
+  if (!allowed) {
+    const blockedCheck = findFirstDisableBlockedCheck(checks)
+    if (blockedCheck) {
+      governanceInfo.value = blockedCheck
+      governanceOpen.value = true
+    }
+    return
+  }
+
+  await disableFee(ids.value)
+  getList()
+  proxy.$modal.msgSuccess('停用成功')
+}
+
+async function handleExport() {
+  const selectedRows = resolveTargetRows()
+  const exportParams = selectedRows.length
+    ? { feeIds: ids.value }
+    : buildCurrentExportQuery()
+  const targetRows = selectedRows.length ? selectedRows : await loadExportTargetRows(exportParams)
+  const checks = await Promise.all(targetRows.map(item => fetchFeeGovernance(item.feeId)))
+  const allowed = await confirmCostExportImpact({
+    checks,
+    targetLabel: '费用',
+    targetNames: targetRows.map(item => item.feeName)
+  })
+  if (!allowed) {
+    return
+  }
+  proxy.download('cost/fee/export', exportParams, `fee_${new Date().getTime()}.xlsx`)
 }
 
 async function handleGovernance(row) {
@@ -1054,6 +1096,16 @@ function resolveTargetRows(row) {
     return [row]
   }
   return feeList.value.filter(item => ids.value.includes(item.feeId))
+}
+
+function buildCurrentExportQuery() {
+  const { pageNum, pageSize, ...params } = queryParams.value
+  return { ...params }
+}
+
+async function loadExportTargetRows(exportParams) {
+  const response = await listFee(exportParams)
+  return Array.isArray(response.rows) ? response.rows : []
 }
 
 function resolveDictLabel(optionsRef, value) {

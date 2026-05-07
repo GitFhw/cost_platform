@@ -61,6 +61,14 @@ export function updateFee(data) {
   })
 }
 
+// 批量停用费用
+export function disableFee(feeIds) {
+  return request({
+    url: '/cost/fee/disable/' + feeIds,
+    method: 'put'
+  })
+}
+
 // 删除费用
 export function delFee(feeId) {
   return request({

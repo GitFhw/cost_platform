@@ -46,6 +46,12 @@ public class CostFeeItem extends BaseEntity {
     private String keyword;
 
     /**
+     * 批量过滤费用主键
+     */
+    @TableField(exist = false)
+    private Long[] feeIds;
+
+    /**
      * 场景编码
      */
     @Excel(name = "场景编码")

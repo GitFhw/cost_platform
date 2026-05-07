@@ -11,6 +11,27 @@ export async function confirmCostDisableImpact({ checks = [], targetLabel = '对
   return confirmCostGovernanceImpact({ checks, targetLabel, targetNames, action: 'disable' })
 }
 
+export async function confirmCostExportImpact({ checks = [], targetLabel = '对象', targetNames = [] } = {}) {
+  const normalizedChecks = checks.filter(Boolean)
+  const html = buildExportPreviewHtml({
+    checks: normalizedChecks,
+    targetLabel,
+    targetNames
+  })
+  try {
+    await ElMessageBox.confirm(html, '导出影响预览', {
+      type: 'info',
+      dangerouslyUseHTMLString: true,
+      confirmButtonText: '确认导出',
+      cancelButtonText: '取消',
+      closeOnClickModal: false
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function confirmCostGovernanceImpact({ checks = [], targetLabel = '对象', targetNames = [], action }) {
   const meta = resolveActionMeta(action)
   const normalizedChecks = checks.filter(Boolean)
@@ -73,6 +94,45 @@ function buildImpactPreviewHtml({ checks, targetLabel, targetNames, blocked, met
     renderImpactSection(meta.secondaryTitle, cleanupImpacts, meta.secondaryEmptyText, meta),
     renderImpactSection(meta.historyTitle, historyImpacts, meta.historyEmptyText, meta),
     `<p style="margin:12px 0 0;color:#909399;font-size:12px;">提示：只展示治理接口返回的代表性引用对象，完整范围以实际${escapeHtml(meta.actionLabel)}校验和数据库约束为准。</p>`,
+    '</div>'
+  ].join('')
+}
+
+function buildExportPreviewHtml({ checks, targetLabel, targetNames }) {
+  const names = targetNames.length ? targetNames : checks.map(resolveCheckName).filter(Boolean)
+  const allImpacts = checks.flatMap(check => normalizeImpacts(check, resolveCheckName(check)))
+  const runBlocks = checks.flatMap(check => normalizeReasonRows(check, check?.runBlockingReasons, '运行/发布阻断'))
+  const runWarnings = checks.flatMap(check => normalizeReasonRows(check, check?.runWarningReasons, '运行/发布告警'))
+  const activeRefs = allImpacts.filter(item => !isHistoryImpact(item))
+  const historyRefs = allImpacts.filter(isHistoryImpact)
+
+  return [
+    '<div class="cost-delete-preview">',
+    `<p style="margin:0 0 10px;color:#303133;">即将导出 ${escapeHtml(targetLabel)}：<strong>${escapeHtml(names.join('、') || '当前筛选结果')}</strong></p>`,
+    '<p style="margin:0 0 10px;color:#606266;">导出不会修改数据；下列信息用于确认导出对象当前是否已进入规则、发布或运行链路。</p>',
+    renderReasonSection('运行/发布阻断提示', runBlocks, '当前导出对象没有运行或发布阻断提示。'),
+    renderReasonSection('运行/发布告警提示', runWarnings, '当前导出对象没有运行或发布告警提示。'),
+    renderImpactSection('当前配置引用', activeRefs, '当前没有规则或配置引用。', { impactKey: 'deleteImpact' }),
+    renderImpactSection('历史版本和运行引用', historyRefs, '当前没有发布快照、结果台账或追溯明细引用。', { impactKey: 'deleteImpact' }),
+    `<p style="margin:12px 0 0;color:#909399;font-size:12px;">提示：勾选费用时仅导出勾选对象；未勾选时按当前检索条件导出。</p>`,
+    '</div>'
+  ].join('')
+}
+
+function normalizeReasonRows(check = {}, reasons = [], title = '') {
+  return Array.isArray(reasons)
+    ? reasons.filter(Boolean).map(reason => ({ ownerName: resolveCheckName(check), title, message: reason }))
+    : []
+}
+
+function renderReasonSection(title, rows, emptyText) {
+  const content = rows.length
+    ? rows.map(item => `<li><strong>${escapeHtml(item.ownerName || '-')}</strong>：${escapeHtml(item.message)}</li>`).join('')
+    : `<li style="color:#909399;">${escapeHtml(emptyText)}</li>`
+  return [
+    '<div style="margin-top:12px;">',
+    `<div style="font-weight:700;color:#303133;margin-bottom:6px;">${escapeHtml(title)}</div>`,
+    `<ul style="margin:0;padding-left:18px;color:#606266;line-height:1.7;">${content}</ul>`,
     '</div>'
   ].join('')
 }

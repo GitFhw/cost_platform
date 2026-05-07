@@ -113,6 +113,16 @@ public class CostFeeController extends BaseController {
     }
 
     /**
+     * 批量停用费用
+     */
+    @PreAuthorize("@ss.hasPermi('cost:fee:edit')")
+    @Log(title = "费用中心", businessType = BusinessType.UPDATE)
+    @PutMapping("/disable/{feeIds}")
+    public AjaxResult disable(@PathVariable Long[] feeIds) {
+        return toAjax(feeService.disableFeeByIds(feeIds));
+    }
+
+    /**
      * 删除费用
      */
     @PreAuthorize("@ss.hasPermi('cost:fee:remove')")

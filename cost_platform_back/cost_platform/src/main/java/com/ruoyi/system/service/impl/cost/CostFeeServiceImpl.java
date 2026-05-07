@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.ruoyi.common.constant.UserConstants;
 import com.ruoyi.common.core.domain.entity.SysDictData;
 import com.ruoyi.common.exception.ServiceException;
+import com.ruoyi.common.utils.DateUtils;
+import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.cost.CostFeeItem;
 import com.ruoyi.system.domain.cost.CostScene;
@@ -149,6 +151,31 @@ public class CostFeeServiceImpl implements ICostFeeService {
         validateDisableBeforeUpdate(feeItem);
         validateFeeConfig(feeItem);
         return feeMapper.updateById(feeItem);
+    }
+
+    /**
+     * 批量停用费用
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int disableFeeByIds(Long[] feeIds) {
+        if (feeIds == null || feeIds.length == 0) {
+            return 0;
+        }
+        for (Long feeId : feeIds) {
+            CostFeeGovernanceCheckVo check = selectFeeGovernanceCheck(feeId);
+            if (StringUtils.isNull(check)) {
+                continue;
+            }
+            if (!Boolean.TRUE.equals(check.getCanDisable())) {
+                throw new ServiceException(String.format("%1$s不能停用：%2$s", check.getFeeName(), check.getDisableBlockingReason()));
+            }
+        }
+        return feeMapper.update(null, Wrappers.<CostFeeItem>lambdaUpdate()
+                .in(CostFeeItem::getFeeId, Arrays.asList(feeIds))
+                .set(CostFeeItem::getStatus, "1")
+                .set(CostFeeItem::getUpdateBy, SecurityUtils.getUsername())
+                .set(CostFeeItem::getUpdateTime, DateUtils.getNowDate()));
     }
 
     /**
