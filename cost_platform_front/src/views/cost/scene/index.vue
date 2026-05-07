@@ -410,6 +410,11 @@
         </el-button>
       </el-col>
       <el-col :span="1.5">
+        <el-button type="primary" plain icon="Collection" @click="templateOpen = true">
+          行业模板库
+        </el-button>
+      </el-col>
+      <el-col :span="1.5">
         <el-button
           type="success"
           plain
@@ -521,6 +526,82 @@
       v-model:limit="queryParams.pageSize"
       @pagination="getList"
     />
+
+    <el-drawer v-model="templateOpen" title="行业模板库" size="980px" append-to-body>
+      <div class="scene-center__template-library">
+        <el-alert
+          type="info"
+          :closable="false"
+          title="模板库用于沉淀典型行业的场景、费用、变量和规则口径草稿；复制后可按本项目字段继续维护，不会直接写入数据库。"
+        />
+        <div class="scene-center__template-layout">
+          <aside class="scene-center__template-list">
+            <button
+              v-for="item in industryTemplates"
+              :key="item.code"
+              type="button"
+              class="scene-center__template-item"
+              :class="{ 'is-active': selectedIndustryTemplateCode === item.code }"
+              @click="selectedIndustryTemplateCode = item.code"
+            >
+              <strong>{{ item.name }}</strong>
+              <span>{{ item.industry }}</span>
+              <small>{{ item.summary }}</small>
+            </button>
+          </aside>
+          <section class="scene-center__template-detail">
+            <div class="scene-center__template-head">
+              <div>
+                <h3>{{ selectedIndustryTemplate.name }}</h3>
+                <p>{{ selectedIndustryTemplate.summary }}</p>
+              </div>
+              <el-button type="primary" icon="DocumentCopy" @click="copyIndustryTemplate">复制模板 JSON</el-button>
+            </div>
+            <div class="scene-center__template-stats">
+              <div><strong>{{ selectedIndustryTemplate.fees.length }}</strong><span>费用</span></div>
+              <div><strong>{{ selectedIndustryTemplate.variables.length }}</strong><span>变量</span></div>
+              <div><strong>{{ selectedIndustryTemplate.rules.length }}</strong><span>规则</span></div>
+            </div>
+            <el-tabs>
+              <el-tab-pane label="场景草稿">
+                <el-descriptions :column="2" border>
+                  <el-descriptions-item label="场景编码">{{ selectedIndustryTemplate.scene.sceneCode }}</el-descriptions-item>
+                  <el-descriptions-item label="场景名称">{{ selectedIndustryTemplate.scene.sceneName }}</el-descriptions-item>
+                  <el-descriptions-item label="业务域">{{ selectedIndustryTemplate.scene.businessDomain }}</el-descriptions-item>
+                  <el-descriptions-item label="对象维度">{{ selectedIndustryTemplate.scene.defaultObjectDimension }}</el-descriptions-item>
+                  <el-descriptions-item label="说明" :span="2">{{ selectedIndustryTemplate.scene.remark }}</el-descriptions-item>
+                </el-descriptions>
+              </el-tab-pane>
+              <el-tab-pane label="费用草稿">
+                <el-table :data="selectedIndustryTemplate.fees" border>
+                  <el-table-column label="费用编码" prop="feeCode" width="160" />
+                  <el-table-column label="费用名称" prop="feeName" min-width="180" />
+                  <el-table-column label="计价单位" prop="unitCode" width="120" />
+                  <el-table-column label="对象维度" prop="objectDimension" min-width="140" />
+                </el-table>
+              </el-tab-pane>
+              <el-tab-pane label="变量草稿">
+                <el-table :data="selectedIndustryTemplate.variables" border>
+                  <el-table-column label="变量编码" prop="variableCode" width="170" />
+                  <el-table-column label="变量名称" prop="variableName" min-width="170" />
+                  <el-table-column label="来源" prop="sourceType" width="110" />
+                  <el-table-column label="数据类型" prop="dataType" width="110" />
+                </el-table>
+              </el-tab-pane>
+              <el-tab-pane label="规则草稿">
+                <el-table :data="selectedIndustryTemplate.rules" border>
+                  <el-table-column label="规则编码" prop="ruleCode" width="170" />
+                  <el-table-column label="规则名称" prop="ruleName" min-width="180" />
+                  <el-table-column label="费用编码" prop="feeCode" width="150" />
+                  <el-table-column label="规则类型" prop="ruleType" width="120" />
+                  <el-table-column label="计量变量" prop="quantityVariableCode" min-width="160" />
+                </el-table>
+              </el-tab-pane>
+            </el-tabs>
+          </section>
+        </div>
+      </div>
+    </el-drawer>
 
     <el-dialog :title="title" v-model="open" width="620px" append-to-body>
       <el-form ref="sceneRef" :model="form" :rules="rules" label-width="100px">
@@ -883,6 +964,8 @@ const taskTypeOptions = ref([])
 const taskStatusOptions = ref([])
 const objectDimensionOptions = ['协力队', '协力单位', '班组', '人员', '设备', '船舶', '库区', '订单']
 const open = ref(false)
+const templateOpen = ref(false)
+const selectedIndustryTemplateCode = ref('PORT')
 const loading = ref(true)
 const showSearch = ref(true)
 const ids = ref([])
@@ -939,6 +1022,97 @@ const data = reactive({
 })
 
 const { queryParams, form, rules } = toRefs(data)
+
+const industryTemplates = [
+  {
+    code: 'PORT',
+    name: '港口综合结算模板',
+    industry: '港口物流',
+    summary: '覆盖装卸、堆存、港杂和危险品附加费，适合船舶/订单维度核算。',
+    scene: {
+      sceneCode: 'TPL_PORT_SETTLEMENT',
+      sceneName: '港口综合结算',
+      businessDomain: 'PORT',
+      sceneType: 'CONTRACT',
+      defaultObjectDimension: '订单',
+      remark: '港口行业模板：按订单聚合装卸、堆存、港杂及附加费。'
+    },
+    fees: [
+      { feeCode: 'PORT_LOAD', feeName: '装卸费', unitCode: 'TON', objectDimension: '订单' },
+      { feeCode: 'PORT_STORAGE', feeName: '堆存费', unitCode: 'DAY', objectDimension: '库区' },
+      { feeCode: 'PORT_MISC', feeName: '港杂费', unitCode: 'ORDER', objectDimension: '订单' }
+    ],
+    variables: [
+      { variableCode: 'PORT_WEIGHT', variableName: '计费重量', sourceType: 'INPUT', dataType: 'DECIMAL' },
+      { variableCode: 'PORT_STORAGE_DAYS', variableName: '堆存天数', sourceType: 'INPUT', dataType: 'DECIMAL' },
+      { variableCode: 'PORT_CARGO_FLAG', variableName: '货类标识', sourceType: 'INPUT', dataType: 'STRING' }
+    ],
+    rules: [
+      { ruleCode: 'PORT_LOAD_BY_WEIGHT', ruleName: '装卸按重量计费', feeCode: 'PORT_LOAD', ruleType: 'FIXED_RATE', quantityVariableCode: 'PORT_WEIGHT' },
+      { ruleCode: 'PORT_STORAGE_BY_DAY', ruleName: '堆存按天计费', feeCode: 'PORT_STORAGE', ruleType: 'TIER_RATE', quantityVariableCode: 'PORT_STORAGE_DAYS' }
+    ]
+  },
+  {
+    code: 'LABOR',
+    name: '人力外包结算模板',
+    industry: '人力服务',
+    summary: '覆盖工时、班次、加班和绩效扣罚，适合人员/班组维度核算。',
+    scene: {
+      sceneCode: 'TPL_LABOR_SETTLEMENT',
+      sceneName: '人力外包结算',
+      businessDomain: 'LABOR',
+      sceneType: 'CONTRACT',
+      defaultObjectDimension: '人员',
+      remark: '人力行业模板：按人员和班组沉淀工时、班次与绩效规则。'
+    },
+    fees: [
+      { feeCode: 'LABOR_HOUR', feeName: '工时费', unitCode: 'HOUR', objectDimension: '人员' },
+      { feeCode: 'LABOR_SHIFT', feeName: '班次费', unitCode: 'SHIFT', objectDimension: '班组' },
+      { feeCode: 'LABOR_OVERTIME', feeName: '加班费', unitCode: 'HOUR', objectDimension: '人员' }
+    ],
+    variables: [
+      { variableCode: 'LABOR_HOURS', variableName: '有效工时', sourceType: 'INPUT', dataType: 'DECIMAL' },
+      { variableCode: 'LABOR_SHIFT_COUNT', variableName: '班次数', sourceType: 'INPUT', dataType: 'DECIMAL' },
+      { variableCode: 'LABOR_LEVEL', variableName: '人员等级', sourceType: 'INPUT', dataType: 'STRING' }
+    ],
+    rules: [
+      { ruleCode: 'LABOR_HOUR_RATE', ruleName: '工时单价计费', feeCode: 'LABOR_HOUR', ruleType: 'FIXED_RATE', quantityVariableCode: 'LABOR_HOURS' },
+      { ruleCode: 'LABOR_OVERTIME_RATE', ruleName: '加班单价计费', feeCode: 'LABOR_OVERTIME', ruleType: 'FIXED_RATE', quantityVariableCode: 'LABOR_HOURS' }
+    ]
+  },
+  {
+    code: 'EQUIPMENT',
+    name: '设备租赁结算模板',
+    industry: '设备运营',
+    summary: '覆盖台班、运行时长、能耗和保底封顶，适合设备维度核算。',
+    scene: {
+      sceneCode: 'TPL_EQUIPMENT_RENTAL',
+      sceneName: '设备租赁结算',
+      businessDomain: 'EQUIPMENT',
+      sceneType: 'CONTRACT',
+      defaultObjectDimension: '设备',
+      remark: '设备行业模板：按设备台班、运行小时和能耗沉淀结算口径。'
+    },
+    fees: [
+      { feeCode: 'EQ_RENT', feeName: '设备租赁费', unitCode: 'DAY', objectDimension: '设备' },
+      { feeCode: 'EQ_RUNTIME', feeName: '运行时长费', unitCode: 'HOUR', objectDimension: '设备' },
+      { feeCode: 'EQ_ENERGY', feeName: '能耗费', unitCode: 'KWH', objectDimension: '设备' }
+    ],
+    variables: [
+      { variableCode: 'EQ_RENT_DAYS', variableName: '租赁天数', sourceType: 'INPUT', dataType: 'DECIMAL' },
+      { variableCode: 'EQ_RUNTIME_HOURS', variableName: '运行小时', sourceType: 'INPUT', dataType: 'DECIMAL' },
+      { variableCode: 'EQ_ENERGY_KWH', variableName: '能耗度数', sourceType: 'INPUT', dataType: 'DECIMAL' }
+    ],
+    rules: [
+      { ruleCode: 'EQ_RENT_BY_DAY', ruleName: '租赁按天计费', feeCode: 'EQ_RENT', ruleType: 'FIXED_RATE', quantityVariableCode: 'EQ_RENT_DAYS' },
+      { ruleCode: 'EQ_ENERGY_BY_KWH', ruleName: '能耗按度计费', feeCode: 'EQ_ENERGY', ruleType: 'FIXED_RATE', quantityVariableCode: 'EQ_ENERGY_KWH' }
+    ]
+  }
+]
+
+const selectedIndustryTemplate = computed(() =>
+  industryTemplates.find(item => item.code === selectedIndustryTemplateCode.value) || industryTemplates[0]
+)
 
 const copyRules = {
   sceneCode: [{ required: true, message: '新场景编码不能为空', trigger: 'blur' }],
@@ -1289,6 +1463,15 @@ function handleExport() {
   proxy.download('cost/scene/export', {
     ...queryParams.value
   }, `scene_${new Date().getTime()}.xlsx`)
+}
+
+async function copyIndustryTemplate() {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(selectedIndustryTemplate.value, null, 2))
+    proxy.$modal.msgSuccess('行业模板 JSON 已复制')
+  } catch (error) {
+    proxy.$modal.msgWarning('浏览器未授予剪贴板权限，请手动复制模板内容')
+  }
 }
 
 function handleOpenDictView() {
@@ -2215,6 +2398,101 @@ getList()
   color: var(--el-text-color-secondary);
 }
 
+.scene-center__template-library {
+  display: grid;
+  gap: 16px;
+}
+
+.scene-center__template-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.scene-center__template-list {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.scene-center__template-item {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-bg-color-overlay);
+  text-align: left;
+  cursor: pointer;
+}
+
+.scene-center__template-item.is-active {
+  border-color: var(--el-color-primary);
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 38%, var(--el-bg-color-overlay));
+}
+
+.scene-center__template-item strong,
+.scene-center__template-item span,
+.scene-center__template-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-center__template-item span,
+.scene-center__template-item small {
+  color: var(--el-text-color-secondary);
+}
+
+.scene-center__template-detail {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.scene-center__template-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.scene-center__template-head h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.scene-center__template-head p {
+  margin: 6px 0 0;
+  color: var(--el-text-color-secondary);
+}
+
+.scene-center__template-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.scene-center__template-stats div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-bg-color-overlay);
+}
+
+.scene-center__template-stats strong {
+  color: var(--el-color-primary);
+  font-size: 22px;
+}
+
+.scene-center__template-stats span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
 .scene-center__alert,
 .scene-center__query {
   margin-bottom: 0;
@@ -2392,7 +2670,9 @@ getList()
   .scene-center__publish-check-summary,
   .scene-center__ledger-metrics,
   .scene-center__compare-impact-list,
-  .scene-center__publish-impact-list {
+  .scene-center__publish-impact-list,
+  .scene-center__template-layout,
+  .scene-center__template-stats {
     grid-template-columns: 1fr;
   }
 
