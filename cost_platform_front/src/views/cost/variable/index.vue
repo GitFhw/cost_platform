@@ -186,6 +186,19 @@
           </div>
         </template>
       </el-table-column>
+      <el-table-column label="远程状态" width="220" align="center">
+        <template #default="scope">
+          <div v-if="scope.row.sourceType === 'REMOTE'" class="variable-center__remote-status">
+            <el-tag :type="resolveRemoteStatusTag(scope.row.remoteTestStatus)" effect="light">
+              {{ resolveRemoteStatusText(scope.row.remoteTestStatus) }}
+            </el-tag>
+            <span>{{ formatDateTime(scope.row.remoteTestStatus?.testedAt) }}</span>
+            <small>{{ resolveRemoteStatusReason(scope.row.remoteTestStatus) }}</small>
+            <small>缓存：{{ resolveDictLabel(cachePolicyOptions, scope.row.cachePolicy) }}</small>
+          </div>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" prop="status" width="100" align="center">
         <template #default="scope"><dict-tag :options="variableStatusOptions" :value="scope.row.status" /></template>
       </el-table-column>
@@ -805,6 +818,7 @@ import { parseJsonText, safeFormatJson } from '@/utils/jsonTools'
 const { proxy } = getCurrentInstance()
 const settingsStore = useSettingsStore()
 const isCompactMode = computed(() => settingsStore.costPageMode === 'COMPACT')
+const REMOTE_TEST_STATUS_KEY = 'cost_variable_remote_test_status'
 const loading = ref(true)
 const showSearch = ref(true)
 const open = ref(false)
@@ -814,6 +828,7 @@ const ids = ref([])
 const single = ref(true)
 const multiple = ref(true)
 const initialStatus = ref(undefined)
+const remoteTestStatusMap = ref(loadRemoteTestStatusMap())
 
 const variableList = ref([])
 const sceneOptions = ref([])
@@ -1183,7 +1198,7 @@ async function getList() {
   try {
     await loadBaseOptions()
     const [rows, statsResponse] = await Promise.all([listVariable(queryParams.value), getVariableStats(queryParams.value)])
-    variableList.value = rows.rows
+    variableList.value = (rows.rows || []).map(withRemoteTestStatus)
     total.value = rows.total
     groupOptions.value = await loadGroups(queryParams.value.sceneId)
     Object.assign(statistics, {
@@ -1497,11 +1512,79 @@ function buildRemoteRequestPayload(row) {
   }
 }
 
+function loadRemoteTestStatusMap() {
+  try {
+    const raw = localStorage.getItem(REMOTE_TEST_STATUS_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveRemoteTestStatusMap() {
+  try {
+    localStorage.setItem(REMOTE_TEST_STATUS_KEY, JSON.stringify(remoteTestStatusMap.value))
+  } catch {
+    // 忽略本地存储限制，列表仍会展示本次会话内的测试结果。
+  }
+}
+
+function remoteStatusKey(row = {}) {
+  return String(row.variableId || `${row.sceneId || ''}:${row.variableCode || ''}`)
+}
+
+function withRemoteTestStatus(row = {}) {
+  return {
+    ...row,
+    remoteTestStatus: remoteTestStatusMap.value[remoteStatusKey(row)]
+  }
+}
+
+function rememberRemoteTestStatus(row = {}, result = {}) {
+  const key = remoteStatusKey(row)
+  if (!key || key === ':') {
+    return
+  }
+  remoteTestStatusMap.value = {
+    ...remoteTestStatusMap.value,
+    [key]: {
+      success: Boolean(result.success),
+      message: result.message || '',
+      diagnosticMessage: result.diagnosticMessage || '',
+      failureStage: result.failureStage || '',
+      statusCode: result.statusCode,
+      elapsedMs: result.elapsedMs,
+      testedAt: new Date().toISOString()
+    }
+  }
+  saveRemoteTestStatusMap()
+  variableList.value = variableList.value.map(item => remoteStatusKey(item) === key ? withRemoteTestStatus(item) : item)
+}
+
+function resolveRemoteStatusTag(status) {
+  if (!status) return 'info'
+  return status.success ? 'success' : 'danger'
+}
+
+function resolveRemoteStatusText(status) {
+  if (!status) return '未测试'
+  return status.success ? '最近通过' : '最近失败'
+}
+
+function resolveRemoteStatusReason(status) {
+  if (!status) return '请先测试接口'
+  if (status.success) {
+    return status.elapsedMs != null ? `耗时 ${status.elapsedMs} ms` : (status.message || '接口连通')
+  }
+  return status.diagnosticMessage || status.message || status.failureStage || '接口测试失败'
+}
+
 async function handleTestRemote() {
   const row = currentRow()
   if (!row) return
   const response = await testVariableRemote(buildRemoteRequestPayload(row))
   testResult.value = response.data
+  rememberRemoteTestStatus(row, response.data)
   testOpen.value = true
 }
 
@@ -1533,6 +1616,7 @@ async function handleTestRemoteDraft() {
   await validateRemoteFormBeforeInvoke()
   const response = await testVariableRemote(buildRemoteRequestPayload(form.value))
   testResult.value = response.data
+  rememberRemoteTestStatus(form.value, response.data)
   testOpen.value = true
 }
 
@@ -1782,6 +1866,9 @@ getList()
 .variable-center__source-cell { display: grid; gap: 4px; line-height: 1.5; }
 .variable-center__source-cell strong { font-size: 13px; color: var(--el-text-color-primary); }
 .variable-center__source-cell span { font-size: 12px; color: var(--el-text-color-secondary); }
+.variable-center__remote-status { display: grid; justify-items: center; gap: 4px; line-height: 1.4; }
+.variable-center__remote-status span,
+.variable-center__remote-status small { max-width: 190px; color: var(--el-text-color-secondary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .variable-center__test-dialog { display: grid; gap: 12px; }
 .variable-center__test-preview { display: grid; gap: 8px; }
 .variable-center__test-preview-label { font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); }
