@@ -672,29 +672,36 @@
         <el-descriptions :column="1" border>
           <el-descriptions-item label="变量类型">{{ resolveDictLabel(variableTypeOptions, detailInfo.variableType) }}</el-descriptions-item>
           <el-descriptions-item label="来源类型">{{ resolveDictLabel(sourceTypeOptions, detailInfo.sourceType) }}</el-descriptions-item>
-          <el-descriptions-item label="来源系统">{{ detailInfo.sourceSystem || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="字典类型">{{ resolveDictTypeLabel(detailInfo.dictType) }}</el-descriptions-item>
-          <el-descriptions-item label="第三方接口">{{ detailInfo.remoteApi || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="请求方式">{{ resolveRemoteOptionLabel(requestMethodOptions, detailInfo.requestMethod) }}</el-descriptions-item>
-          <el-descriptions-item label="内容类型">{{ detailInfo.contentType || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="适配器类型">{{ resolveRemoteOptionLabel(adapterTypeOptions, detailInfo.adapterType) }}</el-descriptions-item>
-          <el-descriptions-item label="鉴权方式">{{ resolveDictLabel(authTypeOptions, detailInfo.authType) }}</el-descriptions-item>
-          <el-descriptions-item label="来源路径">{{ detailInfo.dataPath || '未配置，按变量编码平铺取值' }}</el-descriptions-item>
-          <el-descriptions-item label="同步方式">{{ resolveDictLabel(syncModeOptions, detailInfo.syncMode) }}</el-descriptions-item>
-          <el-descriptions-item label="缓存策略">{{ resolveDictLabel(cachePolicyOptions, detailInfo.cachePolicy) }}</el-descriptions-item>
-          <el-descriptions-item label="失败兜底">{{ resolveDictLabel(fallbackPolicyOptions, detailInfo.fallbackPolicy) }}</el-descriptions-item>
+          <el-descriptions-item label="数据类型">{{ resolveDictLabel(dataTypeOptions, detailInfo.dataType) }}</el-descriptions-item>
           <el-descriptions-item label="默认值">{{ detailInfo.defaultValue || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="公式编码">{{ detailInfo.formulaCode || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="中文公式">{{ detailInfo.businessFormula || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="公式表达式">{{ detailInfo.formulaExpr || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="查询参数JSON"><JsonEditor :model-value="formatJson(detailInfo.queryConfigJson)" title="查询参数 JSON" readonly :rows="4" /></el-descriptions-item>
-          <el-descriptions-item label="请求头JSON"><JsonEditor :model-value="formatJson(detailInfo.requestHeadersJson)" title="请求头 JSON" readonly :rows="4" /></el-descriptions-item>
-          <el-descriptions-item label="请求体模板"><JsonEditor :model-value="formatJson(detailInfo.bodyTemplateJson)" title="请求体模板" readonly :rows="4" /></el-descriptions-item>
-          <el-descriptions-item label="鉴权配置JSON"><JsonEditor :model-value="formatJson(detailInfo.authConfigJson)" title="鉴权配置 JSON" readonly :rows="4" /></el-descriptions-item>
-          <el-descriptions-item label="响应提取配置JSON"><JsonEditor :model-value="formatJson(detailInfo.responseConfigJson)" title="响应提取配置 JSON" readonly :rows="4" /></el-descriptions-item>
-          <el-descriptions-item label="映射配置JSON"><JsonEditor :model-value="formatJson(detailInfo.mappingConfigJson)" title="映射配置 JSON" readonly :rows="4" /></el-descriptions-item>
-          <el-descriptions-item label="分页策略JSON"><JsonEditor :model-value="formatJson(detailInfo.pageConfigJson)" title="分页策略 JSON" readonly :rows="4" /></el-descriptions-item>
-          <el-descriptions-item label="适配器配置JSON"><JsonEditor :model-value="formatJson(detailInfo.adapterConfigJson)" title="适配器配置 JSON" readonly :rows="4" /></el-descriptions-item>
+          <el-descriptions-item v-if="isPathSourceType(detailInfo.sourceType)" label="来源路径">{{ detailInfo.dataPath || '未配置，按变量编码平铺取值' }}</el-descriptions-item>
+          <template v-if="detailInfo.sourceType === 'DICT'">
+            <el-descriptions-item label="字典类型">{{ resolveDictTypeLabel(detailInfo.dictType) }}</el-descriptions-item>
+          </template>
+          <template v-if="detailInfo.sourceType === 'REMOTE'">
+            <el-descriptions-item label="来源系统">{{ detailInfo.sourceSystem || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="第三方接口">{{ detailInfo.remoteApi || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="请求方式">{{ resolveRemoteOptionLabel(requestMethodOptions, detailInfo.requestMethod) }}</el-descriptions-item>
+            <el-descriptions-item label="内容类型">{{ detailInfo.contentType || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="适配器类型">{{ resolveRemoteOptionLabel(adapterTypeOptions, detailInfo.adapterType) }}</el-descriptions-item>
+            <el-descriptions-item label="鉴权方式">{{ resolveDictLabel(authTypeOptions, detailInfo.authType) }}</el-descriptions-item>
+            <el-descriptions-item label="同步方式">{{ resolveDictLabel(syncModeOptions, detailInfo.syncMode) }}</el-descriptions-item>
+            <el-descriptions-item label="缓存策略">{{ resolveDictLabel(cachePolicyOptions, detailInfo.cachePolicy) }}</el-descriptions-item>
+            <el-descriptions-item label="失败兜底">{{ resolveDictLabel(fallbackPolicyOptions, detailInfo.fallbackPolicy) }}</el-descriptions-item>
+            <el-descriptions-item v-if="hasDetailValue(detailInfo.queryConfigJson)" label="查询参数JSON"><JsonEditor :model-value="formatJson(detailInfo.queryConfigJson)" title="查询参数 JSON" readonly :rows="4" /></el-descriptions-item>
+            <el-descriptions-item v-if="hasDetailValue(detailInfo.requestHeadersJson)" label="请求头JSON"><JsonEditor :model-value="formatJson(detailInfo.requestHeadersJson)" title="请求头 JSON" readonly :rows="4" /></el-descriptions-item>
+            <el-descriptions-item v-if="hasDetailValue(detailInfo.bodyTemplateJson)" label="请求体模板"><JsonEditor :model-value="formatJson(detailInfo.bodyTemplateJson)" title="请求体模板" readonly :rows="4" /></el-descriptions-item>
+            <el-descriptions-item v-if="hasDetailValue(detailInfo.authConfigJson)" label="鉴权配置JSON"><JsonEditor :model-value="formatJson(detailInfo.authConfigJson)" title="鉴权配置 JSON" readonly :rows="4" /></el-descriptions-item>
+            <el-descriptions-item v-if="hasDetailValue(detailInfo.responseConfigJson)" label="响应提取配置JSON"><JsonEditor :model-value="formatJson(detailInfo.responseConfigJson)" title="响应提取配置 JSON" readonly :rows="4" /></el-descriptions-item>
+            <el-descriptions-item v-if="hasDetailValue(detailInfo.mappingConfigJson)" label="映射配置JSON"><JsonEditor :model-value="formatJson(detailInfo.mappingConfigJson)" title="映射配置 JSON" readonly :rows="4" /></el-descriptions-item>
+            <el-descriptions-item v-if="hasDetailValue(detailInfo.pageConfigJson)" label="分页策略JSON"><JsonEditor :model-value="formatJson(detailInfo.pageConfigJson)" title="分页策略 JSON" readonly :rows="4" /></el-descriptions-item>
+            <el-descriptions-item v-if="hasDetailValue(detailInfo.adapterConfigJson)" label="适配器配置JSON"><JsonEditor :model-value="formatJson(detailInfo.adapterConfigJson)" title="适配器配置 JSON" readonly :rows="4" /></el-descriptions-item>
+          </template>
+          <template v-if="detailInfo.sourceType === 'FORMULA'">
+            <el-descriptions-item label="公式编码">{{ detailInfo.formulaCode || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="中文公式">{{ detailInfo.businessFormula || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="公式表达式">{{ detailInfo.formulaExpr || '-' }}</el-descriptions-item>
+          </template>
           <el-descriptions-item label="备注">{{ detailInfo.remark || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -1804,6 +1811,14 @@ function resolveVariableSourceHint(row) {
     return row.businessFormula || row.formulaExpr || '在公式实验室维护计算口径'
   }
   return row.dataPath ? '按来源路径读取业务输入' : '按变量编码读取平铺输入'
+}
+
+function isPathSourceType(sourceType) {
+  return ['INPUT', 'DICT', 'REMOTE'].includes(sourceType)
+}
+
+function hasDetailValue(value) {
+  return value !== undefined && value !== null && String(value).trim() !== ''
 }
 
 function formatJson(value) {
