@@ -413,12 +413,19 @@
               <dict-tag :options="taskStatusOptions" :value="scope.row.taskStatus" />
             </template>
           </el-table-column>
-          <el-table-column label="进度" width="120" align="center">
-            <template #default="scope">{{ scope.row.progressPercent }}%</template>
+          <el-table-column label="进度" width="180" align="center">
+            <template #default="scope">
+              <el-progress
+                :percentage="normalizePercent(scope.row.progressPercent)"
+                :status="resolveProgressStatus(scope.row.taskStatus)"
+                :stroke-width="8"
+              />
+            </template>
           </el-table-column>
           <el-table-column label="成功/失败" width="120" align="center">
             <template #default="scope">{{ scope.row.successCount }}/{{ scope.row.failCount }}</template>
           </el-table-column>
+          <el-table-column label="执行节点" prop="executeNode" width="120" align="center" />
           <el-table-column label="操作" width="240" fixed="right" align="center">
             <template #default="scope">
               <div class="cost-row-actions">
@@ -474,6 +481,24 @@
             <el-button icon="List" @click="openResultCenter(detailData.task)">查看结果</el-button>
           </div>
         </section>
+
+        <div class="run-page__progress-panel">
+          <div class="run-page__progress-title">
+            <span>整体进度</span>
+            <strong>{{ normalizePercent(partitionMonitorData.summary?.progressPercent) }}%</strong>
+          </div>
+          <el-progress
+            :percentage="normalizePercent(partitionMonitorData.summary?.progressPercent)"
+            :status="resolveProgressStatus(partitionMonitorData.task?.taskStatus)"
+            :stroke-width="12"
+          />
+          <div class="run-page__progress-breakdown">
+            <span>成功 {{ partitionMonitorData.summary?.successCount || 0 }}</span>
+            <span>失败 {{ partitionMonitorData.summary?.failCount || 0 }}</span>
+            <span>分片 {{ partitionMonitorData.summary?.partitionCount || 0 }}</span>
+            <span>执行节点 {{ partitionMonitorData.summary?.activeOwnerCount || 0 }}</span>
+          </div>
+        </div>
 
         <div class="run-page__summary run-page__summary--detail">
           <div class="run-page__summary-card"><span>输入总量</span><strong>{{ detailData.summary?.sourceCount || 0 }}</strong></div>
@@ -787,6 +812,15 @@
         <el-table-column label="状态" width="120" align="center">
           <template #default="scope">
             <el-tag :type="resolvePartitionTag(scope.row.partitionStatus)">{{ resolveTaskStatus(scope.row.partitionStatus) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="分片进度" width="160" align="center">
+          <template #default="scope">
+            <el-progress
+              :percentage="resolvePartitionProgress(scope.row)"
+              :status="resolveProgressStatus(scope.row.partitionStatus)"
+              :stroke-width="8"
+            />
           </template>
         </el-table-column>
         <el-table-column label="落库模式" width="120" align="center">
@@ -1543,6 +1577,26 @@ function resolvePartitionTag(value) {
   return 'info'
 }
 
+function resolveProgressStatus(value) {
+  if (value === 'SUCCESS') return 'success'
+  if (value === 'FAILED' || value === 'PARTIAL_SUCCESS') return 'exception'
+  if (value === 'RUNNING' || value === 'INIT') return ''
+  return ''
+}
+
+function normalizePercent(value) {
+  const number = Number(value || 0)
+  if (Number.isNaN(number)) return 0
+  return Math.max(0, Math.min(100, Math.round(number)))
+}
+
+function resolvePartitionProgress(row) {
+  const total = Number(row?.totalCount || 0)
+  if (!total) return normalizePercent(row?.partitionStatus === 'SUCCESS' ? 100 : 0)
+  const processed = Number(row?.processedCount || 0)
+  return normalizePercent((processed / total) * 100)
+}
+
 function resolvePartitionPersistMode(value) {
   if (value === 'SINGLE_FALLBACK') return '逐条降级'
   return '批量写入'
@@ -1853,6 +1907,31 @@ onActivated(async () => {
   align-content: flex-start;
   justify-content: flex-end;
   margin-top: 0;
+}
+.run-page__progress-panel {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--el-bg-color-overlay) 92%, var(--el-color-primary-light-9) 8%);
+}
+.run-page__progress-title,
+.run-page__progress-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.run-page__progress-title span,
+.run-page__progress-breakdown {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+.run-page__progress-title strong {
+  color: var(--el-text-color-primary);
+  font-size: 24px;
 }
 .run-page__detail-tabs {
   padding: 14px 16px 16px;
