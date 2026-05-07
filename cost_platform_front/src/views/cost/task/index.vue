@@ -430,6 +430,7 @@
             <template #default="scope">
               <div class="cost-row-actions">
                 <el-button link type="primary" icon="View" @click="handleDetail(scope.row)">详情</el-button>
+                <el-button v-if="isTaskFailed(scope.row)" link type="danger" icon="WarningFilled" @click="handleDetail(scope.row, 'overview')">诊断</el-button>
                 <el-button link type="success" icon="Histogram" @click="handleOpenPartitionMonitor(scope.row)">分片</el-button>
                 <el-dropdown trigger="click" @command="command => handleTaskRowCommand(command, scope.row)">
                   <el-button link type="primary" icon="MoreFilled">更多</el-button>
@@ -510,8 +511,8 @@
           <div class="run-page__summary-card"><span>无 owner 运行中</span><strong>{{ detailData.summary?.runningWithoutOwnerCount || 0 }}</strong></div>
         </div>
 
-        <el-tabs class="run-page__detail-tabs">
-          <el-tab-pane label="任务概览">
+        <el-tabs v-model="detailActiveTab" class="run-page__detail-tabs">
+          <el-tab-pane label="任务概览" name="overview">
             <div v-if="detailData.summary?.topErrors?.length" class="run-page__detail-section">
               <div class="run-page__section-head">
                 <div>
@@ -527,7 +528,7 @@
             <el-empty v-else description="当前任务没有失败聚合信息，可继续查看分片或任务明细。" :image-size="72" />
           </el-tab-pane>
 
-          <el-tab-pane label="关联批次">
+          <el-tab-pane label="关联批次" name="batch">
             <template v-if="detailData.inputBatch?.batch">
               <div class="run-page__batch-card">
                 <span>批次号：{{ detailData.inputBatch.batch.batchNo }}</span>
@@ -565,7 +566,7 @@
             <el-empty v-else description="当前任务未关联导入批次，可能是 JSON 直传任务。" :image-size="72" />
           </el-tab-pane>
 
-          <el-tab-pane label="分片执行">
+          <el-tab-pane label="分片执行" name="partition">
             <div class="run-page__detail-section">
               <div class="run-page__section-head">
                 <div>
@@ -612,7 +613,7 @@
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="任务明细">
+          <el-tab-pane label="任务明细" name="details">
             <div class="run-page__detail-section">
               <div class="run-page__section-head">
                 <div>
@@ -894,6 +895,7 @@ const templateFields = ref([])
 const templateMessage = ref('')
 const detailOpen = ref(false)
 const detailData = ref({})
+const detailActiveTab = ref('overview')
 const batchDialogOpen = ref(false)
 const batchPickerOpen = ref(false)
 const batchPreview = ref({})
@@ -1473,13 +1475,14 @@ function openResultCenter(task) {
   })
 }
 
-async function handleDetail(row) {
+async function handleDetail(row, activeTab = 'overview') {
   detailQuery.pageNum = 1
   const resp = await getTaskDetail(row.taskId, detailQuery)
   detailData.value = resp.data || {}
   detailQuery.pageSize = detailData.value.detailPage?.pageSize || detailQuery.pageSize
   detailBatchQuery.pageNum = 1
   detailBatchQuery.pageSize = 10
+  detailActiveTab.value = activeTab
   detailOpen.value = true
 }
 
@@ -1506,7 +1509,7 @@ async function openTaskByRouteContext() {
   if (routeTaskContext.view === 'partition') {
     await handleOpenPartitionMonitor(task)
   } else {
-    await handleDetail(task)
+    await handleDetail(task, routeTaskContext.view === 'diagnosis' ? 'overview' : 'overview')
   }
   lastOpenedRouteTaskKey.value = currentKey
 }
@@ -1575,6 +1578,10 @@ function resolvePartitionTag(value) {
   if (value === 'FAILED') return 'danger'
   if (value === 'RUNNING') return 'warning'
   return 'info'
+}
+
+function isTaskFailed(row) {
+  return ['FAILED', 'PARTIAL_SUCCESS'].includes(row?.taskStatus) || Number(row?.failCount || 0) > 0
 }
 
 function resolveProgressStatus(value) {
