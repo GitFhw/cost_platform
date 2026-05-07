@@ -23,6 +23,23 @@
       </div>
     </div>
 
+    <div v-if="showGovernanceOverview && hasResult" class="publish-precheck-panel__governance">
+      <div
+        v-for="item in governanceOverviewItems"
+        :key="item.key"
+        class="publish-precheck-panel__governance-card"
+        :class="{ 'is-clean': item.count === 0 }"
+      >
+        <div class="publish-precheck-panel__governance-head">
+          <span>{{ item.label }}</span>
+          <el-tag :type="item.count > 0 ? item.tag : 'success'" size="small">{{ item.count > 0 ? '需处理' : '通过' }}</el-tag>
+        </div>
+        <strong>{{ item.count }}</strong>
+        <small>{{ item.desc }}</small>
+        <p v-if="item.sample">{{ item.sample }}</p>
+      </div>
+    </div>
+
     <el-alert
       v-if="showConclusion && hasResult"
       :type="normalized.publishable === false ? 'warning' : 'success'"
@@ -84,6 +101,10 @@ const props = defineProps({
     default: undefined
   },
   showSummary: {
+    type: Boolean,
+    default: true
+  },
+  showGovernanceOverview: {
     type: Boolean,
     default: true
   },
@@ -168,7 +189,52 @@ const hasResult = computed(() => {
   )
 })
 
+const problemItems = computed(() => normalized.value.items.filter(item => ['BLOCK', 'WARN'].includes(item.level)))
+
+const governanceOverviewItems = computed(() => [
+  buildGovernanceOverviewItem({
+    key: 'missingRule',
+    label: '缺规则',
+    desc: '费用未挂规则、场景无规则或阶梯规则缺明细',
+    tag: 'danger',
+    matcher: item => ['NO_RULE', 'FEE_RULE_MISSING', 'RULE_TIER_MISSING'].includes(item.code)
+  }),
+  buildGovernanceOverviewItem({
+    key: 'missingVariable',
+    label: '缺变量',
+    desc: '规则条件、计量字段或公式依赖缺少可发布变量',
+    tag: 'danger',
+    matcher: item => ['NO_VARIABLE', 'RULE_QUANTITY_VARIABLE_MISSING', 'RULE_CONDITION_VARIABLE_MISSING', 'FORMULA_DEPENDENCY_VARIABLE_MISSING'].includes(item.code)
+  }),
+  buildGovernanceOverviewItem({
+    key: 'formulaIssue',
+    label: '公式问题',
+    desc: '公式编码缺失、公式资产缺失、依赖缺失或循环依赖',
+    tag: 'warning',
+    matcher: item => String(item.code || '').startsWith('FORMULA_') || String(item.title || '').includes('公式')
+  }),
+  buildGovernanceOverviewItem({
+    key: 'disabledObject',
+    label: '停用对象',
+    desc: '场景已停用，或引用对象不存在、未启用',
+    tag: 'warning',
+    matcher: item => String(item.code || '').includes('DISABLED') || /已停用|未启用|停用/.test(`${item.title || ''}${item.message || ''}`)
+  })
+])
+
 const showImpact = computed(() => normalized.value.impactedFees.length > 0)
+
+function buildGovernanceOverviewItem({ key, label, desc, tag, matcher }) {
+  const matched = problemItems.value.filter(matcher)
+  return {
+    key,
+    label,
+    desc,
+    tag,
+    count: matched.length,
+    sample: matched[0]?.message || ''
+  }
+}
 </script>
 
 <style scoped lang="scss">
@@ -203,6 +269,61 @@ const showImpact = computed(() => normalized.value.impactedFees.length > 0)
   line-height: 1.2;
 }
 
+.publish-precheck-panel__governance {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.publish-precheck-panel__governance-card {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--el-color-warning-light-5);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--el-color-warning-light-9) 56%, var(--el-bg-color-overlay));
+}
+
+.publish-precheck-panel__governance-card.is-clean {
+  border-color: var(--el-color-success-light-7);
+  background: color-mix(in srgb, var(--el-color-success-light-9) 56%, var(--el-bg-color-overlay));
+}
+
+.publish-precheck-panel__governance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.publish-precheck-panel__governance-head span {
+  min-width: 0;
+  color: var(--el-text-color-regular);
+  font-weight: 700;
+}
+
+.publish-precheck-panel__governance-card strong {
+  color: var(--el-text-color-primary);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.publish-precheck-panel__governance-card small,
+.publish-precheck-panel__governance-card p {
+  color: var(--el-text-color-secondary);
+}
+
+.publish-precheck-panel__governance-card p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .publish-precheck-panel__alert,
 .publish-precheck-panel__table,
 .publish-precheck-panel__impact {
@@ -210,13 +331,15 @@ const showImpact = computed(() => normalized.value.impactedFees.length > 0)
 }
 
 @media (max-width: 1280px) {
-  .publish-precheck-panel__summary {
+  .publish-precheck-panel__summary,
+  .publish-precheck-panel__governance {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 768px) {
-  .publish-precheck-panel__summary {
+  .publish-precheck-panel__summary,
+  .publish-precheck-panel__governance {
     grid-template-columns: 1fr;
   }
 }
