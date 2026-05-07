@@ -43,9 +43,54 @@ public class CostFeeGovernanceCheckVo {
     private String feeName;
 
     /**
+     * 业务域
+     */
+    private String businessDomain;
+
+    /**
+     * 场景默认对象维度
+     */
+    private String sceneDefaultObjectDimension;
+
+    /**
+     * 费用分类
+     */
+    private String feeCategory;
+
+    /**
+     * 计价单位
+     */
+    private String unitCode;
+
+    /**
+     * 影响因素摘要
+     */
+    private String factorSummary;
+
+    /**
+     * 适用范围说明
+     */
+    private String scopeDescription;
+
+    /**
+     * 费用对象维度
+     */
+    private String objectDimension;
+
+    /**
+     * 排序号
+     */
+    private Integer sortNo;
+
+    /**
      * 状态
      */
     private String status;
+
+    /**
+     * 备注
+     */
+    private String remark;
 
     /**
      * 规则引用数量
@@ -106,4 +151,19 @@ public class CostFeeGovernanceCheckVo {
      * Fee input contracts.
      */
     private List<CostFeeVariableContractVo> variableContracts = new ArrayList<>();
+
+    /**
+     * Linked rule summaries.
+     */
+    private List<CostFeeRuleSummaryVo> ruleSummaries = new ArrayList<>();
+
+    /**
+     * Publish version references.
+     */
+    private List<CostFeePublishRefVo> publishRefs = new ArrayList<>();
+
+    /**
+     * Recent result ledger references.
+     */
+    private List<CostFeeResultRefVo> resultRefs = new ArrayList<>();
 }

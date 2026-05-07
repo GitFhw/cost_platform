@@ -104,9 +104,18 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                f.scene_id as sceneId,
                s.scene_code as sceneCode,
                s.scene_name as sceneName,
+               s.business_domain as businessDomain,
+               s.default_object_dimension as sceneDefaultObjectDimension,
                f.fee_code as feeCode,
                f.fee_name as feeName,
+               f.fee_category as feeCategory,
+               f.unit_code as unitCode,
+               f.factor_summary as factorSummary,
+               f.scope_description as scopeDescription,
+               f.object_dimension as objectDimension,
+               f.sort_no as sortNo,
                f.status as status,
+               f.remark as remark,
                (select count(1) from cost_rule r where r.fee_id = f.fee_id) as ruleCount,
                (select count(1) from cost_fee_variable_rel rel where rel.fee_id = f.fee_id) as variableRelCount,
                (select count(1)
@@ -146,6 +155,68 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         left join cost_rule r on r.rule_id = rel.source_rule_id
         where rel.fee_id = #{feeId}
         order by rel.sort_no asc, rel.rel_id asc
+    </select>
+
+    <select id="selectFeeRuleSummaries" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFeeRuleSummaryVo">
+        select r.rule_id as ruleId,
+               r.scene_id as sceneId,
+               r.fee_id as feeId,
+               r.rule_code as ruleCode,
+               r.rule_name as ruleName,
+               r.rule_type as ruleType,
+               r.pricing_mode as pricingMode,
+               r.priority as priority,
+               r.quantity_variable_code as quantityVariableCode,
+               r.amount_formula_code as amountFormulaCode,
+               r.status as status,
+               (select count(1) from cost_rule_condition c where c.rule_id = r.rule_id) as conditionCount,
+               (select count(1) from cost_rule_tier t where t.rule_id = r.rule_id) as tierCount
+        from cost_rule r
+        where r.fee_id = #{feeId}
+        order by r.priority asc, r.sort_no asc, r.rule_id asc
+        limit 20
+    </select>
+
+    <select id="selectFeePublishRefs" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFeePublishRefVo">
+        select ver.version_id as versionId,
+               ver.scene_id as sceneId,
+               ver.version_no as versionNo,
+               ver.version_status as versionStatus,
+               ver.publish_desc as publishDesc,
+               ver.published_by as publishedBy,
+               ver.published_time as publishedTime
+        from cost_fee_item f
+        join cost_publish_version ver on ver.scene_id = f.scene_id
+        join cost_publish_snapshot snap on snap.version_id = ver.version_id
+             and snap.snapshot_type = 'FEE'
+             and snap.object_code = f.fee_code
+        where f.fee_id = #{feeId}
+        order by ver.published_time desc, ver.version_id desc
+        limit 20
+    </select>
+
+    <select id="selectFeeResultRefs" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFeeResultRefVo">
+        select l.result_id as resultId,
+               l.task_id as taskId,
+               l.version_id as versionId,
+               ver.version_no as versionNo,
+               l.task_no as taskNo,
+               l.biz_no as bizNo,
+               l.bill_month as billMonth,
+               l.object_dimension as objectDimension,
+               l.object_code as objectCode,
+               l.object_name as objectName,
+               l.quantity_value as quantityValue,
+               l.unit_price as unitPrice,
+               l.amount_value as amountValue,
+               l.currency_code as currencyCode,
+               l.result_status as resultStatus,
+               l.create_time as createTime
+        from cost_result_ledger l
+        left join cost_publish_version ver on ver.version_id = l.version_id
+        where l.fee_id = #{feeId}
+        order by l.create_time desc, l.result_id desc
+        limit 20
     </select>
 
     <insert id="insertFeeVariableRels">

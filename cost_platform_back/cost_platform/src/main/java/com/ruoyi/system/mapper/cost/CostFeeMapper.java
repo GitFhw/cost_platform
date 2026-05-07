@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ruoyi.system.domain.cost.CostFeeItem;
 import com.ruoyi.system.domain.cost.CostFeeVariableRel;
 import com.ruoyi.system.domain.vo.CostFeeGovernanceCheckVo;
+import com.ruoyi.system.domain.vo.CostFeePublishRefVo;
+import com.ruoyi.system.domain.vo.CostFeeResultRefVo;
+import com.ruoyi.system.domain.vo.CostFeeRuleSummaryVo;
 import com.ruoyi.system.domain.vo.CostFeeVariableContractVo;
 import org.apache.ibatis.annotations.Param;
 
@@ -60,6 +63,33 @@ public interface CostFeeMapper extends BaseMapper<CostFeeItem> {
      * @return contract items
      */
     List<CostFeeVariableContractVo> selectFeeVariableContracts(Long feeId);
+
+    /**
+     * Query linked rules for a fee detail drawer.
+     *
+     * @param feeId fee id
+     *
+     * @return rule summaries
+     */
+    List<CostFeeRuleSummaryVo> selectFeeRuleSummaries(Long feeId);
+
+    /**
+     * Query publish references for a fee detail drawer.
+     *
+     * @param feeId fee id
+     *
+     * @return publish references
+     */
+    List<CostFeePublishRefVo> selectFeePublishRefs(Long feeId);
+
+    /**
+     * Query recent result ledger references for a fee detail drawer.
+     *
+     * @param feeId fee id
+     *
+     * @return result references
+     */
+    List<CostFeeResultRefVo> selectFeeResultRefs(Long feeId);
 
     int insertFeeVariableRels(@Param("list") List<CostFeeVariableRel> list);
 

@@ -241,7 +241,7 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="governanceOpen" title="费用治理检查" size="720px" append-to-body>
+    <el-drawer v-model="governanceOpen" title="费用详情与治理" size="780px" append-to-body>
       <div v-loading="governanceLoading" class="fee-governance" v-if="governanceInfo.feeId">
         <div class="fee-governance__header">
           <div>
@@ -256,10 +256,51 @@
           <div class="fee-governance__card"><span>版本引用</span><strong>{{ governanceInfo.publishedVersionCount }}</strong></div>
           <div class="fee-governance__card"><span>结果引用</span><strong>{{ governanceInfo.resultLedgerCount }}</strong></div>
         </div>
+        <el-descriptions :column="2" border class="fee-governance__detail">
+          <el-descriptions-item label="业务域">{{ resolveDictLabel(businessDomainOptions, governanceInfo.businessDomain) }}</el-descriptions-item>
+          <el-descriptions-item label="费用分类">{{ governanceInfo.feeCategory || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="计价单位">{{ resolveUnitLabel(governanceInfo.unitCode) }}</el-descriptions-item>
+          <el-descriptions-item label="对象维度">{{ resolveObjectDimensionLabel(governanceInfo) }}</el-descriptions-item>
+          <el-descriptions-item label="影响因素" :span="2">{{ governanceInfo.factorSummary || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="适用范围" :span="2">{{ governanceInfo.scopeDescription || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="备注" :span="2">{{ governanceInfo.remark || '-' }}</el-descriptions-item>
+        </el-descriptions>
         <el-alert :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon />
         <el-alert :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon />
         <GovernanceImpactList :impacts="governanceInfo.impactItems" :context="governanceInfo" />
-        <div class="fee-governance__contract">
+        <div class="fee-governance__section">
+          <div class="fee-governance__section-head">
+            <div>
+              <strong>规则汇总</strong>
+              <small>当前费用已挂载的规则、条件和阶梯规模</small>
+            </div>
+            <el-tag size="small" type="info">{{ feeRuleSummary }}</el-tag>
+          </div>
+          <el-empty v-if="!governanceInfo.ruleSummaries.length" description="当前费用暂无规则" :image-size="56" />
+          <div v-else class="fee-governance__rule-list">
+            <div v-for="item in governanceInfo.ruleSummaries" :key="item.ruleId" class="fee-governance__rule-item">
+              <div class="fee-governance__rule-main">
+                <div>
+                  <span>{{ item.ruleCode || '-' }}</span>
+                  <strong>{{ item.ruleName || '未命名规则' }}</strong>
+                </div>
+                <dict-tag :options="ruleStatusOptions" :value="item.status" />
+              </div>
+              <div class="fee-governance__contract-tags">
+                <el-tag size="small" effect="plain">{{ resolveRuleTypeLabel(item.ruleType) }}</el-tag>
+                <el-tag size="small" effect="plain">优先级 {{ item.priority || '-' }}</el-tag>
+                <el-tag size="small" effect="plain">条件 {{ item.conditionCount || 0 }}</el-tag>
+                <el-tag size="small" effect="plain">阶梯 {{ item.tierCount || 0 }}</el-tag>
+              </div>
+              <div class="fee-governance__contract-meta">
+                <span v-if="item.quantityVariableCode">计量变量：{{ item.quantityVariableCode }}</span>
+                <span v-if="item.amountFormulaCode">金额公式：{{ item.amountFormulaCode }}</span>
+                <span v-if="item.pricingMode">定价模式：{{ item.pricingMode }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="fee-governance__section">
           <div class="fee-governance__section-head">
             <div>
               <strong>费用输入契约</strong>
@@ -291,6 +332,48 @@
                 <span v-if="item.sourceRuleCode">来源规则：{{ item.sourceRuleCode }} / {{ item.sourceRuleName || '-' }}</span>
                 <span v-else-if="item.sourceCode">来源编码：{{ item.sourceCode }}</span>
                 <span v-if="item.remark">备注：{{ item.remark }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="fee-governance__reference-grid">
+          <div class="fee-governance__section">
+            <div class="fee-governance__section-head">
+              <div>
+                <strong>发布引用</strong>
+                <small>当前费用进入过的发布版本快照</small>
+              </div>
+              <el-tag size="small" type="info">{{ feePublishSummary }}</el-tag>
+            </div>
+            <el-empty v-if="!governanceInfo.publishRefs.length" description="暂无发布引用" :image-size="56" />
+            <div v-else class="fee-governance__ref-list">
+              <div v-for="item in governanceInfo.publishRefs" :key="item.versionId" class="fee-governance__ref-item">
+                <div class="fee-governance__ref-main">
+                  <strong>{{ item.versionNo || `#${item.versionId}` }}</strong>
+                  <dict-tag :options="publishVersionStatusOptions" :value="item.versionStatus" />
+                </div>
+                <span>{{ parseTime(item.publishedTime) || '-' }}</span>
+                <small>{{ item.publishDesc || '无发布说明' }}</small>
+              </div>
+            </div>
+          </div>
+          <div class="fee-governance__section">
+            <div class="fee-governance__section-head">
+              <div>
+                <strong>结果引用</strong>
+                <small>最近生成的费用结果样例</small>
+              </div>
+              <el-tag size="small" type="info">{{ feeResultSummary }}</el-tag>
+            </div>
+            <el-empty v-if="!governanceInfo.resultRefs.length" description="暂无结果引用" :image-size="56" />
+            <div v-else class="fee-governance__ref-list">
+              <div v-for="item in governanceInfo.resultRefs" :key="item.resultId" class="fee-governance__ref-item">
+                <div class="fee-governance__ref-main">
+                  <strong>{{ formatMoney(item.amountValue, item.currencyCode) }}</strong>
+                  <dict-tag :options="resultStatusOptions" :value="item.resultStatus" />
+                </div>
+                <span>{{ item.billMonth || '-' }} · {{ item.taskNo || '-' }}</span>
+                <small>{{ resolveResultObjectLabel(item) }} / {{ item.bizNo || '-' }}</small>
               </div>
             </div>
           </div>
@@ -328,6 +411,10 @@ const feeStatusOptions = ref([])
 const unitCodeOptions = ref([])
 const variableSourceOptions = ref([])
 const variableDataTypeOptions = ref([])
+const ruleTypeOptions = ref([])
+const ruleStatusOptions = ref([])
+const publishVersionStatusOptions = ref([])
+const resultStatusOptions = ref([])
 const objectDimensionOptions = ['协力队', '协力单位', '班组', '人员', '设备', '船舶', '库区', '订单']
 const factorSummaryExamples = ['重量 / 件数 / 作业类型', '班次 / 工时 / 人员级别', '里程 / 车型 / 线路', '设备台时 / 能耗 / 维修类型']
 const feeRelationTypeLabels = {
@@ -418,6 +505,16 @@ const feeVariableContractSummary = computed(() => {
   return `${contracts.length} 项输入 · ${derivedCount} 规则派生 · ${manualCount} 手工维护`
 })
 
+const feeRuleSummary = computed(() => {
+  const rules = governanceInfo.value.ruleSummaries || []
+  const enabledCount = rules.filter(item => item.status === '0').length
+  return `${rules.length} 条规则 · ${enabledCount} 启用`
+})
+
+const feePublishSummary = computed(() => `${(governanceInfo.value.publishRefs || []).length} 个版本`)
+
+const feeResultSummary = computed(() => `${(governanceInfo.value.resultRefs || []).length} 条样例`)
+
 const unitOptionsForForm = computed(() => {
   const options = [...unitCodeOptions.value]
   const currentValue = form.value?.unitCode
@@ -470,7 +567,17 @@ const currentSceneLabel = computed(() => {
 
 async function loadBaseOptions() {
   const [dictMap, sceneResponse] = await Promise.all([
-    getRemoteDictOptionMap(['cost_business_domain', 'cost_fee_status', 'cost_unit_code', 'cost_variable_source_type', 'cost_variable_data_type']),
+    getRemoteDictOptionMap([
+      'cost_business_domain',
+      'cost_fee_status',
+      'cost_unit_code',
+      'cost_variable_source_type',
+      'cost_variable_data_type',
+      'cost_rule_type',
+      'cost_rule_status',
+      'cost_publish_version_status',
+      'cost_result_status'
+    ]),
     optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
   ])
   businessDomainOptions.value = dictMap.cost_business_domain || []
@@ -478,6 +585,10 @@ async function loadBaseOptions() {
   unitCodeOptions.value = dictMap.cost_unit_code || []
   variableSourceOptions.value = dictMap.cost_variable_source_type || []
   variableDataTypeOptions.value = dictMap.cost_variable_data_type || []
+  ruleTypeOptions.value = dictMap.cost_rule_type || []
+  ruleStatusOptions.value = dictMap.cost_rule_status || []
+  publishVersionStatusOptions.value = dictMap.cost_publish_version_status || []
+  resultStatusOptions.value = dictMap.cost_result_status || []
   sceneOptions.value = sceneResponse?.data || []
   const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.value.sceneId)
   queryParams.value.sceneId = preferredSceneId
@@ -676,7 +787,16 @@ function normalizeGovernanceInfo(data = {}) {
     feeName: data.feeName || '',
     sceneCode: data.sceneCode || '',
     sceneName: data.sceneName || '',
+    businessDomain: data.businessDomain || '',
+    sceneDefaultObjectDimension: data.sceneDefaultObjectDimension || '',
+    feeCategory: data.feeCategory || '',
+    unitCode: data.unitCode || '',
+    factorSummary: data.factorSummary || '',
+    scopeDescription: data.scopeDescription || '',
+    objectDimension: data.objectDimension || '',
+    sortNo: data.sortNo,
     status: data.status || '0',
+    remark: data.remark || '',
     ruleCount: Number(data.ruleCount || 0),
     variableRelCount: Number(data.variableRelCount || 0),
     publishedVersionCount: Number(data.publishedVersionCount || 0),
@@ -688,7 +808,10 @@ function normalizeGovernanceInfo(data = {}) {
     removeAdvice: data.removeAdvice || '',
     disableAdvice: data.disableAdvice || '',
     impactItems: Array.isArray(data.impactItems) ? data.impactItems : [],
-    variableContracts: Array.isArray(data.variableContracts) ? data.variableContracts : []
+    variableContracts: Array.isArray(data.variableContracts) ? data.variableContracts : [],
+    ruleSummaries: Array.isArray(data.ruleSummaries) ? data.ruleSummaries : [],
+    publishRefs: Array.isArray(data.publishRefs) ? data.publishRefs : [],
+    resultRefs: Array.isArray(data.resultRefs) ? data.resultRefs : []
   }
 }
 
@@ -717,6 +840,10 @@ function resolveFeeContractSourceLabel(value) {
   return resolveLabelByMap(feeContractSourceLabels, value)
 }
 
+function resolveRuleTypeLabel(value) {
+  return resolveDictLabel(ruleTypeOptions, value)
+}
+
 function resolveVariableSourceTypeLabel(value) {
   return resolveDictLabel(variableSourceOptions, value)
 }
@@ -731,6 +858,19 @@ function resolveUnitLabel(value) {
 
 function resolveUnitSemantic(value) {
   return getCostUnitSemantic(value, resolveUnitLabel(value))
+}
+
+function resolveResultObjectLabel(item = {}) {
+  const objectName = item.objectName || item.objectCode
+  if (!objectName) {
+    return item.objectDimension || '-'
+  }
+  return item.objectDimension ? `${item.objectDimension}：${objectName}` : objectName
+}
+
+function formatMoney(value, currencyCode = 'CNY') {
+  const amount = Number(value || 0)
+  return `${amount.toFixed(2)} ${currencyCode || 'CNY'}`
 }
 
 async function ensureDisableAllowed() {
@@ -842,6 +982,9 @@ getList()
 
 .fee-governance__card span { color: var(--el-text-color-secondary); font-size: 12px; }
 .fee-governance__card strong { color: var(--el-color-primary); font-size: 20px; }
+.fee-governance__detail :deep(.el-descriptions__label) {
+  width: 116px;
+}
 .fee-governance__section-head {
   display: flex;
   justify-content: space-between;
@@ -850,6 +993,7 @@ getList()
 }
 .fee-governance__section-head strong { display: block; font-size: 14px; }
 .fee-governance__section-head small { display: block; margin-top: 4px; color: var(--el-text-color-secondary); }
+.fee-governance__section,
 .fee-governance__contract {
   display: grid;
   gap: 10px;
@@ -858,7 +1002,9 @@ getList()
   border-radius: 8px;
   background: var(--el-bg-color-overlay);
 }
+.fee-governance__rule-list,
 .fee-governance__contract-list { display: grid; gap: 8px; }
+.fee-governance__rule-item,
 .fee-governance__contract-item {
   display: grid;
   gap: 8px;
@@ -867,20 +1013,28 @@ getList()
   border-radius: 8px;
   background: var(--el-fill-color-extra-light);
 }
+.fee-governance__rule-main,
 .fee-governance__contract-main {
   display: flex;
   justify-content: space-between;
   gap: 10px;
   align-items: center;
 }
+.fee-governance__rule-main span,
 .fee-governance__contract-main span {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   color: var(--el-color-primary);
   word-break: break-all;
 }
+.fee-governance__rule-main strong,
 .fee-governance__contract-main strong {
   text-align: right;
   word-break: break-word;
+}
+.fee-governance__rule-main strong {
+  display: block;
+  margin-top: 4px;
+  text-align: left;
 }
 .fee-governance__contract-tags {
   display: flex;
@@ -894,10 +1048,40 @@ getList()
   font-size: 12px;
   line-height: 1.6;
 }
+.fee-governance__reference-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.fee-governance__ref-list {
+  display: grid;
+  gap: 8px;
+}
+.fee-governance__ref-item {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-extra-light);
+}
+.fee-governance__ref-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+.fee-governance__ref-item span,
+.fee-governance__ref-item small {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .fee-governance__advice { padding: 12px; border-radius: 10px; background: color-mix(in srgb, var(--el-color-warning-light-9) 40%, var(--el-bg-color-overlay)); }
 .fee-governance__advice p { margin: 4px 0; line-height: 1.7; }
 
 @media (max-width: 1200px) {
   .fee-center__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fee-governance__reference-grid { grid-template-columns: 1fr; }
 }
 </style>
