@@ -26,6 +26,7 @@ import static com.ruoyi.system.service.cost.execution.CostExecutionConstants.RUL
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 
 /**
@@ -238,22 +239,24 @@ public class CostRuleServiceImpl implements ICostRuleService {
         }
         CostRuleSaveBo rule = request.getRule();
         Long sceneId = resolveSceneId(rule);
-        if (!RULE_TYPE_TIER_RATE.equals(rule.getRuleType())) {
-            throw new ServiceException("只有阶梯费率规则支持命中预演");
-        }
         validateVariableReference(sceneId, rule.getQuantityVariableCode(), "计量变量");
+        validatePricing(rule);
         validateConditions(sceneId, rule.getConditions());
         validateTiers(rule);
 
-        CostVariable quantityVariable = requireQuantityVariable(rule);
+        CostVariable quantityVariable = StringUtils.isEmpty(rule.getQuantityVariableCode())
+                ? null : getSceneVariable(sceneId, rule.getQuantityVariableCode(), "计量变量");
         Map<String, Object> rawInputValues = request.getInputValues() == null ? new LinkedHashMap<>() : request.getInputValues();
         Set<String> involvedCodes = collectPreviewVariableCodes(rule);
+        if (RULE_TYPE_FORMULA.equals(rule.getRuleType()) && StringUtils.isNotEmpty(rule.getAmountFormula())) {
+            involvedCodes.addAll(expressionService.extractReferencedCodes(rule.getAmountFormula(), loadSceneVariableMap(sceneId).keySet()));
+        }
         Map<String, CostVariable> variableMetaMap = loadPreviewVariableMeta(sceneId, involvedCodes);
         Map<String, Object> normalizedInputs = normalizePreviewInputs(rawInputValues, variableMetaMap);
 
         CostRuleTierPreviewVo result = new CostRuleTierPreviewVo();
         result.setQuantityVariableCode(rule.getQuantityVariableCode());
-        result.setQuantityVariableName(quantityVariable.getVariableName());
+        result.setQuantityVariableName(quantityVariable == null ? null : quantityVariable.getVariableName());
         result.setInputValues(buildPreviewInputEcho(involvedCodes, variableMetaMap, normalizedInputs));
 
         PreviewConditionResult conditionResult = evaluatePreviewConditions(rule, normalizedInputs);
@@ -264,15 +267,29 @@ public class CostRuleServiceImpl implements ICostRuleService {
 
         BigDecimal quantityValue = toBigDecimal(normalizedInputs.get(rule.getQuantityVariableCode()));
         result.setQuantityValue(quantityValue);
-        result.setTierResults(buildTierResults(rule.getTiers(), quantityValue));
+        if (RULE_TYPE_TIER_RATE.equals(rule.getRuleType())) {
+            result.setTierResults(buildTierResults(rule.getTiers(), quantityValue));
+        }
 
         if (!conditionResult.conditionMatched) {
             result.setTierMatched(false);
-            result.setSummary("当前样本未通过规则条件校验，未进入阶梯定位。");
+            result.setSummary("当前样本未通过规则条件校验，未进入计价计算。");
             return result;
         }
         if (PRICING_MODE_GROUPED.equalsIgnoreCase(rule.getPricingMode()) && conditionResult.matchedGroupNo != null) {
-            result.setSummary(String.format("当前样本命中组合组 %d。", conditionResult.matchedGroupNo));
+            result.setPricingExplain(String.format("当前样本命中组合组 %d。", conditionResult.matchedGroupNo));
+        }
+        if (RULE_TYPE_FIXED_RATE.equals(rule.getRuleType())) {
+            applyFixedRatePreview(rule, conditionResult, quantityValue, result);
+            return result;
+        }
+        if (RULE_TYPE_FIXED_AMOUNT.equals(rule.getRuleType())) {
+            applyFixedAmountPreview(rule, conditionResult, result);
+            return result;
+        }
+        if (RULE_TYPE_FORMULA.equals(rule.getRuleType())) {
+            applyFormulaPreview(rule, normalizedInputs, result);
+            return result;
         }
         if (quantityValue == null) {
             result.setTierMatched(false);
@@ -289,8 +306,74 @@ public class CostRuleServiceImpl implements ICostRuleService {
         result.setMatchedTierNo(matchedTier.getTierNo());
         result.setMatchedTierRange(buildTierRangeSummary(matchedTier));
         result.setMatchedTierRate(matchedTier.getRateValue());
-        result.setSummary(String.format("当前样本通过条件校验，并命中第%d档阶梯。", matchedTier.getTierNo()));
+        result.setUnitPrice(defaultZero(matchedTier.getRateValue()).setScale(6, RoundingMode.HALF_UP));
+        result.setAmountValue(defaultZero(matchedTier.getRateValue()).multiply(quantityValue).setScale(2, RoundingMode.HALF_UP));
+        result.setPricingSource(RULE_TYPE_TIER_RATE);
+        result.setPricingExplain(String.format("命中第 %d 档阶梯，按阶梯费率/单价乘以计量值。", matchedTier.getTierNo()));
+        result.setSummary(String.format("当前样本通过条件校验，并命中第%d档阶梯，预估金额 %s。", matchedTier.getTierNo(), result.getAmountValue()));
         return result;
+    }
+
+    private void applyFixedRatePreview(CostRuleSaveBo rule, PreviewConditionResult conditionResult, BigDecimal quantityValue,
+                                       CostRuleTierPreviewVo result) {
+        result.setPricingSource(RULE_TYPE_FIXED_RATE);
+        result.setTierMatched(false);
+        if (quantityValue == null) {
+            result.setSummary("当前样本已通过条件校验，但计量变量缺少数值，无法计算金额。");
+            return;
+        }
+        BigDecimal unitPrice = resolvePreviewPricingValue(rule, conditionResult.matchedGroupNo, "rateValue");
+        result.setUnitPrice(defaultZero(unitPrice).setScale(6, RoundingMode.HALF_UP));
+        result.setAmountValue(defaultZero(unitPrice).multiply(quantityValue).setScale(2, RoundingMode.HALF_UP));
+        result.setPricingExplain(appendPricingExplain(result.getPricingExplain(), "按固定费率/单价乘以计量值。"));
+        result.setSummary(String.format("当前样本通过条件校验，按固定费率/单价试算金额 %s。", result.getAmountValue()));
+    }
+
+    private void applyFixedAmountPreview(CostRuleSaveBo rule, PreviewConditionResult conditionResult, CostRuleTierPreviewVo result) {
+        result.setPricingSource(RULE_TYPE_FIXED_AMOUNT);
+        result.setTierMatched(false);
+        BigDecimal amountValue = resolvePreviewPricingValue(rule, conditionResult.matchedGroupNo, "amountValue");
+        result.setUnitPrice(defaultZero(amountValue).setScale(6, RoundingMode.HALF_UP));
+        result.setAmountValue(defaultZero(amountValue).setScale(2, RoundingMode.HALF_UP));
+        result.setPricingExplain(appendPricingExplain(result.getPricingExplain(), "按固定金额直接计价。"));
+        result.setSummary(String.format("当前样本通过条件校验，按固定金额试算金额 %s。", result.getAmountValue()));
+    }
+
+    private void applyFormulaPreview(CostRuleSaveBo rule, Map<String, Object> normalizedInputs, CostRuleTierPreviewVo result) {
+        result.setPricingSource(RULE_TYPE_FORMULA);
+        result.setTierMatched(false);
+        Object rawAmount = expressionService.evaluate(rule.getAmountFormula(), buildPreviewExpressionContext(normalizedInputs));
+        BigDecimal amountValue = defaultZero(toBigDecimal(rawAmount)).setScale(2, RoundingMode.HALF_UP);
+        result.setUnitPrice(amountValue.setScale(6, RoundingMode.HALF_UP));
+        result.setAmountValue(amountValue);
+        result.setPricingExplain(String.format("按公式 %s 计算：%s", StringUtils.defaultString(rule.getAmountFormulaCode()), rule.getAmountFormula()));
+        result.setSummary(String.format("当前样本通过条件校验，按公式试算金额 %s。", result.getAmountValue()));
+    }
+
+    private BigDecimal resolvePreviewPricingValue(CostRuleSaveBo rule, Integer matchedGroupNo, String valueKey) {
+        Map<String, Object> pricingConfig = rule.getPricingConfig() == null ? new LinkedHashMap<>() : rule.getPricingConfig();
+        if (PRICING_MODE_GROUPED.equalsIgnoreCase(rule.getPricingMode()) && matchedGroupNo != null) {
+            Object rawGroupPrices = pricingConfig.get("groupPrices");
+            if (rawGroupPrices instanceof List<?> rawList) {
+                for (Object item : rawList) {
+                    if (!(item instanceof Map<?, ?> rawMap)) {
+                        continue;
+                    }
+                    Integer groupNo = toInteger(rawMap.get("groupNo"));
+                    if (Objects.equals(groupNo, matchedGroupNo)) {
+                        return toBigDecimal(rawMap.get(valueKey));
+                    }
+                }
+            }
+        }
+        return toBigDecimal(pricingConfig.get(valueKey));
+    }
+
+    private String appendPricingExplain(String prefix, String text) {
+        if (StringUtils.isEmpty(prefix)) {
+            return text;
+        }
+        return prefix + text;
     }
 
     /**
@@ -1210,6 +1293,10 @@ public class CostRuleServiceImpl implements ICostRuleService {
         } catch (NumberFormatException e) {
             throw new ServiceException("金额/费率字段必须为数值");
         }
+    }
+
+    private BigDecimal defaultZero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     /**

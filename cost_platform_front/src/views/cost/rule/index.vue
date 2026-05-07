@@ -519,15 +519,16 @@
             </template>
           </el-alert>
           <RuleTierEditor v-model="form.tiers" :interval-mode-options="intervalModeOptions" />
+        </template>
           <div class="rule-center__section-title">
-            <span>阶梯命中预演</span>
-            <small>围绕单个费目输入多变量样本值，直接查看条件命中与阶梯定位结果。</small>
+            <span>规则试算</span>
+            <small>输入样例变量后立即预览规则条件、命中口径和预估金额。</small>
           </div>
           <div class="rule-center__preview-workbench">
             <div class="rule-center__preview-header">
               <div>
                 <h4>单费目样本输入</h4>
-                <p>当前预演会同时读取条件变量和阶梯依据变量，口径与正式运行保持一致。</p>
+                <p>当前试算会读取条件变量、计量变量和公式引用变量，口径与正式运行保持一致。</p>
               </div>
               <div class="rule-center__preview-actions">
                 <el-button @click="resetTierPreview">清空样本</el-button>
@@ -562,24 +563,27 @@
                 <small>{{ resolveTagLabel(variableDataTypeOptions, item.dataType) || '文本' }}</small>
               </div>
             </div>
-            <el-empty v-else description="请先配置阶梯依据变量或条件变量" :image-size="72" />
+            <el-empty v-else description="当前规则无需录入样本变量，可直接执行试算" :image-size="72" />
 
             <div v-if="tierPreviewResult" class="rule-center__preview-result">
               <el-alert
-                :title="tierPreviewResult.tierMatched ? '已命中阶梯' : '未命中阶梯'"
+                :title="formatPreviewResultTitle(tierPreviewResult)"
                 :description="tierPreviewResult.summary"
-                :type="tierPreviewResult.tierMatched ? 'success' : (tierPreviewResult.conditionMatched ? 'warning' : 'info')"
+                :type="tierPreviewResult.amountValue != null ? 'success' : (tierPreviewResult.conditionMatched ? 'warning' : 'info')"
                 :closable="false"
                 show-icon
               />
               <el-descriptions :column="2" border class="mt12">
                 <el-descriptions-item label="条件命中">{{ tierPreviewResult.conditionMatched ? '通过' : '未通过' }}</el-descriptions-item>
-                <el-descriptions-item label="阶梯命中">{{ tierPreviewResult.tierMatched ? '已命中' : '未命中' }}</el-descriptions-item>
+                <el-descriptions-item label="计价来源">{{ tierPreviewResult.pricingSource || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="预估单价">{{ tierPreviewResult.unitPrice ?? '-' }}</el-descriptions-item>
+                <el-descriptions-item label="预估金额">{{ tierPreviewResult.amountValue ?? '-' }}</el-descriptions-item>
                 <el-descriptions-item label="命中组合组">{{ tierPreviewResult.matchedGroupNo ?? '-' }}</el-descriptions-item>
                 <el-descriptions-item label="计量变量">{{ tierPreviewResult.quantityVariableName || tierPreviewResult.quantityVariableCode || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="计量值">{{ tierPreviewResult.quantityValue ?? '-' }}</el-descriptions-item>
                 <el-descriptions-item label="命中档位">{{ tierPreviewResult.matchedTierNo ?? '-' }}</el-descriptions-item>
                 <el-descriptions-item label="命中区间">{{ tierPreviewResult.matchedTierRange || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="计价说明" :span="2">{{ tierPreviewResult.pricingExplain || '-' }}</el-descriptions-item>
               </el-descriptions>
               <el-table :data="tierPreviewResult.groupResults || []" size="small" border class="mt12">
                 <el-table-column label="组号" prop="groupNo" width="80" align="center" />
@@ -609,7 +613,7 @@
                   </template>
                 </el-table-column>
               </el-table>
-              <el-table :data="tierPreviewResult.tierResults || []" size="small" border class="mt12">
+              <el-table v-if="tierPreviewResult.tierResults?.length" :data="tierPreviewResult.tierResults || []" size="small" border class="mt12">
                 <el-table-column label="档位" prop="tierNo" width="90" align="center" />
                 <el-table-column label="区间" prop="range" min-width="180" align="center" />
                 <el-table-column label="费率/单价" prop="rateValue" min-width="120" align="center" />
@@ -621,7 +625,6 @@
               </el-table>
             </div>
           </div>
-        </template>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -1082,7 +1085,10 @@ const currentFeeUnitSemantic = computed(() => getCostUnitSemantic(currentFee.val
 const isGroupedPricing = computed(() => ['FIXED_RATE', 'FIXED_AMOUNT'].includes(form.value.ruleType) && form.value.pricingMode === 'GROUPED')
 const tierValidationIssues = computed(() => buildTierValidationIssues(form.value.tiers || []))
 const tierPreviewVariables = computed(() => {
-  const codes = [form.value.quantityVariableCode, ...(form.value.conditions || []).map(item => item.variableCode)].filter(Boolean)
+  const codes = new Set([form.value.quantityVariableCode, ...(form.value.conditions || []).map(item => item.variableCode)].filter(Boolean))
+  if (form.value.ruleType === 'FORMULA') {
+    ;(selectedFormulaValidationResult.value.variableRefs || []).forEach(code => codes.add(code))
+  }
   return [...new Set(codes)].map(code => variableMetaMap.value[code]).filter(Boolean)
 })
 const conditionGroups = computed(() => {
@@ -1727,19 +1733,19 @@ function buildSubmitPayload(source) {
 
 async function handleTierPreview() {
   if (!selectedFeeId.value) {
-    proxy.$modal.msgWarning('请先选择费用后再预演阶梯命中')
+    proxy.$modal.msgWarning('请先选择费用后再执行规则试算')
     return
   }
-  if (form.value.ruleType !== 'TIER_RATE') {
-    proxy.$modal.msgWarning('只有阶梯费率规则支持命中预演')
-    return
-  }
-  if (tierValidationIssues.value.length) {
+  if (form.value.ruleType === 'TIER_RATE' && tierValidationIssues.value.length) {
     proxy.$modal.msgWarning(tierValidationIssues.value[0])
     return
   }
-  if (!form.value.quantityVariableCode) {
-    proxy.$modal.msgWarning('请先选择阶梯依据变量')
+  if (['FIXED_RATE', 'TIER_RATE'].includes(form.value.ruleType) && !form.value.quantityVariableCode) {
+    proxy.$modal.msgWarning('请先选择计量变量')
+    return
+  }
+  if (form.value.ruleType === 'FORMULA' && !form.value.amountFormulaCode) {
+    proxy.$modal.msgWarning('请先选择金额公式编码')
     return
   }
   tierPreviewLoading.value = true
@@ -1749,6 +1755,19 @@ async function handleTierPreview() {
   } finally {
     tierPreviewLoading.value = false
   }
+}
+
+function formatPreviewResultTitle(result = {}) {
+  if (result.amountValue != null) {
+    return '已试算金额'
+  }
+  if (!result.conditionMatched) {
+    return '未命中规则条件'
+  }
+  if (form.value.ruleType === 'TIER_RATE') {
+    return result.tierMatched ? '已命中阶梯' : '未命中阶梯'
+  }
+  return '已命中条件'
 }
 
 function submitForm() {

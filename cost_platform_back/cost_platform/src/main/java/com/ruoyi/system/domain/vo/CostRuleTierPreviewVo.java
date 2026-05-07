@@ -63,6 +63,26 @@ public class CostRuleTierPreviewVo {
     private BigDecimal matchedTierRate;
 
     /**
+     * 预估单价
+     */
+    private BigDecimal unitPrice;
+
+    /**
+     * 预估金额
+     */
+    private BigDecimal amountValue;
+
+    /**
+     * 计价来源
+     */
+    private String pricingSource;
+
+    /**
+     * 计价解释
+     */
+    private String pricingExplain;
+
+    /**
      * 结果摘要
      */
     private String summary;
