@@ -112,6 +112,7 @@
               <el-button link type="primary" icon="MoreFilled">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="dependencies" icon="Connection" v-hasPermi="['cost:fee:list']">依赖变量</el-dropdown-item>
                   <el-dropdown-item command="delete" icon="Delete" v-hasPermi="['cost:fee:remove']">删除费用</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -308,30 +309,53 @@
             </div>
             <el-tag size="small" type="info">{{ feeVariableContractSummary }}</el-tag>
           </div>
+          <div v-if="governanceInfo.variableContracts.length" class="fee-governance__dependency-toolbar">
+            <el-radio-group v-model="feeContractSourceFilter" size="small">
+              <el-radio-button
+                v-for="item in feeVariableSourceOptions"
+                :key="item.value"
+                :value="item.value"
+              >
+                {{ item.label }} {{ item.count }}
+              </el-radio-button>
+            </el-radio-group>
+          </div>
           <el-empty v-if="!governanceInfo.variableContracts.length" description="当前费用暂无输入契约" :image-size="56" />
-          <div v-else class="fee-governance__contract-list">
-            <div
-              v-for="item in governanceInfo.variableContracts"
-              :key="item.relId || `${item.variableCode}-${item.relationType}`"
-              class="fee-governance__contract-item"
-            >
-              <div class="fee-governance__contract-main">
-                <span>{{ item.variableCode || '-' }}</span>
-                <strong>{{ item.variableName || '未命名变量' }}</strong>
+          <el-empty v-else-if="!filteredFeeVariableContracts.length" description="当前来源下没有依赖变量" :image-size="56" />
+          <div v-else class="fee-governance__dependency-groups">
+            <div v-for="group in feeVariableContractGroups" :key="group.sourceType" class="fee-governance__dependency-group">
+              <div class="fee-governance__dependency-head">
+                <div>
+                  <strong>{{ group.label }}</strong>
+                  <small>{{ group.description }}</small>
+                </div>
+                <el-tag size="small" :type="group.tagType">{{ group.items.length }} 项</el-tag>
               </div>
-              <div class="fee-governance__contract-tags">
-                <el-tag size="small" effect="plain">{{ resolveFeeRelationTypeLabel(item.relationType) }}</el-tag>
-                <el-tag size="small" effect="plain" :type="item.sourceType === 'RULE_DERIVED' ? 'success' : 'warning'">
-                  {{ resolveFeeContractSourceLabel(item.sourceType) }}
-                </el-tag>
-                <el-tag size="small" effect="plain">{{ resolveVariableSourceTypeLabel(item.variableSourceType) }}</el-tag>
-                <el-tag size="small" effect="plain">{{ resolveVariableDataTypeLabel(item.dataType) }}</el-tag>
-              </div>
-              <div class="fee-governance__contract-meta">
-                <span v-if="item.dataPath">取值路径：{{ item.dataPath }}</span>
-                <span v-if="item.sourceRuleCode">来源规则：{{ item.sourceRuleCode }} / {{ item.sourceRuleName || '-' }}</span>
-                <span v-else-if="item.sourceCode">来源编码：{{ item.sourceCode }}</span>
-                <span v-if="item.remark">备注：{{ item.remark }}</span>
+              <div class="fee-governance__contract-list">
+                <div
+                  v-for="item in group.items"
+                  :key="item.relId || `${item.variableCode}-${item.relationType}`"
+                  class="fee-governance__contract-item"
+                >
+                  <div class="fee-governance__contract-main">
+                    <span>{{ item.variableCode || '-' }}</span>
+                    <strong>{{ item.variableName || '未命名变量' }}</strong>
+                  </div>
+                  <div class="fee-governance__contract-tags">
+                    <el-tag size="small" effect="plain">{{ resolveFeeRelationTypeLabel(item.relationType) }}</el-tag>
+                    <el-tag size="small" effect="plain" :type="resolveFeeContractSourceMeta(item.sourceType).tagType">
+                      {{ resolveFeeContractSourceLabel(item.sourceType) }}
+                    </el-tag>
+                    <el-tag size="small" effect="plain">{{ resolveVariableSourceTypeLabel(item.variableSourceType) }}</el-tag>
+                    <el-tag size="small" effect="plain">{{ resolveVariableDataTypeLabel(item.dataType) }}</el-tag>
+                  </div>
+                  <div class="fee-governance__contract-meta">
+                    <span v-if="item.dataPath">取值路径：{{ item.dataPath }}</span>
+                    <span v-if="item.sourceRuleCode">来源规则：{{ item.sourceRuleCode }} / {{ item.sourceRuleName || '-' }}</span>
+                    <span v-else-if="item.sourceCode">来源编码：{{ item.sourceCode }}</span>
+                    <span v-if="item.remark">备注：{{ item.remark }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -427,6 +451,23 @@ const feeContractSourceLabels = {
   RULE_DERIVED: '规则派生',
   MANUAL_REQUIRED: '手工维护'
 }
+const feeContractSourceMetas = {
+  RULE_DERIVED: {
+    label: '规则派生',
+    tagType: 'success',
+    description: '由规则条件、计量变量或公式输入自动沉淀，随规则配置变化同步重建。'
+  },
+  MANUAL_REQUIRED: {
+    label: '手工维护',
+    tagType: 'warning',
+    description: '由费用口径直接要求的必填输入，不依赖规则生成，适合未来手工必填变量。'
+  },
+  OTHER: {
+    label: '其他来源',
+    tagType: 'info',
+    description: '当前来源未归类，建议后续治理时补齐来源类型。'
+  }
+}
 const feeCategoryHints = [
   {
     keyword: '港',
@@ -461,6 +502,7 @@ const governanceOpen = ref(false)
 const governanceLoading = ref(false)
 const initialStatus = ref(undefined)
 const governanceInfo = ref({})
+const feeContractSourceFilter = ref('ALL')
 const statistics = reactive({ feeCount: 0, enabledFeeCount: 0, sceneCoverageCount: 0 })
 
 const data = reactive({
@@ -503,6 +545,48 @@ const feeVariableContractSummary = computed(() => {
   const derivedCount = contracts.filter(item => item.sourceType === 'RULE_DERIVED').length
   const manualCount = contracts.filter(item => item.sourceType === 'MANUAL_REQUIRED').length
   return `${contracts.length} 项输入 · ${derivedCount} 规则派生 · ${manualCount} 手工维护`
+})
+
+const feeVariableSourceOptions = computed(() => {
+  const contracts = governanceInfo.value.variableContracts || []
+  const counts = contracts.reduce((result, item) => {
+    const sourceType = normalizeFeeContractSourceType(item.sourceType)
+    result[sourceType] = (result[sourceType] || 0) + 1
+    result.ALL += 1
+    return result
+  }, { ALL: 0, RULE_DERIVED: 0, MANUAL_REQUIRED: 0, OTHER: 0 })
+  return [
+    { value: 'ALL', label: '全部', count: counts.ALL },
+    { value: 'RULE_DERIVED', label: '规则派生', count: counts.RULE_DERIVED },
+    { value: 'MANUAL_REQUIRED', label: '手工维护', count: counts.MANUAL_REQUIRED },
+    { value: 'OTHER', label: '其他', count: counts.OTHER }
+  ]
+})
+
+const filteredFeeVariableContracts = computed(() => {
+  const contracts = governanceInfo.value.variableContracts || []
+  if (feeContractSourceFilter.value === 'ALL') {
+    return contracts
+  }
+  return contracts.filter(item => normalizeFeeContractSourceType(item.sourceType) === feeContractSourceFilter.value)
+})
+
+const feeVariableContractGroups = computed(() => {
+  const buckets = new Map()
+  filteredFeeVariableContracts.value.forEach(item => {
+    const sourceType = normalizeFeeContractSourceType(item.sourceType)
+    if (!buckets.has(sourceType)) {
+      buckets.set(sourceType, [])
+    }
+    buckets.get(sourceType).push(item)
+  })
+  return ['RULE_DERIVED', 'MANUAL_REQUIRED', 'OTHER']
+    .filter(sourceType => buckets.has(sourceType))
+    .map(sourceType => ({
+      sourceType,
+      ...resolveFeeContractSourceMeta(sourceType),
+      items: buckets.get(sourceType)
+    }))
 })
 
 const feeRuleSummary = computed(() => {
@@ -652,6 +736,11 @@ function handleSelectionChange(selection) {
 }
 
 function handleFeeRowCommand(command, row) {
+  if (command === 'dependencies') {
+    feeContractSourceFilter.value = 'ALL'
+    handleGovernance(row)
+    return
+  }
   if (command === 'delete') {
     handleDelete(row)
   }
@@ -765,6 +854,7 @@ function handleExport() {
 }
 
 async function handleGovernance(row) {
+  feeContractSourceFilter.value = 'ALL'
   governanceLoading.value = true
   governanceOpen.value = true
   try {
@@ -837,7 +927,15 @@ function resolveFeeRelationTypeLabel(value) {
 }
 
 function resolveFeeContractSourceLabel(value) {
-  return resolveLabelByMap(feeContractSourceLabels, value)
+  return feeContractSourceLabels[value] || resolveFeeContractSourceMeta(value).label
+}
+
+function normalizeFeeContractSourceType(value) {
+  return value === 'RULE_DERIVED' || value === 'MANUAL_REQUIRED' ? value : 'OTHER'
+}
+
+function resolveFeeContractSourceMeta(value) {
+  return feeContractSourceMetas[normalizeFeeContractSourceType(value)] || feeContractSourceMetas.OTHER
 }
 
 function resolveRuleTypeLabel(value) {
@@ -1004,6 +1102,40 @@ getList()
 }
 .fee-governance__rule-list,
 .fee-governance__contract-list { display: grid; gap: 8px; }
+.fee-governance__dependency-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fee-governance__dependency-groups {
+  display: grid;
+  gap: 10px;
+}
+.fee-governance__dependency-group {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+.fee-governance__dependency-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.fee-governance__dependency-head strong {
+  display: block;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+}
+.fee-governance__dependency-head small {
+  display: block;
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
 .fee-governance__rule-item,
 .fee-governance__contract-item {
   display: grid;
