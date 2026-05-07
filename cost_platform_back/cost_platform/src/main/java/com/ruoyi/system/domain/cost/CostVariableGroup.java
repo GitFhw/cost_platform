@@ -98,4 +98,10 @@ public class CostVariableGroup extends BaseEntity {
     @TableField("status")
     @NotBlank(message = "分组状态不能为空")
     private String status;
+
+    /**
+     * Variables currently assigned to this group.
+     */
+    @TableField(exist = false)
+    private Long variableCount;
 }

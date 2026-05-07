@@ -470,6 +470,7 @@ public class CostSceneServiceImpl implements ICostSceneService {
      * @return 结果
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int deleteSceneByIds(Long[] sceneIds) {
         for (Long sceneId : sceneIds) {
             CostSceneGovernanceCheckVo check = selectSceneGovernanceCheck(sceneId);
@@ -480,7 +481,17 @@ public class CostSceneServiceImpl implements ICostSceneService {
                 throw new ServiceException(String.format("%1$s不能删除：%2$s", check.getSceneName(), check.getRemoveBlockingReason()));
             }
         }
+        cleanupEmptyVariableGroups(sceneIds);
         return sceneMapper.deleteBatchIds(Arrays.asList(sceneIds));
+    }
+
+    private void cleanupEmptyVariableGroups(Long[] sceneIds) {
+        if (sceneIds == null || sceneIds.length == 0) {
+            return;
+        }
+        variableGroupMapper.delete(Wrappers.<CostVariableGroup>lambdaQuery()
+                .in(CostVariableGroup::getSceneId, Arrays.asList(sceneIds))
+                .notExists("select 1 from cost_variable v where v.group_id = cost_variable_group.group_id"));
     }
 
     /**

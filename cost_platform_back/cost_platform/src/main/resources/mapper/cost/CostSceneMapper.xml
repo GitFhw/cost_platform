@@ -93,7 +93,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                s.active_version_id as activeVersionId,
                active_ver.version_no as activeVersionNo,
                (select count(1) from cost_fee_item f where f.scene_id = s.scene_id) as feeCount,
-               (select count(1) from cost_variable_group g where g.scene_id = s.scene_id) as variableGroupCount,
+               (select count(1)
+                from cost_variable_group g
+                where g.scene_id = s.scene_id
+                  and exists (select 1 from cost_variable v where v.group_id = g.group_id)) as variableGroupCount,
                (select count(1) from cost_variable v where v.scene_id = s.scene_id) as variableCount,
                (select count(1) from cost_rule r where r.scene_id = s.scene_id) as ruleCount,
                (select count(1) from cost_publish_version p where p.scene_id = s.scene_id) as publishedVersionCount,

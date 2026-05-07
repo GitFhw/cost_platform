@@ -153,6 +153,7 @@
       <el-col :span="1.5"><el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['cost:variable:add']">新增变量</el-button></el-col>
       <el-col :span="1.5"><el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['cost:variable:edit']">修改变量</el-button></el-col>
       <el-col :span="1.5"><el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['cost:variable:remove']">删除变量</el-button></el-col>
+      <el-col :span="1.5"><el-button type="primary" plain icon="FolderOpened" @click="handleGroupCenter" v-hasPermi="['cost:variable:list']">变量组</el-button></el-col>
       <el-col :span="1.5"><el-button type="primary" plain icon="Upload" @click="handleImport" v-hasPermi="['cost:variable:add']">导入变量</el-button></el-col>
       <el-col :span="1.5"><el-button type="success" plain icon="CopyDocument" :disabled="single" @click="handleCopy()">复制变量</el-button></el-col>
       <el-col :span="1.5"><el-button type="primary" plain icon="Collection" @click="handleTemplateCenter">共享模板</el-button></el-col>
@@ -233,6 +234,75 @@
     </el-table>
 
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+
+    <el-dialog title="变量组维护" v-model="groupOpen" width="820px" append-to-body>
+      <div class="variable-group-toolbar">
+        <el-select v-model="groupQuery.sceneId" clearable filterable placeholder="请选择场景" style="width: 320px" @change="refreshGroupList">
+          <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
+        </el-select>
+        <el-input v-model="groupQuery.keyword" clearable placeholder="分组编码/名称" style="width: 220px" @keyup.enter="refreshGroupList" />
+        <el-button type="primary" icon="Search" @click="refreshGroupList">搜索</el-button>
+        <el-button type="primary" plain icon="Plus" @click="handleAddGroup" v-hasPermi="['cost:variable:add']">新增分组</el-button>
+      </div>
+      <el-alert
+        class="mt12"
+        type="info"
+        :closable="false"
+        show-icon
+        title="复制场景配置时会同步复制源场景变量组；变量删除后，空变量组可在这里清理，也不会再阻断场景删除。"
+      />
+      <el-table v-loading="groupLoading" :data="groupList" size="small" class="mt12" max-height="360">
+        <el-table-column prop="sceneName" label="场景" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="groupCode" label="分组编码" min-width="150" />
+        <el-table-column prop="groupName" label="分组名称" min-width="150" />
+        <el-table-column prop="variableCount" label="变量数" width="90" align="center">
+          <template #default="scope">{{ scope.row.variableCount || 0 }}</template>
+        </el-table-column>
+        <el-table-column prop="sortNo" label="排序" width="80" align="center" />
+        <el-table-column label="状态" width="100" align="center">
+          <template #default="scope"><dict-tag :options="groupStatusOptions" :value="scope.row.status" /></template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right" align="center">
+          <template #default="scope">
+            <el-button link type="primary" icon="Edit" @click="handleUpdateGroup(scope.row)" v-hasPermi="['cost:variable:edit']">修改</el-button>
+            <el-button link type="danger" icon="Delete" :disabled="Number(scope.row.variableCount || 0) > 0" @click="handleDeleteGroup(scope.row)" v-hasPermi="['cost:variable:remove']">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
+    <el-dialog :title="groupTitle" v-model="groupFormOpen" width="520px" append-to-body>
+      <el-form ref="groupRef" :model="groupForm" :rules="groupRules" label-width="96px">
+        <el-form-item label="所属场景" prop="sceneId">
+          <el-select v-model="groupForm.sceneId" filterable style="width: 100%">
+            <el-option v-for="item in sceneOptions" :key="item.sceneId" :label="`${item.sceneName} / ${item.sceneCode}`" :value="item.sceneId" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="分组编码" prop="groupCode">
+          <el-input v-model="groupForm.groupCode" />
+        </el-form-item>
+        <el-form-item label="分组名称" prop="groupName">
+          <el-input v-model="groupForm.groupName" />
+        </el-form-item>
+        <el-form-item label="排序" prop="sortNo">
+          <el-input-number v-model="groupForm.sortNo" :min="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="状态" prop="status">
+          <el-radio-group v-model="groupForm.status">
+            <el-radio v-for="item in groupStatusOptions" :key="item.value" :label="item.value">{{ item.label }}</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="备注" prop="remark">
+          <el-input v-model="groupForm.remark" type="textarea" :rows="3" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" @click="submitGroupForm">确 定</el-button>
+          <el-button @click="groupFormOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
 
     <el-drawer v-model="open" :title="title" size="720px" append-to-body>
       <el-form ref="variableRef" :model="form" :rules="rules" label-width="108px">
@@ -821,7 +891,13 @@ import {
   testVariableRemote,
   updateVariable
 } from '@/api/cost/variable'
-import { optionselectVariableGroup } from '@/api/cost/variableGroup'
+import {
+  addVariableGroup,
+  delVariableGroup,
+  listVariableGroup,
+  optionselectVariableGroup,
+  updateVariableGroup
+} from '@/api/cost/variableGroup'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
@@ -859,6 +935,12 @@ const cachePolicyOptions = ref([])
 const fallbackPolicyOptions = ref([])
 const formulaOptions = ref([])
 const dictTypeOptions = ref([])
+const groupStatusOptions = ref([])
+const groupOpen = ref(false)
+const groupLoading = ref(false)
+const groupList = ref([])
+const groupFormOpen = ref(false)
+const groupTitle = ref('')
 const requestMethodOptions = [
   { label: 'GET', value: 'GET' },
   { label: 'POST', value: 'POST' },
@@ -1033,6 +1115,8 @@ const validateRemoteJson = fieldLabel => (_rule, value, callback) => {
 const data = reactive({
   queryParams: { pageNum: 1, pageSize: 10, sceneId: undefined, groupId: undefined, variableCode: undefined, variableName: undefined, sourceType: undefined, sourceSystem: undefined },
   form: {},
+  groupQuery: { sceneId: undefined, keyword: undefined, pageNum: 1, pageSize: 1000 },
+  groupForm: { groupId: undefined, sceneId: undefined, groupCode: undefined, groupName: undefined, sortNo: 10, status: '0', remark: undefined },
   copyForm: { variableId: undefined, targetSceneId: undefined, targetGroupId: undefined, variableCode: undefined, variableName: undefined },
   templateForm: { sceneId: undefined, groupId: undefined, templateCode: undefined, updateSupport: false },
   importForm: { updateSupport: false },
@@ -1053,13 +1137,19 @@ const data = reactive({
     adapterConfigJson: [{ validator: validateRemoteJson('适配器配置JSON'), trigger: 'blur' }],
     status: [{ required: true, message: '状态不能为空', trigger: 'change' }]
   },
+  groupRules: {
+    sceneId: [{ required: true, message: '所属场景不能为空', trigger: 'change' }],
+    groupCode: [{ required: true, message: '分组编码不能为空', trigger: 'blur' }],
+    groupName: [{ required: true, message: '分组名称不能为空', trigger: 'blur' }],
+    status: [{ required: true, message: '状态不能为空', trigger: 'change' }]
+  },
   copyRules: {
     targetSceneId: [{ required: true, message: '目标场景不能为空', trigger: 'change' }],
     variableCode: [{ required: true, message: '新变量编码不能为空', trigger: 'blur' }],
     variableName: [{ required: true, message: '新变量名称不能为空', trigger: 'blur' }]
   }
 })
-const { queryParams, form, copyForm, templateForm, importForm, rules, copyRules } = toRefs(data)
+const { queryParams, form, groupQuery, groupForm, copyForm, templateForm, importForm, rules, groupRules, copyRules } = toRefs(data)
 const requestBodyLang = computed(() => String(form.value.contentType || '').toLowerCase().includes('json') ? 'json' : 'text')
 const currentSourceGuide = computed(() => sourceGuideItems.find(item => item.value === form.value.sourceType) || sourceGuideItems[0])
 
@@ -1171,7 +1261,8 @@ async function loadBaseOptions() {
       'cost_variable_auth_type',
       'cost_variable_sync_mode',
       'cost_variable_cache_policy',
-      'cost_variable_fallback_policy'
+      'cost_variable_fallback_policy',
+      'cost_variable_group_status'
     ]),
     optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 }),
     listVariableTemplates(),
@@ -1185,6 +1276,7 @@ async function loadBaseOptions() {
   syncModeOptions.value = dictMap.cost_variable_sync_mode || []
   cachePolicyOptions.value = dictMap.cost_variable_cache_policy || []
   fallbackPolicyOptions.value = dictMap.cost_variable_fallback_policy || []
+  groupStatusOptions.value = dictMap.cost_variable_group_status || variableStatusOptions.value
   sceneOptions.value = sceneResponse?.data || []
   templateList.value = templateResponse?.data || []
   dictTypeOptions.value = (dictTypeResponse?.data || []).slice().sort((a, b) => {
@@ -1203,6 +1295,80 @@ async function loadGroups(sceneId) {
   if (!sceneId) return []
   const response = await optionselectVariableGroup({ sceneId, status: '0', pageNum: 1, pageSize: 1000 })
   return response?.data || []
+}
+
+async function refreshGroupList() {
+  groupLoading.value = true
+  try {
+    const response = await listVariableGroup(groupQuery.value)
+    groupList.value = response?.rows || []
+  } finally {
+    groupLoading.value = false
+  }
+}
+
+function resetGroupFormModel() {
+  groupForm.value = {
+    groupId: undefined,
+    sceneId: groupQuery.value.sceneId || queryParams.value.sceneId || resolveWorkingCostSceneId(sceneOptions.value),
+    groupCode: undefined,
+    groupName: undefined,
+    sortNo: 10,
+    status: '0',
+    remark: undefined
+  }
+  proxy.resetForm('groupRef')
+}
+
+async function handleGroupCenter() {
+  await loadBaseOptions()
+  groupQuery.value.sceneId = queryParams.value.sceneId || resolveWorkingCostSceneId(sceneOptions.value)
+  groupQuery.value.keyword = undefined
+  groupOpen.value = true
+  await refreshGroupList()
+}
+
+function handleAddGroup() {
+  resetGroupFormModel()
+  groupTitle.value = '新增变量组'
+  groupFormOpen.value = true
+}
+
+function handleUpdateGroup(row) {
+  groupForm.value = {
+    groupId: row.groupId,
+    sceneId: row.sceneId,
+    groupCode: row.groupCode,
+    groupName: row.groupName,
+    sortNo: row.sortNo ?? 10,
+    status: row.status || '0',
+    remark: row.remark
+  }
+  groupTitle.value = '修改变量组'
+  groupFormOpen.value = true
+}
+
+function submitGroupForm() {
+  proxy.$refs.groupRef.validate(async valid => {
+    if (!valid) return
+    const req = groupForm.value.groupId ? updateVariableGroup(groupForm.value) : addVariableGroup(groupForm.value)
+    await req
+    proxy.$modal.msgSuccess(groupForm.value.groupId ? '修改成功' : '新增成功')
+    groupFormOpen.value = false
+    await refreshGroupList()
+    groupOptions.value = await loadGroups(queryParams.value.sceneId)
+  })
+}
+
+async function handleDeleteGroup(row) {
+  await proxy.$modal.confirm(`确认删除变量组“${row.groupName || row.groupCode}”吗？`)
+  await delVariableGroup(row.groupId)
+  proxy.$modal.msgSuccess('删除成功')
+  await refreshGroupList()
+  groupOptions.value = await loadGroups(queryParams.value.sceneId)
+  if (queryParams.value.groupId === row.groupId) {
+    queryParams.value.groupId = undefined
+  }
 }
 
 async function getList() {
@@ -1905,6 +2071,7 @@ getList()
 .variable-center__test-preview-label { font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); }
 .variable-center__test-preview-content { margin: 0; padding: 12px 14px; max-height: 160px; overflow: auto; border-radius: 12px; background: var(--el-fill-color-light); color: var(--el-text-color-regular); line-height: 1.7; white-space: pre-wrap; word-break: break-word; font-family: Consolas, Monaco, monospace; }
 .variable-center__formula-preview { width: 100%; padding: 12px 14px; border-radius: 12px; background: var(--el-fill-color-light); line-height: 1.7; color: var(--el-text-color-regular); }
+.variable-group-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .variable-detail { display: grid; gap: 14px; }
 .variable-detail__header { padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 12px; }
 .variable-detail__title { font-size: 18px; font-weight: 700; }
