@@ -490,13 +490,16 @@
           <span>{{ parseTime(scope.row.createTime) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="250" class-name="small-padding fixed-width" fixed="right">
+      <el-table-column label="操作" align="center" width="320" class-name="small-padding fixed-width" fixed="right">
         <template #default="scope">
           <el-button link type="primary" icon="View" @click="handleGovernance(scope.row)" v-hasPermi="['cost:scene:list']">
             治理
           </el-button>
           <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['cost:scene:edit']">
             修改
+          </el-button>
+          <el-button link type="primary" icon="CopyDocument" @click="handleCopy(scope.row)" v-hasPermi="['cost:scene:add']">
+            复制
           </el-button>
           <el-button link type="primary" icon="Select" @click="handleSetCurrentScene(scope.row)">
             设为工作场景
@@ -618,6 +621,112 @@
         <div class="dialog-footer">
           <el-button type="primary" @click="submitForm">确 定</el-button>
           <el-button @click="cancel">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog :title="copyTitle" v-model="copyOpen" width="640px" append-to-body>
+      <el-form ref="copySceneRef" :model="copyForm" :rules="copyRules" label-width="110px">
+        <div class="scene-center__dialog-tip">
+          来源：{{ copySourceScene.sceneCode || '-' }} / {{ copySourceScene.sceneName || '-' }}
+        </div>
+        <el-row :gutter="18">
+          <el-col :span="12">
+            <el-form-item label="新场景编码" prop="sceneCode">
+              <el-input v-model="copyForm.sceneCode" maxlength="64" show-word-limit />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="新场景名称" prop="sceneName">
+              <el-input v-model="copyForm.sceneName" maxlength="128" show-word-limit />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="业务域" prop="businessDomain">
+              <el-select v-model="copyForm.businessDomain" placeholder="请选择业务域" style="width: 100%">
+                <el-option
+                  v-for="item in businessDomainOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="场景类型" prop="sceneType">
+              <el-select v-model="copyForm.sceneType" placeholder="请选择场景类型" style="width: 100%">
+                <el-option
+                  v-for="item in sceneTypeOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="适用组织" prop="orgCode">
+              <el-tree-select
+                v-model="copyForm.orgCode"
+                :data="deptOptions"
+                :props="{ value: 'id', label: 'label', children: 'children' }"
+                value-key="id"
+                placeholder="请选择适用组织"
+                check-strictly
+                clearable
+                filterable
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="对象维度" prop="defaultObjectDimension">
+              <el-select
+                v-model="copyForm.defaultObjectDimension"
+                filterable
+                allow-create
+                clearable
+                default-first-option
+                style="width: 100%"
+              >
+                <el-option v-for="item in objectDimensionOptions" :key="item" :label="item" :value="item" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="状态" prop="status">
+              <el-radio-group v-model="copyForm.status">
+                <el-radio
+                  v-for="item in sceneStatusOptions"
+                  :key="item.value"
+                  :value="item.value"
+                >
+                  {{ item.label }}
+                </el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="复制配置" prop="copyConfig">
+              <el-switch
+                v-model="copyForm.copyConfig"
+                inline-prompt
+                active-text="复制"
+                inactive-text="空场景"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="说明" prop="remark">
+              <el-input v-model="copyForm.remark" type="textarea" :rows="3" maxlength="500" show-word-limit />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" @click="submitCopyForm">确 定</el-button>
+          <el-button @click="cancelCopy">取 消</el-button>
         </div>
       </template>
     </el-dialog>
@@ -747,7 +856,7 @@ import GovernanceImpactList from '@/components/cost/GovernanceImpactList.vue'
 import JsonDiffViewer from '@/components/cost/JsonDiffViewer.vue'
 import PublishPrecheckPanel from '@/components/cost/publish/PublishPrecheckPanel.vue'
 import { getPublishDiff, getPublishPrecheck, listPublish } from '@/api/cost/publish'
-import { addScene, delScene, getScene, getSceneGovernance, getSceneStats, listScene, updateScene } from '@/api/cost/scene'
+import { addScene, copyScene, delScene, getScene, getSceneGovernance, getSceneStats, listScene, updateScene } from '@/api/cost/scene'
 import { deptTreeSelect } from '@/api/system/user'
 import useSettingsStore from '@/store/modules/settings'
 import { getCostSceneContextId, setCostSceneContextId } from '@/utils/costSceneContext'
@@ -781,6 +890,10 @@ const single = ref(true)
 const multiple = ref(true)
 const total = ref(0)
 const title = ref('')
+const copyOpen = ref(false)
+const copyTitle = ref('')
+const copySourceScene = ref({})
+const copyForm = ref(createEmptyCopyForm())
 const governanceOpen = ref(false)
 const governanceLoading = ref(false)
 const initialStatus = ref(undefined)
@@ -826,6 +939,14 @@ const data = reactive({
 })
 
 const { queryParams, form, rules } = toRefs(data)
+
+const copyRules = {
+  sceneCode: [{ required: true, message: '新场景编码不能为空', trigger: 'blur' }],
+  sceneName: [{ required: true, message: '新场景名称不能为空', trigger: 'blur' }],
+  businessDomain: [{ required: true, message: '业务域不能为空', trigger: 'change' }],
+  sceneType: [{ required: true, message: '场景类型不能为空', trigger: 'change' }],
+  status: [{ required: true, message: '场景状态不能为空', trigger: 'change' }]
+}
 
 const filterStatusText = computed(() => {
   if (!queryParams.value.status) {
@@ -1022,6 +1143,21 @@ function reset() {
   proxy.resetForm('sceneRef')
 }
 
+function createEmptyCopyForm() {
+  return {
+    sourceSceneId: undefined,
+    sceneCode: undefined,
+    sceneName: undefined,
+    businessDomain: undefined,
+    orgCode: undefined,
+    sceneType: 'CONTRACT',
+    defaultObjectDimension: undefined,
+    status: '2',
+    copyConfig: true,
+    remark: undefined
+  }
+}
+
 function handleQuery() {
   queryParams.value.pageNum = 1
   getList()
@@ -1062,6 +1198,49 @@ async function handleUpdate(row) {
   initialStatus.value = response.data?.status
   open.value = true
   title.value = '修改场景'
+}
+
+async function handleCopy(row) {
+  await Promise.all([
+    loadSceneDictOptions(),
+    loadDeptOptions()
+  ])
+  copySourceScene.value = row || {}
+  copyForm.value = {
+    sourceSceneId: row.sceneId,
+    sceneCode: buildCopySceneCode(row),
+    sceneName: truncateText(`${row.sceneName || '新场景'}-副本`, 128),
+    businessDomain: row.businessDomain,
+    orgCode: row.orgCode ? String(row.orgCode) : undefined,
+    sceneType: row.sceneType || 'CONTRACT',
+    defaultObjectDimension: row.defaultObjectDimension || undefined,
+    status: resolveDraftSceneStatus(),
+    copyConfig: true,
+    remark: truncateText(`由 ${row.sceneName || row.sceneCode || '来源场景'} 复制生成`, 500)
+  }
+  copyOpen.value = true
+  copyTitle.value = '复制场景'
+  nextTick(() => proxy.$refs.copySceneRef?.clearValidate())
+}
+
+function cancelCopy() {
+  copyOpen.value = false
+  copySourceScene.value = {}
+  copyForm.value = createEmptyCopyForm()
+}
+
+function submitCopyForm() {
+  proxy.$refs.copySceneRef.validate(async valid => {
+    if (!valid) {
+      return
+    }
+    await copyScene(copyForm.value)
+    proxy.$modal.msgSuccess('复制成功')
+    copyOpen.value = false
+    copySourceScene.value = {}
+    copyForm.value = createEmptyCopyForm()
+    getList()
+  })
 }
 
 function submitForm() {
@@ -1571,6 +1750,19 @@ function resolveOrgLabel(value) {
     return '-'
   }
   return deptLabelMap.value[String(value)] || formatLegacyOrgLabel(value)
+}
+
+function buildCopySceneCode(row = {}) {
+  return truncateText(`${row.sceneCode || 'SCENE'}_COPY`, 64)
+}
+
+function resolveDraftSceneStatus() {
+  return sceneStatusOptions.value.some(item => item.value === '2') ? '2' : '0'
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value || '')
+  return text.length > maxLength ? text.slice(0, maxLength) : text
 }
 
 async function ensureDisableAllowed() {

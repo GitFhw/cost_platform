@@ -52,6 +52,15 @@ export function addScene(data) {
   })
 }
 
+// 复制场景
+export function copyScene(data) {
+  return request({
+    url: '/cost/scene/copy',
+    method: 'post',
+    data: data
+  })
+}
+
 // 修改场景
 export function updateScene(data) {
   return request({

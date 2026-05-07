@@ -1,6 +1,7 @@
 package com.ruoyi.system.service.cost;
 
 import com.ruoyi.system.domain.cost.CostScene;
+import com.ruoyi.system.domain.cost.bo.CostSceneCopyBo;
 import com.ruoyi.system.domain.vo.CostSceneGovernanceCheckVo;
 
 import java.util.List;
@@ -74,6 +75,15 @@ public interface ICostSceneService {
      * @return 结果
      */
     public int insertScene(CostScene scene);
+
+    /**
+     * 复制场景及可选配置
+     *
+     * @param request 复制请求
+     *
+     * @return 新场景
+     */
+    public CostScene copyScene(CostSceneCopyBo request);
 
     /**
      * 修改场景

@@ -2,16 +2,20 @@ package com.ruoyi.system.service.impl.cost;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.ruoyi.common.constant.UserConstants;
+import com.ruoyi.common.core.domain.BaseEntity;
 import com.ruoyi.common.core.domain.entity.SysDictData;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
-import com.ruoyi.system.domain.cost.CostScene;
+import com.ruoyi.system.domain.cost.*;
+import com.ruoyi.system.domain.cost.bo.CostSceneCopyBo;
 import com.ruoyi.system.domain.vo.CostSceneGovernanceCheckVo;
 import com.ruoyi.system.mapper.SysDictDataMapper;
-import com.ruoyi.system.mapper.cost.CostSceneMapper;
+import com.ruoyi.system.mapper.cost.*;
 import com.ruoyi.system.service.cost.ICostSceneService;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
@@ -34,6 +38,30 @@ public class CostSceneServiceImpl implements ICostSceneService {
 
     @Autowired
     private CostGovernanceImpactSupport governanceImpactSupport;
+
+    @Autowired
+    private CostFormulaMapper formulaMapper;
+
+    @Autowired
+    private CostVariableGroupMapper variableGroupMapper;
+
+    @Autowired
+    private CostVariableMapper variableMapper;
+
+    @Autowired
+    private CostFeeMapper feeMapper;
+
+    @Autowired
+    private CostRuleMapper ruleMapper;
+
+    @Autowired
+    private CostRuleConditionMapper conditionMapper;
+
+    @Autowired
+    private CostRuleTierMapper tierMapper;
+
+    @Autowired
+    private CostFeeVariableRelMapper feeVariableRelMapper;
 
     /**
      * 查询场景列表
@@ -160,6 +188,36 @@ public class CostSceneServiceImpl implements ICostSceneService {
     }
 
     /**
+     * 复制场景及配置。
+     *
+     * <p>复制仅覆盖配置主数据，不复制发布版本、核算任务和结果台账，避免新场景继承运行态数据。</p>
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CostScene copyScene(CostSceneCopyBo request) {
+        if (request == null || request.getSourceSceneId() == null) {
+            throw new ServiceException("来源场景不能为空");
+        }
+        CostScene source = sceneMapper.selectById(request.getSourceSceneId());
+        if (StringUtils.isNull(source)) {
+            throw new ServiceException("来源场景不存在，请刷新后重试");
+        }
+
+        CostScene target = buildCopiedScene(source, request);
+        normalizeSceneDimension(target);
+        validateSceneDictValue(target);
+        if (!checkSceneCodeUnique(target)) {
+            throw new ServiceException("复制场景失败，场景编码已存在");
+        }
+        sceneMapper.insert(target);
+
+        if (!Boolean.FALSE.equals(request.getCopyConfig())) {
+            copySceneConfig(source.getSceneId(), target.getSceneId());
+        }
+        return sceneMapper.selectById(target.getSceneId());
+    }
+
+    /**
      * 修改场景
      *
      * @param scene 场景对象
@@ -172,6 +230,214 @@ public class CostSceneServiceImpl implements ICostSceneService {
         validateSceneDictValue(scene);
         validateDisableBeforeUpdate(scene);
         return sceneMapper.updateById(scene);
+    }
+
+    private CostScene buildCopiedScene(CostScene source, CostSceneCopyBo request) {
+        CostScene target = new CostScene();
+        target.setSceneCode(StringUtils.trim(request.getSceneCode()));
+        target.setSceneName(StringUtils.trim(request.getSceneName()));
+        target.setBusinessDomain(firstNonEmpty(request.getBusinessDomain(), source.getBusinessDomain()));
+        target.setOrgCode(firstNonEmpty(request.getOrgCode(), source.getOrgCode()));
+        target.setSceneType(firstNonEmpty(request.getSceneType(), source.getSceneType()));
+        target.setDefaultObjectDimension(firstNonEmpty(request.getDefaultObjectDimension(), source.getDefaultObjectDimension()));
+        target.setStatus(firstNonEmpty(request.getStatus(), "2"));
+        target.setRemark(firstNonEmpty(request.getRemark(), source.getRemark()));
+        target.setActiveVersionId(null);
+        return target;
+    }
+
+    private void copySceneConfig(Long sourceSceneId, Long targetSceneId) {
+        copyFormulas(sourceSceneId, targetSceneId);
+        Map<Long, Long> groupIdMap = copyVariableGroups(sourceSceneId, targetSceneId);
+        Map<Long, Long> variableIdMap = copyVariables(sourceSceneId, targetSceneId, groupIdMap);
+        Map<Long, Long> feeIdMap = copyFees(sourceSceneId, targetSceneId);
+        Map<Long, Long> ruleIdMap = copyRules(sourceSceneId, targetSceneId, feeIdMap);
+        copyRuleConditions(sourceSceneId, targetSceneId, ruleIdMap);
+        copyRuleTiers(sourceSceneId, targetSceneId, ruleIdMap);
+        copyFeeVariableRels(sourceSceneId, targetSceneId, feeIdMap, variableIdMap, ruleIdMap);
+    }
+
+    private void copyFormulas(Long sourceSceneId, Long targetSceneId) {
+        List<CostFormula> formulas = formulaMapper.selectList(Wrappers.<CostFormula>lambdaQuery()
+                .eq(CostFormula::getSceneId, sourceSceneId)
+                .orderByAsc(CostFormula::getSortNo)
+                .orderByAsc(CostFormula::getFormulaId));
+        for (CostFormula source : formulas) {
+            CostFormula target = new CostFormula();
+            BeanUtils.copyProperties(source, target);
+            target.setFormulaId(null);
+            target.setSceneId(targetSceneId);
+            target.setSampleResultJson(null);
+            target.setLastTestTime(null);
+            resetAudit(target);
+            formulaMapper.insert(target);
+        }
+    }
+
+    private Map<Long, Long> copyVariableGroups(Long sourceSceneId, Long targetSceneId) {
+        List<CostVariableGroup> groups = variableGroupMapper.selectList(Wrappers.<CostVariableGroup>lambdaQuery()
+                .eq(CostVariableGroup::getSceneId, sourceSceneId)
+                .orderByAsc(CostVariableGroup::getSortNo)
+                .orderByAsc(CostVariableGroup::getGroupId));
+        Map<Long, Long> groupIdMap = new LinkedHashMap<>();
+        for (CostVariableGroup source : groups) {
+            Long sourceGroupId = source.getGroupId();
+            CostVariableGroup target = new CostVariableGroup();
+            BeanUtils.copyProperties(source, target);
+            target.setGroupId(null);
+            target.setSceneId(targetSceneId);
+            resetAudit(target);
+            variableGroupMapper.insert(target);
+            groupIdMap.put(sourceGroupId, target.getGroupId());
+        }
+        return groupIdMap;
+    }
+
+    private Map<Long, Long> copyVariables(Long sourceSceneId, Long targetSceneId, Map<Long, Long> groupIdMap) {
+        List<CostVariable> variables = variableMapper.selectList(Wrappers.<CostVariable>lambdaQuery()
+                .eq(CostVariable::getSceneId, sourceSceneId)
+                .orderByAsc(CostVariable::getSortNo)
+                .orderByAsc(CostVariable::getVariableId));
+        Map<Long, Long> variableIdMap = new LinkedHashMap<>();
+        for (CostVariable source : variables) {
+            Long sourceVariableId = source.getVariableId();
+            CostVariable target = new CostVariable();
+            BeanUtils.copyProperties(source, target);
+            target.setVariableId(null);
+            target.setSceneId(targetSceneId);
+            target.setGroupId(source.getGroupId() == null ? null : groupIdMap.get(source.getGroupId()));
+            resetAudit(target);
+            variableMapper.insert(target);
+            variableIdMap.put(sourceVariableId, target.getVariableId());
+        }
+        return variableIdMap;
+    }
+
+    private Map<Long, Long> copyFees(Long sourceSceneId, Long targetSceneId) {
+        List<CostFeeItem> fees = feeMapper.selectList(Wrappers.<CostFeeItem>lambdaQuery()
+                .eq(CostFeeItem::getSceneId, sourceSceneId)
+                .orderByAsc(CostFeeItem::getSortNo)
+                .orderByAsc(CostFeeItem::getFeeId));
+        Map<Long, Long> feeIdMap = new LinkedHashMap<>();
+        for (CostFeeItem source : fees) {
+            Long sourceFeeId = source.getFeeId();
+            CostFeeItem target = new CostFeeItem();
+            BeanUtils.copyProperties(source, target);
+            target.setFeeId(null);
+            target.setSceneId(targetSceneId);
+            resetAudit(target);
+            feeMapper.insert(target);
+            feeIdMap.put(sourceFeeId, target.getFeeId());
+        }
+        return feeIdMap;
+    }
+
+    private Map<Long, Long> copyRules(Long sourceSceneId, Long targetSceneId, Map<Long, Long> feeIdMap) {
+        List<CostRule> rules = ruleMapper.selectList(Wrappers.<CostRule>lambdaQuery()
+                .eq(CostRule::getSceneId, sourceSceneId)
+                .orderByAsc(CostRule::getPriority)
+                .orderByAsc(CostRule::getSortNo)
+                .orderByAsc(CostRule::getRuleId));
+        Map<Long, Long> ruleIdMap = new LinkedHashMap<>();
+        for (CostRule source : rules) {
+            Long targetFeeId = feeIdMap.get(source.getFeeId());
+            if (targetFeeId == null) {
+                throw new ServiceException("来源场景规则引用的费用不存在，无法复制");
+            }
+            Long sourceRuleId = source.getRuleId();
+            CostRule target = new CostRule();
+            BeanUtils.copyProperties(source, target);
+            target.setRuleId(null);
+            target.setSceneId(targetSceneId);
+            target.setFeeId(targetFeeId);
+            resetAudit(target);
+            ruleMapper.insert(target);
+            ruleIdMap.put(sourceRuleId, target.getRuleId());
+        }
+        return ruleIdMap;
+    }
+
+    private void copyRuleConditions(Long sourceSceneId, Long targetSceneId, Map<Long, Long> ruleIdMap) {
+        List<CostRuleCondition> conditions = conditionMapper.selectList(Wrappers.<CostRuleCondition>lambdaQuery()
+                .eq(CostRuleCondition::getSceneId, sourceSceneId)
+                .orderByAsc(CostRuleCondition::getRuleId)
+                .orderByAsc(CostRuleCondition::getGroupNo)
+                .orderByAsc(CostRuleCondition::getSortNo)
+                .orderByAsc(CostRuleCondition::getConditionId));
+        for (CostRuleCondition source : conditions) {
+            Long targetRuleId = ruleIdMap.get(source.getRuleId());
+            if (targetRuleId == null) {
+                continue;
+            }
+            CostRuleCondition target = new CostRuleCondition();
+            BeanUtils.copyProperties(source, target);
+            target.setConditionId(null);
+            target.setSceneId(targetSceneId);
+            target.setRuleId(targetRuleId);
+            resetAudit(target);
+            conditionMapper.insert(target);
+        }
+    }
+
+    private void copyRuleTiers(Long sourceSceneId, Long targetSceneId, Map<Long, Long> ruleIdMap) {
+        List<CostRuleTier> tiers = tierMapper.selectList(Wrappers.<CostRuleTier>lambdaQuery()
+                .eq(CostRuleTier::getSceneId, sourceSceneId)
+                .orderByAsc(CostRuleTier::getRuleId)
+                .orderByAsc(CostRuleTier::getTierNo)
+                .orderByAsc(CostRuleTier::getTierId));
+        for (CostRuleTier source : tiers) {
+            Long targetRuleId = ruleIdMap.get(source.getRuleId());
+            if (targetRuleId == null) {
+                continue;
+            }
+            CostRuleTier target = new CostRuleTier();
+            BeanUtils.copyProperties(source, target);
+            target.setTierId(null);
+            target.setSceneId(targetSceneId);
+            target.setRuleId(targetRuleId);
+            resetAudit(target);
+            tierMapper.insert(target);
+        }
+    }
+
+    private void copyFeeVariableRels(Long sourceSceneId, Long targetSceneId, Map<Long, Long> feeIdMap,
+                                     Map<Long, Long> variableIdMap, Map<Long, Long> ruleIdMap) {
+        List<CostFeeVariableRel> rels = feeVariableRelMapper.selectList(Wrappers.<CostFeeVariableRel>lambdaQuery()
+                .eq(CostFeeVariableRel::getSceneId, sourceSceneId)
+                .orderByAsc(CostFeeVariableRel::getSortNo)
+                .orderByAsc(CostFeeVariableRel::getRelId));
+        List<CostFeeVariableRel> targetRels = new ArrayList<>();
+        for (CostFeeVariableRel source : rels) {
+            Long targetFeeId = feeIdMap.get(source.getFeeId());
+            Long targetVariableId = variableIdMap.get(source.getVariableId());
+            if (targetFeeId == null || targetVariableId == null) {
+                continue;
+            }
+            CostFeeVariableRel target = new CostFeeVariableRel();
+            BeanUtils.copyProperties(source, target);
+            target.setRelId(null);
+            target.setSceneId(targetSceneId);
+            target.setFeeId(targetFeeId);
+            target.setVariableId(targetVariableId);
+            target.setSourceRuleId(source.getSourceRuleId() == null ? null : ruleIdMap.get(source.getSourceRuleId()));
+            targetRels.add(target);
+        }
+        if (!targetRels.isEmpty()) {
+            feeMapper.insertFeeVariableRels(targetRels);
+        }
+    }
+
+    private void resetAudit(BaseEntity entity) {
+        entity.setSearchValue(null);
+        entity.setCreateBy(null);
+        entity.setCreateTime(null);
+        entity.setUpdateBy(null);
+        entity.setUpdateTime(null);
+        entity.setParams(null);
+    }
+
+    private String firstNonEmpty(String value, String fallback) {
+        return StringUtils.isEmpty(value) ? fallback : StringUtils.trim(value);
     }
 
     private void normalizeSceneDimension(CostScene scene) {

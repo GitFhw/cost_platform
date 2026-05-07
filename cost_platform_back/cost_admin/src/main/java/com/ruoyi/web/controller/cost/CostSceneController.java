@@ -7,6 +7,7 @@ import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostScene;
+import com.ruoyi.system.domain.cost.bo.CostSceneCopyBo;
 import com.ruoyi.system.service.cost.ICostSceneService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -97,6 +98,16 @@ public class CostSceneController extends BaseController {
             return error("新增场景'" + scene.getSceneName() + "'失败，场景编码已存在");
         }
         return toAjax(sceneService.insertScene(scene));
+    }
+
+    /**
+     * 复制场景
+     */
+    @PreAuthorize("@ss.hasPermi('cost:scene:add')")
+    @Log(title = "场景中心", businessType = BusinessType.INSERT)
+    @PostMapping("/copy")
+    public AjaxResult copy(@Validated @RequestBody CostSceneCopyBo request) {
+        return success(sceneService.copyScene(request));
     }
 
     /**
