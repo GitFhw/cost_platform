@@ -303,6 +303,12 @@
             />
           </el-tab-pane>
           <el-tab-pane label="快照对象">
+            <el-alert
+              title="以下费用、变量、规则均来自该发布版本固化快照，不读取当前配置中心的最新维护结果。"
+              type="info"
+              :closable="false"
+              class="publish-center__diff-tip"
+            />
             <el-descriptions :column="3" border>
               <el-descriptions-item label="场景">{{ detailData.snapshotCounts?.scene || 0 }}</el-descriptions-item>
               <el-descriptions-item label="费用">{{ detailData.snapshotCounts?.fee || 0 }}</el-descriptions-item>
