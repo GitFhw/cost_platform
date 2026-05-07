@@ -16,6 +16,23 @@
       </div>
     </section>
 
+    <section class="simulation-page__entry-guide">
+      <div class="simulation-page__entry-card is-active">
+        <div>
+          <strong>试算验证</strong>
+          <p>用于规则联调、样例回归和结果解释，不落正式台账。</p>
+        </div>
+        <el-tag type="success">当前入口</el-tag>
+      </div>
+      <div class="simulation-page__entry-card">
+        <div>
+          <strong>正式核算</strong>
+          <p>用于生产账期任务提交，执行后进入结果台账和异常治理。</p>
+        </div>
+        <el-button type="warning" plain icon="Promotion" @click="goFormalRun">去正式核算</el-button>
+      </div>
+    </section>
+
     <section class="simulation-page__query-shell">
       <div class="simulation-page__panel-head">
         <div>
@@ -871,6 +888,17 @@ async function getList() {
 function handleQuery() {
   queryParams.pageNum = 1
   getList()
+}
+
+function goFormalRun() {
+  router.push({
+    path: COST_MENU_ROUTES.task,
+    query: {
+      sceneId: queryParams.sceneId,
+      versionId: queryParams.versionId,
+      billMonth: queryParams.billMonth
+    }
+  })
 }
 
 async function resetQuery() {
@@ -1853,6 +1881,41 @@ function formatFileTimestamp(value) {
   gap: 10px;
 }
 
+.simulation-page__entry-guide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.simulation-page__entry-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--sim-border);
+  border-radius: 18px;
+  background: var(--sim-card-bg);
+  box-shadow: var(--sim-shadow);
+}
+
+.simulation-page__entry-card.is-active {
+  background: color-mix(in srgb, var(--sim-card-soft) 82%, var(--el-color-success-light-9) 18%);
+}
+
+.simulation-page__entry-card strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--sim-text);
+  font-size: 16px;
+}
+
+.simulation-page__entry-card p {
+  margin: 0;
+  color: var(--sim-muted);
+  line-height: 1.6;
+}
+
 .simulation-page__eyebrow {
   font-size: 12px;
   font-weight: 700;
@@ -2193,6 +2256,7 @@ function formatFileTimestamp(value) {
 
 @media (max-width: 1280px) {
   .simulation-page__hero,
+  .simulation-page__entry-guide,
   .simulation-page__workspace,
   .simulation-page__result-grid,
   .simulation-page__summary-grid--overview,
@@ -2210,6 +2274,7 @@ function formatFileTimestamp(value) {
   }
 
   .simulation-page__hero,
+  .simulation-page__entry-guide,
   .simulation-page__workspace,
   .simulation-page__result-grid,
   .simulation-page__summary-grid--overview,

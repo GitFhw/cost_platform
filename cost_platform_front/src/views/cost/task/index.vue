@@ -14,6 +14,23 @@
       </div>
     </section>
 
+    <section v-show="!isCompactMode" class="run-page__entry-guide">
+      <div class="run-page__entry-card">
+        <div>
+          <strong>试算验证</strong>
+          <p>用于规则联调、样例回归和结果解释，不落正式台账。</p>
+        </div>
+        <el-button type="primary" plain icon="Promotion" @click="goSimulation">去试算中心</el-button>
+      </div>
+      <div class="run-page__entry-card is-active">
+        <div>
+          <strong>正式核算</strong>
+          <p>用于生产账期任务提交，执行后进入结果台账和异常治理。</p>
+        </div>
+        <el-tag type="warning">当前入口</el-tag>
+      </div>
+    </section>
+
     <section v-show="!isCompactMode" class="run-page__metrics">
       <div v-for="item in metricItems" :key="item.label" class="run-page__metric-card">
         <span>{{ item.label }}</span>
@@ -1293,6 +1310,17 @@ function openBatchLedger() {
   router.push({ path: COST_MENU_ROUTES.taskBatch, query: { sceneId: form.sceneId, versionId: form.versionId, billMonth: form.billMonth } })
 }
 
+function goSimulation() {
+  router.push({
+    path: COST_MENU_ROUTES.simulation,
+    query: {
+      sceneId: form.sceneId,
+      versionId: form.versionId,
+      billMonth: form.billMonth
+    }
+  })
+}
+
 function openAlertCenter(task) {
   if (!task?.taskId) {
     router.push(COST_MENU_ROUTES.alert)
@@ -1603,6 +1631,35 @@ onActivated(async () => {
   background: color-mix(in srgb, var(--el-color-warning-light-8) 28%, var(--el-bg-color-overlay));
 }
 .run-page__hero-side { display: grid; gap: 10px; justify-items: end; align-content: start; }
+.run-page__entry-guide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.run-page__entry-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 16px;
+  background: var(--el-bg-color-overlay);
+}
+.run-page__entry-card.is-active {
+  background: color-mix(in srgb, var(--el-color-warning-light-9) 44%, var(--el-bg-color-overlay));
+}
+.run-page__entry-card strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--el-text-color-primary);
+  font-size: 16px;
+}
+.run-page__entry-card p {
+  margin: 0;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
 .run-page__eyebrow {
   font-size: 12px;
   color: var(--el-color-warning-dark-2);
@@ -1733,7 +1790,7 @@ onActivated(async () => {
   margin-top: 0;
 }
 @media (max-width: 1200px) {
-  .run-page__metrics, .run-page__overview-grid, .run-page__workspace, .run-page__summary, .run-page__batch-card, .run-page__distribution-grid { grid-template-columns: 1fr; }
+  .run-page__entry-guide, .run-page__metrics, .run-page__overview-grid, .run-page__workspace, .run-page__summary, .run-page__batch-card, .run-page__distribution-grid { grid-template-columns: 1fr; }
   .run-page__batch-select { grid-template-columns: 1fr; }
   .run-page__hero-side { justify-items: stretch; }
   .run-page__detail-hero { flex-direction: column; }
