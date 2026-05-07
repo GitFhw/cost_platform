@@ -19,6 +19,46 @@
       </div>
     </section>
 
+    <section v-show="!isCompactMode && hasBusinessSummary" class="result-page__business-summary">
+      <div class="result-page__distribution-card">
+        <div class="result-page__section-head result-page__section-head--tight">
+          <div>
+            <h3>费用分布</h3>
+            <p>按金额排序展示当前筛选范围内贡献最高的费用。</p>
+          </div>
+        </div>
+        <div v-if="feeDistribution.length" class="result-page__distribution-list">
+          <div v-for="item in feeDistribution" :key="item.feeCode || item.feeName" class="result-page__distribution-row">
+            <div>
+              <strong>{{ item.feeName || item.feeCode || '-' }}</strong>
+              <small>{{ item.feeCode || '-' }} · {{ formatInteger(item.resultCount) }} 条</small>
+            </div>
+            <span>{{ formatAmount(item.amountTotal) }}</span>
+          </div>
+        </div>
+        <el-empty v-else description="暂无费用分布" :image-size="72" />
+      </div>
+
+      <div class="result-page__distribution-card">
+        <div class="result-page__section-head result-page__section-head--tight">
+          <div>
+            <h3>对象分布</h3>
+            <p>按对象维度汇总结果条数、对象数和金额。</p>
+          </div>
+        </div>
+        <div v-if="objectDistribution.length" class="result-page__distribution-list">
+          <div v-for="item in objectDistribution" :key="item.objectDimension" class="result-page__distribution-row">
+            <div>
+              <strong>{{ item.objectDimension || '-' }}</strong>
+              <small>{{ formatInteger(item.objectCount) }} 个对象 · {{ formatInteger(item.resultCount) }} 条</small>
+            </div>
+            <span>{{ formatAmount(item.amountTotal) }}</span>
+          </div>
+        </div>
+        <el-empty v-else description="暂无对象分布" :image-size="72" />
+      </div>
+    </section>
+
     <section class="result-page__query-shell">
       <div class="result-page__section-head">
         <div>
@@ -287,7 +327,15 @@ const detailOpen = ref(false)
 const traceOpen = ref(false)
 const detailData = ref({})
 const traceData = ref({})
-const stats = reactive({ resultCount: 0, taskCount: 0, traceCount: 0, amountTotal: 0 })
+const stats = reactive({
+  resultCount: 0,
+  taskCount: 0,
+  traceCount: 0,
+  abnormalCount: 0,
+  amountTotal: 0,
+  feeDistribution: [],
+  objectDistribution: []
+})
 const resultQueryGuardMessage = '结果台账数据量较大，请至少补充账期、任务ID、任务号或业务单号后再查询'
 const routeContext = reactive({
   taskId: route.query.taskId ? Number(route.query.taskId) : undefined
@@ -308,11 +356,15 @@ const queryParams = reactive({
 })
 
 const metricItems = computed(() => [
-  { label: '结果条数', value: stats.resultCount, desc: '当前筛选范围内的结果台账条数' },
-  { label: '任务数量', value: stats.taskCount, desc: '结果覆盖的任务数' },
-  { label: '追溯记录', value: stats.traceCount, desc: '已生成的追溯解释数量' },
-  { label: '金额合计', value: stats.amountTotal, desc: '当前筛选结果的金额汇总' }
+  { label: '结果条数', value: formatInteger(stats.resultCount), desc: '当前筛选范围内的结果台账条数' },
+  { label: '任务数量', value: formatInteger(stats.taskCount), desc: '结果覆盖的正式核算任务数' },
+  { label: '异常数量', value: formatInteger(stats.abnormalCount), desc: '非成功状态的结果记录数量' },
+  { label: '金额合计', value: formatAmount(stats.amountTotal), desc: '当前筛选结果的金额汇总' }
 ])
+
+const feeDistribution = computed(() => Array.isArray(stats.feeDistribution) ? stats.feeDistribution : [])
+const objectDistribution = computed(() => Array.isArray(stats.objectDistribution) ? stats.objectDistribution : [])
+const hasBusinessSummary = computed(() => Number(stats.resultCount || 0) > 0 || feeDistribution.value.length > 0 || objectDistribution.value.length > 0)
 
 const resultTableHeight = computed(() => (isCompactMode.value ? 'calc(100dvh - 320px)' : 'calc(100dvh - 540px)'))
 
@@ -359,7 +411,15 @@ function shouldBlockBroadResultQuery() {
 function clearResultView() {
   resultList.value = []
   total.value = 0
-  Object.assign(stats, { resultCount: 0, taskCount: 0, traceCount: 0, amountTotal: 0 })
+  Object.assign(stats, {
+    resultCount: 0,
+    taskCount: 0,
+    traceCount: 0,
+    abnormalCount: 0,
+    amountTotal: 0,
+    feeDistribution: [],
+    objectDistribution: []
+  })
 }
 
 async function getList(showWarning = false) {
@@ -468,6 +528,17 @@ function countTraceEntries(value) {
   if (Array.isArray(value)) return value.length
   if (typeof value === 'object') return Object.keys(value).length
   return 1
+}
+
+function formatAmount(value) {
+  if (value === undefined || value === null || value === '') {
+    return '0.00'
+  }
+  return Number(value || 0).toFixed(2)
+}
+
+function formatInteger(value) {
+  return Number(value || 0).toLocaleString()
 }
 
 function formatQuantity(row) {
@@ -587,6 +658,59 @@ onActivated(async () => {
 .result-page__metric-card strong {
   font-size: 26px;
   color: var(--el-color-success-dark-2);
+}
+
+.result-page__business-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.result-page__distribution-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 16px;
+  background: var(--el-bg-color-overlay);
+}
+
+.result-page__section-head--tight {
+  margin-bottom: 12px;
+}
+
+.result-page__distribution-list {
+  display: grid;
+  gap: 8px;
+}
+
+.result-page__distribution-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--el-bg-color-overlay) 92%, var(--el-color-success-light-9) 8%);
+}
+
+.result-page__distribution-row strong,
+.result-page__distribution-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-page__distribution-row small {
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+}
+
+.result-page__distribution-row > span {
+  color: var(--el-color-success-dark-2);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .result-page__query-shell {
@@ -737,6 +861,7 @@ onActivated(async () => {
 
 @media (max-width: 1200px) {
   .result-page__metrics,
+  .result-page__business-summary,
   .result-page__summary {
     grid-template-columns: 1fr;
   }

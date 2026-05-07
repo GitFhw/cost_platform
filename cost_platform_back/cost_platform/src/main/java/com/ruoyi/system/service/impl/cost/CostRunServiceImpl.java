@@ -1144,7 +1144,10 @@ public class CostRunServiceImpl implements ICostRunService {
             empty.put("resultCount", 0L);
             empty.put("taskCount", 0L);
             empty.put("traceCount", 0L);
+            empty.put("abnormalCount", 0L);
             empty.put("amountTotal", BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            empty.put("feeDistribution", Collections.emptyList());
+            empty.put("objectDistribution", Collections.emptyList());
             return empty;
         }
         Map<String, Object> rawStats = resultLedgerMapper.selectStats(query, requestTaskIds);
@@ -1152,8 +1155,11 @@ public class CostRunServiceImpl implements ICostRunService {
         stats.put("resultCount", toLong(rawStats.get("resultCount")));
         stats.put("taskCount", toLong(rawStats.get("taskCount")));
         stats.put("traceCount", toLong(rawStats.get("traceCount")));
+        stats.put("abnormalCount", toLong(rawStats.get("abnormalCount")));
         BigDecimal amountTotal = toBigDecimal(rawStats.get("amountTotal"));
         stats.put("amountTotal", (amountTotal == null ? BigDecimal.ZERO : amountTotal).setScale(2, RoundingMode.HALF_UP));
+        stats.put("feeDistribution", normalizeAmountRows(resultLedgerMapper.selectFeeDistribution(query, requestTaskIds), "amountTotal"));
+        stats.put("objectDistribution", normalizeAmountRows(resultLedgerMapper.selectObjectDistribution(query, requestTaskIds), "amountTotal"));
         return stats;
     }
 
@@ -2794,6 +2800,22 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private long toLong(Object value) {
         return value instanceof Number ? ((Number) value).longValue() : 0L;
+    }
+
+    private List<Map<String, Object>> normalizeAmountRows(List<Map<String, Object>> rows, String amountKey) {
+        if (rows == null || rows.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return rows.stream().map(row -> {
+            LinkedHashMap<String, Object> normalized = new LinkedHashMap<>(row);
+            BigDecimal amount = toBigDecimal(row.get(amountKey));
+            normalized.put(amountKey, defaultZero(amount).setScale(2, RoundingMode.HALF_UP));
+            normalized.put("resultCount", toLong(row.get("resultCount")));
+            if (row.containsKey("objectCount")) {
+                normalized.put("objectCount", toLong(row.get("objectCount")));
+            }
+            return normalized;
+        }).collect(Collectors.toList());
     }
 
     private Map<Long, CostPublishVersion> selectVersionMap(Set<Long> versionIds) {

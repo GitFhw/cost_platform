@@ -27,4 +27,10 @@ public interface CostResultLedgerMapper extends BaseMapper<CostResultLedger> {
 
     Map<String, Object> selectStats(@Param("query") CostResultLedger query,
                                     @Param("requestTaskIds") List<Long> requestTaskIds);
+
+    List<Map<String, Object>> selectFeeDistribution(@Param("query") CostResultLedger query,
+                                                    @Param("requestTaskIds") List<Long> requestTaskIds);
+
+    List<Map<String, Object>> selectObjectDistribution(@Param("query") CostResultLedger query,
+                                                       @Param("requestTaskIds") List<Long> requestTaskIds);
 }
