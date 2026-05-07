@@ -682,7 +682,7 @@
       </div>
     </el-drawer>
 
-    <el-drawer v-model="governanceOpen" title="变量治理检查" size="640px" append-to-body>
+    <el-drawer v-model="governanceOpen" title="变量治理检查" size="720px" append-to-body>
       <div v-loading="governanceLoading" v-if="governanceInfo.variableId">
         <div class="variable-governance__summary">
           <div class="variable-governance__item">
@@ -702,12 +702,34 @@
             <strong>{{ governanceInfo.publishedVersionCount }}</strong>
           </div>
         </div>
+        <div class="variable-dependency-map">
+          <div class="variable-dependency-map__root">
+            <span>当前变量</span>
+            <strong>{{ governanceInfo.variableName }}</strong>
+            <small>{{ governanceInfo.variableCode }}</small>
+          </div>
+          <div class="variable-dependency-map__arrow">-&gt;</div>
+          <div class="variable-dependency-map__nodes">
+            <div v-for="node in variableDependencyNodes" :key="node.key" class="variable-dependency-map__node" :class="{ 'is-empty': !node.count }">
+              <div class="variable-dependency-map__node-head">
+                <span>{{ node.label }}</span>
+                <strong>{{ node.count }}</strong>
+              </div>
+              <p>{{ node.desc }}</p>
+              <ul v-if="node.examples.length">
+                <li v-for="example in node.examples" :key="example">{{ example }}</li>
+              </ul>
+              <small v-else>暂无引用样例</small>
+            </div>
+          </div>
+        </div>
         <el-descriptions :column="1" border>
           <el-descriptions-item label="变量">{{ governanceInfo.variableCode }} / {{ governanceInfo.variableName }}</el-descriptions-item>
           <el-descriptions-item label="所属场景">{{ governanceInfo.sceneCode }} / {{ governanceInfo.sceneName }}</el-descriptions-item>
           <el-descriptions-item label="费用关系引用">{{ governanceInfo.feeRelCount }}</el-descriptions-item>
           <el-descriptions-item label="规则条件引用">{{ governanceInfo.ruleConditionCount }}</el-descriptions-item>
           <el-descriptions-item label="规则计量引用">{{ governanceInfo.ruleQuantityCount }}</el-descriptions-item>
+          <el-descriptions-item label="公式表达式引用">{{ governanceInfo.formulaRefCount }}</el-descriptions-item>
           <el-descriptions-item label="发布版本引用">{{ governanceInfo.publishedVersionCount }}</el-descriptions-item>
         </el-descriptions>
         <el-alert :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon class="mt12" />
@@ -864,6 +886,39 @@ const templateImpact = ref({
 const lastTemplateApplyResult = ref({})
 const statistics = reactive({ variableCount: 0, enabledVariableCount: 0, remoteVariableCount: 0, formulaVariableCount: 0 })
 const selectedFormulaMeta = computed(() => formulaOptions.value.find(item => item.formulaCode === form.value.formulaCode) || {})
+const variableDependencyNodes = computed(() => {
+  const info = governanceInfo.value || {}
+  return [
+    {
+      key: 'fee',
+      label: '费用契约',
+      count: Number(info.feeRelCount || 0),
+      desc: '费用输入契约中使用该变量',
+      examples: collectImpactExamples(['VARIABLE_FEE_CONTRACT'])
+    },
+    {
+      key: 'rule',
+      label: '规则引用',
+      count: Number(info.ruleConditionCount || 0) + Number(info.ruleQuantityCount || 0),
+      desc: `条件 ${Number(info.ruleConditionCount || 0)} 条，计量字段 ${Number(info.ruleQuantityCount || 0)} 条`,
+      examples: collectImpactExamples(['VARIABLE_RULE_CONDITION', 'VARIABLE_RULE_QUANTITY'])
+    },
+    {
+      key: 'formula',
+      label: '公式引用',
+      count: Number(info.formulaRefCount || 0),
+      desc: '公式表达式中读取该变量作为输入',
+      examples: collectImpactExamples(['VARIABLE_FORMULA_REF'])
+    },
+    {
+      key: 'publish',
+      label: '发布版本',
+      count: Number(info.publishedVersionCount || 0),
+      desc: '已发布快照中保留该变量定义',
+      examples: collectImpactExamples(['VARIABLE_PUBLISH_SNAPSHOT'])
+    }
+  ]
+})
 const dictTypeOptionGroups = computed(() => {
   const groups = [
     {
@@ -881,6 +936,14 @@ const dictTypeOptionGroups = computed(() => {
   ]
   return groups.filter(group => group.items.length)
 })
+
+function collectImpactExamples(types) {
+  const impacts = Array.isArray(governanceInfo.value?.impactItems) ? governanceInfo.value.impactItems : []
+  return impacts
+    .filter(item => types.includes(item.impactType))
+    .flatMap(item => Array.isArray(item.examples) ? item.examples : [])
+    .slice(0, 3)
+}
 
 const validateDictType = (_rule, value, callback) => {
   if (data.form.sourceType === 'DICT' && !value) {
@@ -1674,6 +1737,21 @@ getList()
 .variable-governance__item { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: var(--el-fill-color-extra-light); }
 .variable-governance__item span { font-size: 12px; color: var(--el-text-color-secondary); }
 .variable-governance__item strong { font-size: 18px; color: var(--el-text-color-primary); }
+.variable-dependency-map { display: grid; grid-template-columns: 150px 28px 1fr; align-items: stretch; gap: 10px; margin: 12px 0; }
+.variable-dependency-map__root { display: grid; align-content: center; gap: 6px; padding: 14px; border: 1px solid color-mix(in srgb, var(--el-color-primary) 36%, var(--el-border-color-light)); border-radius: 10px; background: color-mix(in srgb, var(--el-color-primary-light-9) 44%, var(--el-bg-color-overlay)); }
+.variable-dependency-map__root span,
+.variable-dependency-map__root small { color: var(--el-text-color-secondary); }
+.variable-dependency-map__root strong { color: var(--el-text-color-primary); word-break: break-word; }
+.variable-dependency-map__arrow { display: grid; place-items: center; color: var(--el-text-color-secondary); font-weight: 700; }
+.variable-dependency-map__nodes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.variable-dependency-map__node { min-height: 126px; padding: 12px; border: 1px solid var(--el-border-color-light); border-radius: 10px; background: var(--el-bg-color-overlay); }
+.variable-dependency-map__node.is-empty { background: var(--el-fill-color-extra-light); }
+.variable-dependency-map__node-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.variable-dependency-map__node-head span { color: var(--el-text-color-primary); font-weight: 700; }
+.variable-dependency-map__node-head strong { color: var(--el-color-primary); font-size: 20px; }
+.variable-dependency-map__node p { margin: 8px 0; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
+.variable-dependency-map__node ul { margin: 0; padding-left: 16px; color: var(--el-text-color-regular); font-size: 12px; line-height: 1.7; }
+.variable-dependency-map__node small { color: var(--el-text-color-placeholder); }
 .variable-template-toolbar { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; margin-bottom: 12px; }
 .variable-template-list { display: grid; gap: 12px; max-height: 420px; overflow: auto; }
 .variable-template-card { padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 12px; cursor: pointer; background: var(--el-bg-color-overlay); display: grid; gap: 8px; }
@@ -1704,9 +1782,12 @@ getList()
   .variable-center__action-grid,
   .variable-center__source-guide,
   .variable-governance__summary,
+  .variable-dependency-map,
   .variable-template-summary,
   .variable-template-governance,
   .variable-template-impact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .variable-dependency-map__arrow { display: none; }
+  .variable-dependency-map__nodes { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
@@ -1717,6 +1798,8 @@ getList()
   .variable-center__action-grid,
   .variable-center__source-guide,
   .variable-governance__summary,
+  .variable-dependency-map,
+  .variable-dependency-map__nodes,
   .variable-template-toolbar,
   .variable-template-summary,
   .variable-template-governance,

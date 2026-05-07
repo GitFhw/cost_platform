@@ -147,20 +147,22 @@ public class CostVariableServiceImpl implements ICostVariableService {
         if (check == null) {
             return null;
         }
+        populateFormulaReferenceCount(check);
         normalizeGovernanceCount(check);
 
         boolean hasFeeRelRef = check.getFeeRelCount() > 0;
         boolean hasRuleConditionRef = check.getRuleConditionCount() > 0;
         boolean hasRuleQuantityRef = check.getRuleQuantityCount() > 0;
+        boolean hasFormulaRef = check.getFormulaRefCount() > 0;
         boolean hasPublishedVersionRef = check.getPublishedVersionCount() > 0;
 
-        check.setCanDelete(!hasRuleConditionRef && !hasRuleQuantityRef && !hasPublishedVersionRef);
+        check.setCanDelete(!hasRuleConditionRef && !hasRuleQuantityRef && !hasFormulaRef && !hasPublishedVersionRef);
         check.setCanDisable(!hasPublishedVersionRef);
-        check.setRemoveBlockingReason(buildRemoveBlockingReason(check, hasFeeRelRef, hasRuleConditionRef, hasRuleQuantityRef, hasPublishedVersionRef));
+        check.setRemoveBlockingReason(buildRemoveBlockingReason(check, hasFeeRelRef, hasRuleConditionRef, hasRuleQuantityRef, hasFormulaRef, hasPublishedVersionRef));
         check.setDisableBlockingReason(buildDisableBlockingReason(check, hasPublishedVersionRef));
         check.setRemoveAdvice(check.getCanDelete()
-                ? (hasFeeRelRef ? "当前变量未被规则和版本占用，费用变量关系会随删除自动清理。" : "当前变量未被规则和版本占用，可直接删除。")
-                : "请先解除规则引用与发布版本引用后再删除变量；费用变量关系不单独阻断删除。");
+                ? (hasFeeRelRef ? "当前变量未被规则、公式和版本占用，费用变量关系会随删除自动清理。" : "当前变量未被规则、公式和版本占用，可直接删除。")
+                : "请先解除规则、公式与发布版本引用后再删除变量；费用变量关系不单独阻断删除。");
         check.setDisableAdvice(check.getCanDisable() ? "变量停用后将不再出现在新增配置中，历史配置保留。"
                 : "当前变量已进入发布版本，请先替换并发布新版本后再停用。");
         check.setImpactItems(governanceImpactSupport.buildVariableImpacts(check));
@@ -623,7 +625,34 @@ public class CostVariableServiceImpl implements ICostVariableService {
         check.setFeeRelCount(nullSafeLong(check.getFeeRelCount()));
         check.setRuleConditionCount(nullSafeLong(check.getRuleConditionCount()));
         check.setRuleQuantityCount(nullSafeLong(check.getRuleQuantityCount()));
+        check.setFormulaRefCount(nullSafeLong(check.getFormulaRefCount()));
         check.setPublishedVersionCount(nullSafeLong(check.getPublishedVersionCount()));
+    }
+
+    private void populateFormulaReferenceCount(CostVariableGovernanceCheckVo check) {
+        if (StringUtils.isEmpty(check.getVariableCode()) || check.getSceneId() == null) {
+            check.setFormulaRefCount(0L);
+            return;
+        }
+        long count = formulaMapper.selectList(Wrappers.<CostFormula>lambdaQuery()
+                        .eq(CostFormula::getSceneId, check.getSceneId()))
+                .stream()
+                .filter(formula -> formulaReferencesVariable(formula, check.getVariableCode()))
+                .count();
+        check.setFormulaRefCount(count);
+    }
+
+    private boolean formulaReferencesVariable(CostFormula formula, String variableCode) {
+        if (formula == null || StringUtils.isEmpty(formula.getFormulaExpr())) {
+            return false;
+        }
+        try {
+            CostExpressionAnalysisVo analysis = expressionService.analyzeExpression(formula.getFormulaExpr(), formula.getNamespaceScope());
+            return analysis.getVariableReferences().contains(variableCode);
+        } catch (Exception e) {
+            log.warn("分析公式变量引用失败，formulaCode={}，variableCode={}", formula.getFormulaCode(), variableCode, e);
+            return false;
+        }
     }
 
     /**
@@ -677,12 +706,12 @@ public class CostVariableServiceImpl implements ICostVariableService {
      * 构造删除阻断说明。
      */
     private String buildRemoveBlockingReason(CostVariableGovernanceCheckVo check, boolean hasFeeRelRef, boolean hasRuleConditionRef,
-                                             boolean hasRuleQuantityRef, boolean hasPublishedVersionRef) {
-        if (!hasRuleConditionRef && !hasRuleQuantityRef && !hasPublishedVersionRef) {
+                                             boolean hasRuleQuantityRef, boolean hasFormulaRef, boolean hasPublishedVersionRef) {
+        if (!hasRuleConditionRef && !hasRuleQuantityRef && !hasFormulaRef && !hasPublishedVersionRef) {
             if (hasFeeRelRef) {
-                return String.format("当前变量未被规则和版本占用；已有%d条费用变量关系将随删除自动清理", check.getFeeRelCount());
+                return String.format("当前变量未被规则、公式和版本占用；已有%d条费用变量关系将随删除自动清理", check.getFeeRelCount());
             }
-            return "当前变量未被规则和版本占用";
+            return "当前变量未被规则、公式和版本占用";
         }
         StringJoiner joiner = new StringJoiner("；");
         if (hasRuleConditionRef) {
@@ -690,6 +719,9 @@ public class CostVariableServiceImpl implements ICostVariableService {
         }
         if (hasRuleQuantityRef) {
             joiner.add(String.format("已有%d条规则计量字段引用", check.getRuleQuantityCount()));
+        }
+        if (hasFormulaRef) {
+            joiner.add(String.format("已有%d个公式引用", check.getFormulaRefCount()));
         }
         if (hasPublishedVersionRef) {
             joiner.add(String.format("已有%d个发布版本快照引用", check.getPublishedVersionCount()));

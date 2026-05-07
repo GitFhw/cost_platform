@@ -5,6 +5,7 @@ import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.cost.*;
 import com.ruoyi.system.domain.vo.*;
 import com.ruoyi.system.mapper.cost.*;
+import com.ruoyi.system.service.cost.ICostExpressionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +22,9 @@ public class CostGovernanceImpactSupport {
 
     @Autowired
     private CostFeeMapper feeMapper;
+
+    @Autowired
+    private CostFormulaMapper formulaMapper;
 
     @Autowired
     private CostVariableGroupMapper variableGroupMapper;
@@ -54,6 +58,9 @@ public class CostGovernanceImpactSupport {
 
     @Autowired
     private CostFeeVariableRelMapper feeVariableRelMapper;
+
+    @Autowired
+    private ICostExpressionService expressionService;
 
     public List<CostGovernanceImpactVo> buildSceneImpacts(CostSceneGovernanceCheckVo check) {
         List<CostGovernanceImpactVo> impacts = new ArrayList<>();
@@ -156,6 +163,12 @@ public class CostGovernanceImpactSupport {
                     "删除变量会导致规则计量或阶梯依据缺失，必须先替换规则计量变量。",
                     "停用变量后，相关规则仍可能引用它，发布前需要重新校验计量口径。",
                     "进入规则中心筛选计量变量，替换为新的变量后再删除。", sampleQuantityRulesByVariable(check.getSceneId(), check.getVariableCode())));
+        }
+        if (positive(check.getFormulaRefCount())) {
+            impacts.add(impact("VARIABLE_FORMULA_REF", "公式实验室", "公式表达式引用当前变量", check.getFormulaRefCount(), true, false,
+                    "删除变量会导致这些公式表达式缺少输入，必须先替换公式中的变量引用。",
+                    "停用变量不会删除公式表达式，但后续发布前需要确认公式输入已替换为可用变量。",
+                    "进入公式实验室定位这些公式，替换表达式中的变量后再处理变量。", sampleFormulasByVariable(check.getSceneId(), check.getVariableCode())));
         }
         if (positive(check.getPublishedVersionCount())) {
             impacts.add(impact("VARIABLE_PUBLISH_SNAPSHOT", "发布中心", "发布版本快照引用当前变量", check.getPublishedVersionCount(), true, true,
@@ -414,6 +427,30 @@ public class CostGovernanceImpactSupport {
                         .orderByDesc(CostRule::getPriority)
                         .last("limit " + SAMPLE_LIMIT))
                 .stream().map(rule -> label(rule.getRuleName(), rule.getRuleCode())).collect(Collectors.toList());
+    }
+
+    private List<String> sampleFormulasByVariable(Long sceneId, String variableCode) {
+        return formulaMapper.selectList(Wrappers.<CostFormula>lambdaQuery()
+                        .eq(CostFormula::getSceneId, sceneId)
+                        .orderByAsc(CostFormula::getSortNo)
+                        .last("limit " + SAMPLE_LIMIT * 4))
+                .stream()
+                .filter(formula -> formulaReferencesVariable(formula, variableCode))
+                .limit(SAMPLE_LIMIT)
+                .map(formula -> label(formula.getFormulaName(), formula.getFormulaCode()))
+                .collect(Collectors.toList());
+    }
+
+    private boolean formulaReferencesVariable(CostFormula formula, String variableCode) {
+        if (formula == null || StringUtils.isEmpty(formula.getFormulaExpr())) {
+            return false;
+        }
+        try {
+            CostExpressionAnalysisVo analysis = expressionService.analyzeExpression(formula.getFormulaExpr(), formula.getNamespaceScope());
+            return analysis.getVariableReferences().contains(variableCode);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private List<String> sampleConditionsByRule(Long ruleId) {

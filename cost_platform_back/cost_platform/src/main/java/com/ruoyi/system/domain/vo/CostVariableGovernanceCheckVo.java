@@ -63,6 +63,11 @@ public class CostVariableGovernanceCheckVo {
     private Long ruleQuantityCount;
 
     /**
+     * 公式引用数量
+     */
+    private Long formulaRefCount;
+
+    /**
      * 发布版本引用数量
      */
     private Long publishedVersionCount;
