@@ -134,8 +134,9 @@
               <span>{{ parseTime(scope.row.updateTime) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="280" fixed="right" align="center">
+          <el-table-column label="操作" width="340" fixed="right" align="center">
             <template #default="scope">
+              <el-button link type="primary" icon="Document" @click="handleDetail(scope.row)">详情</el-button>
               <el-button link type="primary" icon="View" @click="handleGovernance(scope.row)">治理</el-button>
               <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)">修改</el-button>
               <el-button link type="primary" icon="CopyDocument" @click="handleCopy(scope.row)">复制</el-button>
@@ -766,6 +767,81 @@
       </template>
     </el-dialog>
 
+    <el-drawer v-model="detailOpen" title="规则详情" size="760px" append-to-body>
+      <div v-if="detailInfo.ruleId" class="rule-detail">
+        <div class="rule-detail__header">
+          <div>
+            <div class="rule-detail__title">{{ detailInfo.ruleName }}</div>
+            <div class="rule-detail__meta">{{ detailInfo.ruleCode }} / {{ detailInfo.feeCode }} / {{ detailInfo.feeName }}</div>
+          </div>
+          <el-tag>{{ resolveTagLabel(ruleTypeOptions, detailInfo.ruleType) || detailInfo.ruleType }}</el-tag>
+        </div>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="命中逻辑">{{ resolveTagLabel(conditionLogicOptions, detailInfo.conditionLogic) || detailInfo.conditionLogic || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="优先级">{{ detailInfo.priority ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="计量变量">{{ resolveVariableName(detailInfo.quantityVariableCode) || detailInfo.quantityVariableCode || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="状态"><dict-tag :options="ruleStatusOptions" :value="detailInfo.status" /></el-descriptions-item>
+          <el-descriptions-item label="计价方式" :span="2">{{ explainRulePricing(detailInfo) }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailInfo.ruleType === 'FORMULA'" label="金额公式" :span="2">
+            <div class="rule-detail__formula">
+              <strong>{{ detailInfo.amountFormulaCode || '-' }}</strong>
+              <span>{{ detailInfo.amountFormula || '-' }}</span>
+            </div>
+          </el-descriptions-item>
+        </el-descriptions>
+        <div class="rule-detail__section">
+          <div class="rule-detail__section-title">
+            <strong>命中条件</strong>
+            <span>{{ detailConditionRows.length ? `${detailConditionRows.length} 个条件，按 ${resolveTagLabel(conditionLogicOptions, detailInfo.conditionLogic) || detailInfo.conditionLogic || 'AND'} 判断` : '无条件，默认命中' }}</span>
+          </div>
+          <el-table v-if="detailConditionRows.length" :data="detailConditionRows" size="small" border>
+            <el-table-column label="组" prop="groupNo" width="70" align="center" />
+            <el-table-column label="变量" min-width="180">
+              <template #default="scope">
+                <div class="rule-detail__variable">
+                  <strong>{{ scope.row.displayName || resolveVariableName(scope.row.variableCode) }}</strong>
+                  <span>{{ scope.row.variableCode }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作符" width="120" align="center">
+              <template #default="scope">{{ resolveTagLabel(operatorOptions, scope.row.operatorCode) || scope.row.operatorCode }}</template>
+            </el-table-column>
+            <el-table-column label="比较值" prop="compareValue" min-width="160" show-overflow-tooltip />
+          </el-table>
+          <el-empty v-else description="当前规则未配置命中条件" :image-size="64" />
+        </div>
+        <div class="rule-detail__section" v-if="detailVariableRows.length">
+          <div class="rule-detail__section-title">
+            <strong>变量依赖</strong>
+            <span>计量变量、条件变量和公式引用变量统一汇总</span>
+          </div>
+          <div class="rule-detail__variable-grid">
+            <div v-for="item in detailVariableRows" :key="item.variableCode" class="rule-detail__variable-card">
+              <strong>{{ item.variableName || item.variableCode }}</strong>
+              <span>{{ item.variableCode }}</span>
+              <small>{{ resolveTagLabel(variableSourceOptions, item.sourceType) || item.sourceType || '-' }} / {{ resolveTagLabel(variableDataTypeOptions, item.dataType) || item.dataType || '-' }}</small>
+              <small>{{ item.dataPath ? `读取 ${item.dataPath}` : '按变量编码取值' }}</small>
+            </div>
+          </div>
+        </div>
+        <div class="rule-detail__section" v-if="detailTierRows.length">
+          <div class="rule-detail__section-title">
+            <strong>阶梯配置</strong>
+            <span>{{ detailTierRows.length }} 档，按计量变量定位命中区间</span>
+          </div>
+          <el-table :data="detailTierRows" size="small" border>
+            <el-table-column label="档位" prop="tierNo" width="80" align="center" />
+            <el-table-column label="区间" min-width="180">
+              <template #default="scope">{{ formatTierRange(scope.row) }}</template>
+            </el-table-column>
+            <el-table-column label="费率/单价" prop="rateValue" min-width="120" align="center" />
+            <el-table-column label="状态" width="100" align="center"><template #default="scope"><dict-tag :options="ruleStatusOptions" :value="scope.row.status" /></template></el-table-column>
+          </el-table>
+        </div>
+      </div>
+    </el-drawer>
+
     <el-drawer v-model="governanceOpen" title="规则治理检查" size="640px" append-to-body>
       <div v-loading="governanceLoading" v-if="governanceInfo.ruleId">
         <el-descriptions :column="1" border>
@@ -847,6 +923,8 @@ const dynamicDictOptionsMap = ref({})
 const governanceOpen = ref(false)
 const governanceLoading = ref(false)
 const governanceInfo = ref({})
+const detailOpen = ref(false)
+const detailInfo = ref({})
 const statistics = reactive({ ruleCount: 0, enabledRuleCount: 0, tierRuleCount: 0, formulaRuleCount: 0 })
 
 const data = reactive({
@@ -916,6 +994,26 @@ const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) 
   acc[item.variableCode] = item
   return acc
 }, {}))
+const detailConditionRows = computed(() => detailInfo.value.conditions || [])
+const detailTierRows = computed(() => detailInfo.value.tiers || [])
+const detailVariableRows = computed(() => {
+  const codes = new Set()
+  if (detailInfo.value.quantityVariableCode) {
+    codes.add(detailInfo.value.quantityVariableCode)
+  }
+  ;(detailInfo.value.conditions || []).forEach(item => {
+    if (item.variableCode) {
+      codes.add(item.variableCode)
+    }
+  })
+  ;(validateCostExpression({
+    expression: detailInfo.value.amountFormula,
+    namespaceScope: 'V,C,I,F,T',
+    variables: variableOptions.value,
+    fees: feeOptions.value
+  }).variableRefs || []).forEach(code => codes.add(code))
+  return [...codes].map(code => variableMetaMap.value[code] || { variableCode: code }).filter(item => item.variableCode)
+})
 const selectedAmountFormulaMeta = computed(() => formulaOptions.value.find(item => item.formulaCode === form.value.amountFormulaCode) || {})
 const expressionHelperDescription = computed(() => {
   if (selectedAmountFormulaMeta.value.formulaCode) {
@@ -1368,6 +1466,15 @@ async function handleAdd() {
   title.value = '新增规则'
 }
 
+async function handleDetail(row) {
+  const ruleId = row?.ruleId || ids.value[0]
+  if (!ruleId) return
+  const response = await getRule(ruleId)
+  await loadVariables(row?.sceneId || currentFee.value?.sceneId || queryParams.value.sceneId)
+  detailInfo.value = normalizeRuleDetail(response.data)
+  detailOpen.value = true
+}
+
 async function handleUpdate(row) {
   const ruleId = row?.ruleId || ids.value[0]
   const response = await getRule(ruleId)
@@ -1792,6 +1899,35 @@ async function ensureDisableAllowed() {
 
 function resolveVariableName(variableCode) {
   return variableMetaMap.value[variableCode]?.variableName || variableCode
+}
+
+function explainRulePricing(rule) {
+  const config = rule?.pricingConfig || {}
+  if (rule?.ruleType === 'FIXED_RATE') {
+    if (rule.pricingMode === 'GROUPED' && Array.isArray(config.groupPrices)) {
+      return `组合定价：${config.groupPrices.length} 组价格`
+    }
+    return `固定费率/单价：${config.rateValue ?? '-'}`
+  }
+  if (rule?.ruleType === 'FIXED_AMOUNT') {
+    if (rule.pricingMode === 'GROUPED' && Array.isArray(config.groupPrices)) {
+      return `组合定价：${config.groupPrices.length} 组金额`
+    }
+    return `固定金额：${config.amountValue ?? '-'}`
+  }
+  if (rule?.ruleType === 'TIER_RATE') {
+    return `阶梯费率：${(rule.tiers || []).length} 档`
+  }
+  if (rule?.ruleType === 'FORMULA') {
+    return `公式计价：${rule.amountFormulaCode || '未绑定公式编码'}`
+  }
+  return '-'
+}
+
+function formatTierRange(tier) {
+  const min = tier.minValue ?? '-∞'
+  const max = tier.maxValue ?? '+∞'
+  return `${min} <= x < ${max}`
 }
 
 function resolveUnitLabel(unitCode) {
@@ -2452,6 +2588,22 @@ getList()
   display: grid;
   gap: 12px;
 }
+
+.rule-detail { display: grid; gap: 14px; }
+.rule-detail__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px; border: 1px solid var(--el-border-color-light); border-radius: 8px; }
+.rule-detail__title { font-size: 18px; font-weight: 700; color: var(--el-text-color-primary); }
+.rule-detail__meta { margin-top: 6px; color: var(--el-text-color-secondary); font-size: 12px; }
+.rule-detail__section { display: grid; gap: 10px; }
+.rule-detail__section-title { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.rule-detail__section-title span { color: var(--el-text-color-secondary); font-size: 12px; }
+.rule-detail__formula,
+.rule-detail__variable { display: grid; gap: 4px; }
+.rule-detail__formula span,
+.rule-detail__variable span { color: var(--el-text-color-secondary); font-size: 12px; }
+.rule-detail__variable-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.rule-detail__variable-card { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; background: var(--el-fill-color-extra-light); }
+.rule-detail__variable-card span,
+.rule-detail__variable-card small { color: var(--el-text-color-secondary); font-size: 12px; }
 
 .mb8 { margin-bottom: 8px; }
 .mb16 { margin-bottom: 16px; }
