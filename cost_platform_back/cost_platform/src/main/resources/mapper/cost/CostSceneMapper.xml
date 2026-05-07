@@ -91,13 +91,52 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                s.default_object_dimension as defaultObjectDimension,
                s.status as status,
                s.active_version_id as activeVersionId,
+               active_ver.version_no as activeVersionNo,
                (select count(1) from cost_fee_item f where f.scene_id = s.scene_id) as feeCount,
                (select count(1) from cost_variable_group g where g.scene_id = s.scene_id) as variableGroupCount,
                (select count(1) from cost_variable v where v.scene_id = s.scene_id) as variableCount,
                (select count(1) from cost_rule r where r.scene_id = s.scene_id) as ruleCount,
-               (select count(1) from cost_publish_version p where p.scene_id = s.scene_id) as publishedVersionCount
+               (select count(1) from cost_publish_version p where p.scene_id = s.scene_id) as publishedVersionCount,
+               (select count(1) from cost_calc_task t where t.scene_id = s.scene_id) as taskCount,
+               (select count(1)
+                from cost_calc_task t
+                where t.scene_id = s.scene_id
+                  and t.task_status in ('INIT', 'RUNNING')) as runningTaskCount,
+               (select count(1)
+                from cost_calc_task t
+                where t.scene_id = s.scene_id
+                  and (t.task_status = 'FAILED' or coalesce(t.fail_count, 0) > 0)) as failedTaskCount
         from cost_scene s
+        left join cost_publish_version active_ver on active_ver.version_id = s.active_version_id
         where s.scene_id = #{sceneId}
+    </select>
+
+    <select id="selectRecentSceneTasks" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostSceneRecentTaskVo">
+        select t.task_id as taskId,
+               t.task_no as taskNo,
+               t.scene_id as sceneId,
+               t.version_id as versionId,
+               pv.version_no as versionNo,
+               t.task_type as taskType,
+               t.bill_month as billMonth,
+               t.source_count as sourceCount,
+               t.success_count as successCount,
+               t.fail_count as failCount,
+               t.task_status as taskStatus,
+               t.progress_percent as progressPercent,
+               t.started_time as startedTime,
+               t.finished_time as finishedTime,
+               t.duration_ms as durationMs,
+               t.request_no as requestNo,
+               t.execute_node as executeNode,
+               t.input_source_type as inputSourceType,
+               t.source_batch_no as sourceBatchNo,
+               t.error_message as errorMessage
+        from cost_calc_task t
+        left join cost_publish_version pv on pv.version_id = t.version_id
+        where t.scene_id = #{sceneId}
+        order by coalesce(t.started_time, t.create_time) desc, t.task_id desc
+        limit 5
     </select>
 
 </mapper>

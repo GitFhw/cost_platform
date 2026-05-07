@@ -33,6 +33,11 @@ public class CostSceneGovernanceCheckVo {
     private String businessDomain;
 
     /**
+     * Default object dimension.
+     */
+    private String defaultObjectDimension;
+
+    /**
      * 场景状态
      */
     private String status;
@@ -41,6 +46,11 @@ public class CostSceneGovernanceCheckVo {
      * 当前生效版本
      */
     private Long activeVersionId;
+
+    /**
+     * Active version number.
+     */
+    private String activeVersionNo;
 
     /**
      * 费用数量
@@ -66,6 +76,21 @@ public class CostSceneGovernanceCheckVo {
      * 已发布版本数量
      */
     private Long publishedVersionCount;
+
+    /**
+     * Calculation task count.
+     */
+    private Long taskCount;
+
+    /**
+     * Running calculation task count.
+     */
+    private Long runningTaskCount;
+
+    /**
+     * Failed calculation task count.
+     */
+    private Long failedTaskCount;
 
     /**
      * 配置对象总数
@@ -106,4 +131,9 @@ public class CostSceneGovernanceCheckVo {
      * 关联影响明细
      */
     private List<CostGovernanceImpactVo> impactItems = new ArrayList<>();
+
+    /**
+     * Recent calculation tasks.
+     */
+    private List<CostSceneRecentTaskVo> recentTasks = new ArrayList<>();
 }

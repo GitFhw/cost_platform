@@ -3,6 +3,7 @@ package com.ruoyi.system.mapper.cost;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ruoyi.system.domain.cost.CostScene;
 import com.ruoyi.system.domain.vo.CostSceneGovernanceCheckVo;
+import com.ruoyi.system.domain.vo.CostSceneRecentTaskVo;
 
 import java.util.List;
 import java.util.Map;
@@ -48,4 +49,13 @@ public interface CostSceneMapper extends BaseMapper<CostScene> {
      * @return 结果
      */
     public CostSceneGovernanceCheckVo selectSceneGovernanceCheck(Long sceneId);
+
+    /**
+     * Query recent calculation tasks in a scene.
+     *
+     * @param sceneId scene id
+     *
+     * @return recent tasks
+     */
+    public List<CostSceneRecentTaskVo> selectRecentSceneTasks(Long sceneId);
 }

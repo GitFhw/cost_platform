@@ -123,6 +123,7 @@ public class CostSceneServiceImpl implements ICostSceneService {
         check.setDisableAdvice(check.getCanDisable() ? buildDisableAdvice(check)
                 : "请先处理当前生效版本或已发布版本，再执行停用。");
         check.setImpactItems(governanceImpactSupport.buildSceneImpacts(check));
+        check.setRecentTasks(sceneMapper.selectRecentSceneTasks(sceneId));
         return check;
     }
 
@@ -225,6 +226,9 @@ public class CostSceneServiceImpl implements ICostSceneService {
         check.setVariableCount(nullSafeLong(check.getVariableCount()));
         check.setRuleCount(nullSafeLong(check.getRuleCount()));
         check.setPublishedVersionCount(nullSafeLong(check.getPublishedVersionCount()));
+        check.setTaskCount(nullSafeLong(check.getTaskCount()));
+        check.setRunningTaskCount(nullSafeLong(check.getRunningTaskCount()));
+        check.setFailedTaskCount(nullSafeLong(check.getFailedTaskCount()));
         check.setTotalConfigCount(check.getFeeCount() + check.getVariableGroupCount() + check.getVariableCount() + check.getRuleCount());
     }
 

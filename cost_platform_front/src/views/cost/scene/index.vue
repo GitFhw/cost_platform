@@ -622,7 +622,7 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="governanceOpen" title="场景治理检查" size="640px" append-to-body>
+    <el-drawer v-model="governanceOpen" title="场景详情与治理" size="760px" append-to-body>
       <div v-loading="governanceLoading" class="scene-governance">
         <template v-if="governanceInfo.sceneId">
           <div class="scene-governance__header">
@@ -631,6 +631,7 @@
               <div class="scene-governance__meta">
                 <span>{{ governanceInfo.sceneCode }}</span>
                 <span>业务域：{{ resolveDictLabel(businessDomainOptions, governanceInfo.businessDomain) }}</span>
+                <span>对象维度：{{ governanceInfo.defaultObjectDimension || '-' }}</span>
               </div>
             </div>
             <dict-tag :options="sceneStatusOptions" :value="governanceInfo.status" />
@@ -659,7 +660,54 @@
             </div>
             <div class="scene-governance__card">
               <span>当前生效版本</span>
-              <strong>{{ governanceInfo.activeVersionId || '-' }}</strong>
+              <strong>{{ governanceInfo.activeVersionNo || governanceInfo.activeVersionId || '-' }}</strong>
+            </div>
+            <div class="scene-governance__card">
+              <span>核算任务</span>
+              <strong>{{ governanceInfo.taskCount }}</strong>
+            </div>
+            <div class="scene-governance__card">
+              <span>运行中任务</span>
+              <strong>{{ governanceInfo.runningTaskCount }}</strong>
+            </div>
+            <div class="scene-governance__card">
+              <span>异常任务</span>
+              <strong>{{ governanceInfo.failedTaskCount }}</strong>
+            </div>
+          </div>
+
+          <div class="scene-governance__recent">
+            <div class="scene-governance__recent-head">
+              <div>
+                <strong>最近核算任务</strong>
+                <small>按最近启动时间展示，用于判断场景是否正在运行或已有异常。</small>
+              </div>
+              <el-button link type="primary" icon="Right" @click="handleOpenTaskCenter(governanceInfo)">
+                查看全部
+              </el-button>
+            </div>
+            <el-empty v-if="!governanceInfo.recentTasks.length" description="当前场景暂无核算任务" :image-size="56" />
+            <div v-else class="scene-governance__task-list">
+              <div v-for="item in governanceInfo.recentTasks" :key="item.taskId" class="scene-governance__task-item">
+                <div class="scene-governance__task-head">
+                  <div>
+                    <strong>{{ item.taskNo }}</strong>
+                    <span>{{ resolveDictLabel(taskTypeOptions, item.taskType) }} · {{ item.billMonth || '-' }}</span>
+                  </div>
+                  <dict-tag :options="taskStatusOptions" :value="item.taskStatus" />
+                </div>
+                <el-progress
+                  :percentage="Number(item.progressPercent || 0)"
+                  :status="resolveTaskProgressStatus(item.taskStatus)"
+                  :stroke-width="8"
+                />
+                <div class="scene-governance__task-meta">
+                  <span>版本：{{ item.versionNo || '-' }}</span>
+                  <span>成功/失败：{{ item.successCount || 0 }} / {{ item.failCount || 0 }}</span>
+                  <span>启动：{{ parseTime(item.startedTime) || '-' }}</span>
+                </div>
+                <div v-if="item.errorMessage" class="scene-governance__task-error">{{ item.errorMessage }}</div>
+              </div>
             </div>
           </div>
 
@@ -718,6 +766,8 @@ const deptLoadDegraded = ref(false)
 const businessDomainOptions = ref([])
 const sceneStatusOptions = ref([])
 const sceneTypeOptions = ref([])
+const taskTypeOptions = ref([])
+const taskStatusOptions = ref([])
 const objectDimensionOptions = ['协力队', '协力单位', '班组', '人员', '设备', '船舶', '库区', '订单']
 const open = ref(false)
 const loading = ref(true)
@@ -875,11 +925,15 @@ async function loadSceneDictOptions() {
   const dictMap = await getRemoteDictOptionMap([
     'cost_business_domain',
     'cost_scene_status',
-    'cost_scene_type'
+    'cost_scene_type',
+    'cost_calc_task_type',
+    'cost_calc_task_status'
   ])
   businessDomainOptions.value = dictMap.cost_business_domain || []
   sceneStatusOptions.value = dictMap.cost_scene_status || []
   sceneTypeOptions.value = dictMap.cost_scene_type || []
+  taskTypeOptions.value = dictMap.cost_calc_task_type || []
+  taskStatusOptions.value = dictMap.cost_calc_task_status || []
 }
 
 async function loadDeptOptions() {
@@ -1083,6 +1137,15 @@ function handleOpenPublishCenter(row) {
   })
 }
 
+function handleOpenTaskCenter(row) {
+  router.push({
+    path: COST_MENU_ROUTES.task,
+    query: {
+      sceneId: row.sceneId
+    }
+  })
+}
+
 function handleOpenPublishAudit() {
   if (!currentSceneInfo.value.sceneId) {
     return
@@ -1145,13 +1208,18 @@ function normalizeGovernanceInfo(data = {}) {
     sceneCode: data.sceneCode || '',
     sceneName: data.sceneName || '',
     businessDomain: data.businessDomain || '',
+    defaultObjectDimension: data.defaultObjectDimension || '',
     status: data.status || '0',
     activeVersionId: data.activeVersionId,
+    activeVersionNo: data.activeVersionNo || '',
     feeCount: Number(data.feeCount || 0),
     variableGroupCount: Number(data.variableGroupCount || 0),
     variableCount: Number(data.variableCount || 0),
     ruleCount: Number(data.ruleCount || 0),
     publishedVersionCount: Number(data.publishedVersionCount || 0),
+    taskCount: Number(data.taskCount || 0),
+    runningTaskCount: Number(data.runningTaskCount || 0),
+    failedTaskCount: Number(data.failedTaskCount || 0),
     totalConfigCount: Number(data.totalConfigCount || 0),
     canDelete: Boolean(data.canDelete),
     canDisable: Boolean(data.canDisable),
@@ -1159,7 +1227,8 @@ function normalizeGovernanceInfo(data = {}) {
     disableBlockingReason: data.disableBlockingReason || '当前场景可以停用',
     removeAdvice: data.removeAdvice || '',
     disableAdvice: data.disableAdvice || '',
-    impactItems: Array.isArray(data.impactItems) ? data.impactItems : []
+    impactItems: Array.isArray(data.impactItems) ? data.impactItems : [],
+    recentTasks: Array.isArray(data.recentTasks) ? data.recentTasks : []
   }
 }
 
@@ -1477,6 +1546,19 @@ function resolveDictLabel(optionsRef, value) {
   const options = Array.isArray(optionsRef) ? optionsRef : (optionsRef?.value || [])
   const match = options.find(item => item.value === value)
   return match ? match.label : value || '-'
+}
+
+function resolveTaskProgressStatus(value) {
+  if (value === 'SUCCESS') {
+    return 'success'
+  }
+  if (value === 'FAILED' || value === 'CANCELLED') {
+    return 'exception'
+  }
+  if (value === 'PART_SUCCESS') {
+    return 'warning'
+  }
+  return undefined
 }
 
 function resolveOrgLabel(value) {
@@ -2011,6 +2093,81 @@ getList()
 .scene-governance__card strong {
   font-size: 24px;
   color: var(--el-color-primary);
+}
+
+.scene-governance__recent {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-bg-color-overlay);
+}
+
+.scene-governance__recent-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.scene-governance__recent-head strong {
+  display: block;
+  font-size: 15px;
+  color: var(--el-text-color-primary);
+}
+
+.scene-governance__recent-head small {
+  display: block;
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+}
+
+.scene-governance__task-list {
+  display: grid;
+  gap: 10px;
+}
+
+.scene-governance__task-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-extra-light);
+}
+
+.scene-governance__task-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.scene-governance__task-head strong,
+.scene-governance__task-head span {
+  display: block;
+}
+
+.scene-governance__task-head span,
+.scene-governance__task-meta {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.scene-governance__task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.scene-governance__task-error {
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--el-color-danger);
+  background: color-mix(in srgb, var(--el-color-danger-light-9) 56%, var(--el-bg-color-overlay));
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .scene-governance__advice {
