@@ -93,6 +93,9 @@
             <el-button type="primary" plain icon="Plus" @click="handleAdd" :disabled="!selectedFeeId" v-hasPermi="['cost:rule:add']">新增规则</el-button>
           </el-col>
           <el-col :span="1.5">
+            <el-button type="primary" plain icon="MagicStick" @click="openConfigAssistant">配置助手</el-button>
+          </el-col>
+          <el-col :span="1.5">
             <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate" v-hasPermi="['cost:rule:edit']">修改规则</el-button>
           </el-col>
           <el-col :span="1.8">
@@ -785,6 +788,71 @@
       </template>
     </el-dialog>
 
+    <el-drawer v-model="assistantOpen" title="配置助手" size="920px" append-to-body>
+      <div class="rule-center__assistant">
+        <el-alert
+          type="info"
+          :closable="false"
+          title="输入业务口径后生成变量草稿和规则草稿；草稿不会直接落库，确认后再到变量中心和规则中心维护。"
+        />
+        <el-form label-width="88px">
+          <el-form-item label="当前费用">
+            <el-input :model-value="currentFee ? `${currentFee.feeName} / ${currentFee.feeCode}` : '未选择费用'" readonly />
+          </el-form-item>
+          <el-form-item label="业务描述">
+            <el-input
+              v-model="assistantDescription"
+              type="textarea"
+              :rows="6"
+              maxlength="1200"
+              show-word-limit
+              placeholder="例：港口装卸费按重量计费，20吨以内每吨12元，超过20吨部分每吨10元；危险品加收固定200元。"
+            />
+          </el-form-item>
+        </el-form>
+        <div class="rule-center__assistant-actions">
+          <el-button type="primary" icon="MagicStick" @click="generateConfigDraft">生成草稿</el-button>
+          <el-button icon="DocumentCopy" :disabled="!assistantDraftText" @click="copyConfigDraft">复制草稿</el-button>
+        </div>
+
+        <section v-if="assistantDraft.variableDrafts.length" class="rule-center__assistant-section">
+          <div class="rule-center__assistant-section-head">
+            <h4>变量草稿</h4>
+            <span>{{ assistantDraft.variableDrafts.length }} 项</span>
+          </div>
+          <el-table :data="assistantDraft.variableDrafts" border>
+            <el-table-column label="变量编码" prop="variableCode" width="160" />
+            <el-table-column label="变量名称" prop="variableName" min-width="160" />
+            <el-table-column label="来源" prop="sourceType" width="110" />
+            <el-table-column label="数据类型" prop="dataType" width="110" />
+            <el-table-column label="建议" prop="remark" min-width="220" />
+          </el-table>
+        </section>
+
+        <section v-if="assistantDraft.ruleDrafts.length" class="rule-center__assistant-section">
+          <div class="rule-center__assistant-section-head">
+            <h4>规则草稿</h4>
+            <span>{{ assistantDraft.ruleDrafts.length }} 项</span>
+          </div>
+          <el-table :data="assistantDraft.ruleDrafts" border>
+            <el-table-column label="规则编码" prop="ruleCode" width="160" />
+            <el-table-column label="规则名称" prop="ruleName" min-width="180" />
+            <el-table-column label="类型" prop="ruleType" width="120" />
+            <el-table-column label="计量变量" prop="quantityVariableCode" width="150" />
+            <el-table-column label="定价草稿" prop="pricingSummary" min-width="260" />
+          </el-table>
+        </section>
+
+        <section v-if="assistantDraftText" class="rule-center__assistant-section">
+          <div class="rule-center__assistant-section-head">
+            <h4>JSON 草稿</h4>
+            <span>可复制后人工调整</span>
+          </div>
+          <el-input :model-value="assistantDraftText" type="textarea" :rows="12" readonly />
+        </section>
+      </div>
+    </el-drawer>
+
     <el-drawer v-model="detailOpen" title="规则详情" size="760px" append-to-body>
       <div v-if="detailInfo.ruleId" class="rule-detail">
         <div class="rule-detail__header">
@@ -917,6 +985,12 @@ const selectedFeeId = ref(undefined)
 const initialStatus = ref(undefined)
 const expressionOpen = ref(false)
 const expressionDraft = ref('')
+const assistantOpen = ref(false)
+const assistantDescription = ref('')
+const assistantDraft = reactive({
+  variableDrafts: [],
+  ruleDrafts: []
+})
 const copyOpen = ref(false)
 const copySourceRule = ref(undefined)
 const initialPriority = ref(undefined)
@@ -1011,6 +1085,19 @@ const currentFeeTitle = computed(() => currentFee.value ? `${currentFee.value.fe
 const currentFeeDesc = computed(() => currentFee.value
   ? `当前归属场景：${currentFee.value.sceneName}，计价单位：${resolveUnitLabel(currentFee.value.unitCode)}`
   : '规则维护严格遵守费用主线工作台，不直接脱离费用新增规则。')
+const assistantDraftText = computed(() => {
+  if (!assistantDraft.variableDrafts.length && !assistantDraft.ruleDrafts.length) {
+    return ''
+  }
+  return JSON.stringify({
+    sceneId: queryParams.value.sceneId || currentFee.value?.sceneId,
+    feeId: selectedFeeId.value,
+    feeCode: currentFee.value?.feeCode,
+    feeName: currentFee.value?.feeName,
+    variableDrafts: assistantDraft.variableDrafts,
+    ruleDrafts: assistantDraft.ruleDrafts
+  }, null, 2)
+})
 const variableMetaMap = computed(() => variableOptions.value.reduce((acc, item) => {
   acc[item.variableCode] = item
   return acc
@@ -2088,6 +2175,127 @@ async function handleCopyExpressionDraft() {
   }
 }
 
+function openConfigAssistant() {
+  assistantOpen.value = true
+  if (!assistantDescription.value && currentFee.value) {
+    assistantDescription.value = `${currentFee.value.feeName}按业务数量计费，请补充计量变量、价格口径、条件和阶梯。`
+  }
+}
+
+function generateConfigDraft() {
+  const description = assistantDescription.value.trim()
+  if (!description) {
+    proxy.$modal.msgWarning('请先输入业务描述')
+    return
+  }
+  const variableDrafts = buildAssistantVariableDrafts(description)
+  const ruleDrafts = buildAssistantRuleDrafts(description, variableDrafts)
+  assistantDraft.variableDrafts.splice(0, assistantDraft.variableDrafts.length, ...variableDrafts)
+  assistantDraft.ruleDrafts.splice(0, assistantDraft.ruleDrafts.length, ...ruleDrafts)
+  proxy.$modal.msgSuccess('配置草稿已生成')
+}
+
+function buildAssistantVariableDrafts(description) {
+  const candidates = [
+    { pattern: /重量|吨|公斤|千克/, code: 'WEIGHT', name: '重量', dataType: 'DECIMAL', remark: '建议作为计量变量，用于按重量计费。' },
+    { pattern: /数量|件数|箱数|票数|单量/, code: 'QTY', name: '数量', dataType: 'DECIMAL', remark: '建议作为计量变量，用于按数量计费。' },
+    { pattern: /金额|货值|申报价值|保额/, code: 'AMOUNT', name: '金额', dataType: 'DECIMAL', remark: '建议作为金额变量，用于费率或保底封顶计算。' },
+    { pattern: /天数|时长|小时|工时/, code: 'DURATION', name: '时长', dataType: 'DECIMAL', remark: '建议作为时间变量，用于按天/小时计费。' },
+    { pattern: /里程|距离|公里/, code: 'DISTANCE', name: '距离', dataType: 'DECIMAL', remark: '建议作为距离变量，用于里程计费。' },
+    { pattern: /体积|立方/, code: 'VOLUME', name: '体积', dataType: 'DECIMAL', remark: '建议作为体积变量，用于仓储或运输计费。' },
+    { pattern: /面积|平方/, code: 'AREA', name: '面积', dataType: 'DECIMAL', remark: '建议作为面积变量，用于场地类计费。' },
+    { pattern: /危险品|冷链|加急|夜间|超重|超长/, code: 'BIZ_FLAG', name: '业务标识', dataType: 'STRING', remark: '建议作为条件变量，用于附加费或分组规则。' }
+  ]
+  const prefix = normalizeAssistantCodePrefix(currentFee.value?.feeCode || 'COST')
+  const usedCodes = new Set(variableOptions.value.map(item => item.variableCode))
+  const drafts = candidates
+    .filter(item => item.pattern.test(description))
+    .map(item => {
+      const variableCode = ensureAssistantUniqueCode(`${prefix}_${item.code}`, usedCodes)
+      usedCodes.add(variableCode)
+      return {
+        variableCode,
+        variableName: item.name,
+        variableType: 'BASIC',
+        sourceType: 'INPUT',
+        dataType: item.dataType,
+        status: '0',
+        remark: item.remark
+      }
+    })
+  if (!drafts.length) {
+    const variableCode = ensureAssistantUniqueCode(`${prefix}_QTY`, usedCodes)
+    drafts.push({
+      variableCode,
+      variableName: '计量数量',
+      variableType: 'BASIC',
+      sourceType: 'INPUT',
+      dataType: 'DECIMAL',
+      status: '0',
+      remark: '未识别到明确计量口径，先生成通用计量数量变量。'
+    })
+  }
+  return drafts
+}
+
+function buildAssistantRuleDrafts(description, variableDrafts) {
+  const feeCode = currentFee.value?.feeCode || 'FEE'
+  const ruleCode = `${normalizeAssistantCodePrefix(feeCode)}_AUTO_RULE`
+  const amountMatches = [...description.matchAll(/(\d+(?:\.\d+)?)\s*元/g)].map(item => item[1])
+  const hasTier = /阶梯|分档|以内|超过|不足|封顶|保底/.test(description)
+  const hasFixed = /固定|每单|每票|一次性|加收/.test(description)
+  const quantityVariableCode = variableDrafts[0]?.variableCode
+  const ruleType = hasTier ? 'TIER_RATE' : (hasFixed && !quantityVariableCode ? 'FIXED_AMOUNT' : 'FIXED_RATE')
+  const unitPrice = amountMatches[0] || ''
+  const pricingSummary = hasTier
+    ? `识别到阶梯/分档口径，建议维护阶梯区间；候选价格：${amountMatches.join('、') || '待补充'} 元。`
+    : (unitPrice ? `建议单价/固定金额：${unitPrice} 元，提交前请确认计价单位。` : '未识别到明确价格，请补充单价、固定金额或公式。')
+  return [{
+    ruleCode,
+    ruleName: `${currentFee.value?.feeName || '费用'}规则草稿`,
+    feeCode,
+    ruleType,
+    conditionLogic: 'AND',
+    quantityVariableCode,
+    priority: 100,
+    status: '0',
+    pricingSummary,
+    conditions: /危险品|冷链|加急|夜间|超重|超长/.test(description) && variableDrafts.some(item => item.variableCode.endsWith('BIZ_FLAG'))
+      ? [{ variableCode: variableDrafts.find(item => item.variableCode.endsWith('BIZ_FLAG')).variableCode, operatorCode: 'EQ', compareValue: 'Y' }]
+      : []
+  }]
+}
+
+function normalizeAssistantCodePrefix(value) {
+  return String(value || 'COST')
+    .replace(/[^A-Za-z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .toUpperCase() || 'COST'
+}
+
+function ensureAssistantUniqueCode(baseCode, usedCodes) {
+  let code = baseCode
+  let index = 1
+  while (usedCodes.has(code)) {
+    code = `${baseCode}_${index++}`
+  }
+  return code
+}
+
+async function copyConfigDraft() {
+  if (!assistantDraftText.value) {
+    proxy.$modal.msgWarning('当前没有可复制的配置草稿')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(assistantDraftText.value)
+    proxy.$modal.msgSuccess('配置草稿已复制')
+  } catch (error) {
+    proxy.$modal.msgWarning('浏览器未授予剪贴板权限，请手动复制草稿内容')
+  }
+}
+
 function handleOpenFormulaLab() {
   const query = {}
   if (form.value.sceneId) {
@@ -2613,6 +2821,40 @@ getList()
 .rule-center__expression-grid {
   display: grid;
   gap: 16px;
+}
+
+.rule-center__assistant {
+  display: grid;
+  gap: 16px;
+}
+
+.rule-center__assistant-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rule-center__assistant-section {
+  display: grid;
+  gap: 12px;
+}
+
+.rule-center__assistant-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.rule-center__assistant-section-head h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.rule-center__assistant-section-head span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .rule-center__expression-actions {
