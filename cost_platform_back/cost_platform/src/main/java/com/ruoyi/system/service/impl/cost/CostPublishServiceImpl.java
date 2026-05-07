@@ -7,6 +7,7 @@ import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.cost.*;
 import com.ruoyi.system.domain.cost.bo.CostPublishCreateBo;
+import com.ruoyi.system.domain.vo.CostPublishCheckItemVo;
 import com.ruoyi.system.mapper.cost.*;
 import com.ruoyi.system.service.cost.ICostPublishService;
 import com.ruoyi.system.service.cost.publish.PublishSnapshotBundle;
@@ -120,10 +121,16 @@ public class CostPublishServiceImpl implements ICostPublishService {
         List<Map<String, Object>> impactedFees = sameAsActiveSnapshot
                 ? Collections.emptyList()
                 : snapshotViewService.buildFeeDiffSummary(activeBundle, draftBundle, null);
-        List<com.ruoyi.system.domain.vo.CostPublishCheckItemVo> items = new ArrayList<>();
+        List<CostPublishCheckItemVo> items = new ArrayList<>();
         publishValidationChain.validate(buildPublishValidationContext(sceneId, draftBundle, activeVersion, impactedFees.size()), items);
         long blockingCount = items.stream().filter(item -> "BLOCK".equals(item.getLevel())).count();
         long warningCount = items.stream().filter(item -> "WARN".equals(item.getLevel())).count();
+        List<CostPublishCheckItemVo> blockingItems = items.stream()
+                .filter(item -> "BLOCK".equals(item.getLevel()))
+                .collect(Collectors.toList());
+        List<CostPublishCheckItemVo> warningItems = items.stream()
+                .filter(item -> "WARN".equals(item.getLevel()))
+                .collect(Collectors.toList());
 
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("sceneId", draftBundle.sceneId);
@@ -147,10 +154,23 @@ public class CostPublishServiceImpl implements ICostPublishService {
         result.put("conditionCount", draftBundle.ruleConditionsByRuleCode.values().stream().mapToInt(List::size).sum());
         result.put("tierCount", draftBundle.ruleTiersByRuleCode.values().stream().mapToInt(List::size).sum());
         result.put("items", items);
+        result.put("blockingItems", blockingItems);
+        result.put("warningItems", warningItems);
+        result.put("blockingSummary", buildCheckSummary(blockingItems));
+        result.put("warningSummary", buildCheckSummary(warningItems));
         result.put("impactedFeeCount", impactedFees.size());
         result.put("impactedFees", impactedFees);
         result.put("suggestActivateNow", activeVersion == null);
         return result;
+    }
+
+    private String buildCheckSummary(List<CostPublishCheckItemVo> items) {
+        if (items == null || items.isEmpty()) {
+            return "";
+        }
+        return items.stream()
+                .map(item -> item.getTitle() + "：" + item.getMessage())
+                .collect(Collectors.joining("；"));
     }
 
     private Map<String, Object> buildDraftDiffPreview(CostPublishVersion previousVersion, PublishSnapshotBundle draftBundle) {
@@ -296,7 +316,7 @@ public class CostPublishServiceImpl implements ICostPublishService {
                 {
                     Map<String, Object> precheck = selectPublishPrecheck(bo.getSceneId());
                     if (!Boolean.TRUE.equals(precheck.get("publishable"))) {
-                        throw new ServiceException("当前场景存在阻断项，请先处理后再发布");
+                        throw new ServiceException(buildPublishBlockedMessage(precheck));
                     }
 
                     PublishSnapshotBundle draftBundle = buildDraftSnapshotBundle(bo.getSceneId());
@@ -325,6 +345,22 @@ public class CostPublishServiceImpl implements ICostPublishService {
                     }
                     return 1;
                 });
+    }
+
+    @SuppressWarnings("unchecked")
+    private String buildPublishBlockedMessage(Map<String, Object> precheck) {
+        Object blockingItemsValue = precheck == null ? null : precheck.get("blockingItems");
+        if (!(blockingItemsValue instanceof List)) {
+            return "当前场景存在阻断项，请先处理后再发布";
+        }
+        List<CostPublishCheckItemVo> blockingItems = (List<CostPublishCheckItemVo>) blockingItemsValue;
+        if (blockingItems.isEmpty()) {
+            return "当前场景存在阻断项，请先处理后再发布";
+        }
+        String detail = blockingItems.stream()
+                .map(item -> item.getTitle() + "：" + item.getMessage())
+                .collect(Collectors.joining("；"));
+        return "当前场景存在" + blockingItems.size() + "项发布阻断，请一次性处理后再发布：" + detail;
     }
 
     @Override

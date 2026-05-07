@@ -49,6 +49,17 @@
       class="publish-precheck-panel__alert"
     />
 
+    <div v-if="showBlockingSummary && normalized.blockingItems.length" class="publish-precheck-panel__blocking">
+      <div class="publish-precheck-panel__blocking-head">
+        <strong>阻断项汇总</strong>
+        <el-tag type="danger" size="small">{{ normalized.blockingItems.length }} 项</el-tag>
+      </div>
+      <div v-for="item in normalized.blockingItems" :key="item.code + item.title" class="publish-precheck-panel__blocking-item">
+        <strong>{{ item.title }}</strong>
+        <p>{{ item.message }}</p>
+      </div>
+    </div>
+
     <el-table
       v-if="normalized.items.length"
       :data="normalized.items"
@@ -159,18 +170,26 @@ const props = defineProps({
   showImpactCount: {
     type: Boolean,
     default: true
+  },
+  showBlockingSummary: {
+    type: Boolean,
+    default: true
   }
 })
 
 const normalized = computed(() => {
   const payload = props.data || {}
   const items = Array.isArray(payload.items) ? payload.items : []
+  const blockingItems = Array.isArray(payload.blockingItems) ? payload.blockingItems : items.filter(item => item.level === 'BLOCK')
+  const warningItems = Array.isArray(payload.warningItems) ? payload.warningItems : items.filter(item => item.level === 'WARN')
   const impactFees = Array.isArray(props.impactFees) ? props.impactFees : (Array.isArray(payload.impactedFees) ? payload.impactedFees : [])
   const blockingCount = Number(payload.blockingCount ?? items.filter(item => item.level === 'BLOCK').length ?? 0)
   const warningCount = Number(payload.warningCount ?? items.filter(item => item.level === 'WARN').length ?? 0)
   return {
     ...payload,
     items,
+    blockingItems,
+    warningItems,
     impactedFees: impactFees.filter(Boolean),
     blockingCount,
     warningCount,
@@ -328,6 +347,37 @@ function buildGovernanceOverviewItem({ key, label, desc, tag, matcher }) {
 .publish-precheck-panel__table,
 .publish-precheck-panel__impact {
   margin-top: 2px;
+}
+
+.publish-precheck-panel__blocking {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--el-color-danger-light-7);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--el-color-danger-light-9) 52%, var(--el-bg-color-overlay));
+}
+
+.publish-precheck-panel__blocking-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.publish-precheck-panel__blocking-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-bg-color-overlay);
+}
+
+.publish-precheck-panel__blocking-item p {
+  margin: 0;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
 }
 
 @media (max-width: 1280px) {
