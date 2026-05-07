@@ -28,12 +28,14 @@ public class CostResultLedger implements Serializable {
     /**
      * 结果主键
      */
+    @Excel(name = "结果ID")
     @TableId(value = "result_id", type = IdType.AUTO)
     private Long resultId;
 
     /**
      * 任务主键
      */
+    @Excel(name = "任务ID")
     @TableField("task_id")
     private Long taskId;
 
@@ -47,12 +49,14 @@ public class CostResultLedger implements Serializable {
     /**
      * 场景主键
      */
+    @Excel(name = "场景ID")
     @TableField("scene_id")
     private Long sceneId;
 
     /**
      * 版本主键
      */
+    @Excel(name = "版本ID")
     @TableField("version_id")
     private Long versionId;
 
@@ -135,6 +139,7 @@ public class CostResultLedger implements Serializable {
     /**
      * 币种
      */
+    @Excel(name = "币种")
     @TableField("currency_code")
     private String currencyCode;
 
@@ -148,6 +153,7 @@ public class CostResultLedger implements Serializable {
     /**
      * 追溯主键
      */
+    @Excel(name = "追溯ID")
     @TableField("trace_id")
     private Long traceId;
 
@@ -157,6 +163,14 @@ public class CostResultLedger implements Serializable {
     @Excel(name = "生成时间", width = 30, dateFormat = "yyyy-MM-dd HH:mm:ss")
     @TableField("create_time")
     private Date createTime;
+
+    @Excel(name = "导出人")
+    @TableField(exist = false)
+    private String exportBy;
+
+    @Excel(name = "导出时间", width = 30, dateFormat = "yyyy-MM-dd HH:mm:ss")
+    @TableField(exist = false)
+    private Date exportTime;
 
     /**
      * 场景编码

@@ -5,6 +5,7 @@ import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
+import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.cost.CostCalcInputBatch;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -272,6 +274,12 @@ public class CostRunController extends BaseController {
     @PostMapping("/result/export")
     public void exportResult(HttpServletResponse response, CostResultLedger query) {
         List<CostResultLedger> list = runService.selectResultList(query);
+        Date exportTime = DateUtils.getNowDate();
+        String exportBy = getUsername();
+        list.forEach(item -> {
+            item.setExportBy(exportBy);
+            item.setExportTime(exportTime);
+        });
         ExcelUtil<CostResultLedger> util = new ExcelUtil<>(CostResultLedger.class);
         util.exportExcel(response, list, "结果台账");
     }
