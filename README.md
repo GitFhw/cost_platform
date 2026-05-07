@@ -62,6 +62,14 @@
 - `cost_platform_back/sql/cost_thread1_governance_20260330.sql` 仍保留为历史参考和人工补库兜底脚本
 - 示例数据主要用于帮助业务人员熟悉场景中心的配置方式，建议优先投放到测试、培训或演示环境
 
+## 开发热加载
+
+- 前端使用 Vite：进入 `cost_platform_front` 后执行 `npm run dev`，页面和组件默认支持 HMR。
+- 后端 `cost_admin` 已接入 Spring Boot DevTools：进入 `cost_platform_back` 后执行 `mvn -pl cost_admin -am spring-boot:run`，Java 代码编译到 `target/classes` 后会触发应用自动重启。
+- IDE 弹出的 HotSwap “add method not implemented” 属于 JVM 原生热替换限制，新增方法、字段或注解变更需要走 DevTools 重启。
+
+详细约定见：`docs/开发环境热加载说明.md`。
+
 ## 说明
 
 当前仓库是新的产品重构工作区。后续开发、构建验证、提交和交付，都以根目录文档为统一基线。
