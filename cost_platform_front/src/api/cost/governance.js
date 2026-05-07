@@ -53,6 +53,13 @@ export function getRecalcDetail(recalcId) {
   })
 }
 
+export function getRecalcImpact(recalcId) {
+  return request({
+    url: '/cost/governance/recalc/impact/' + recalcId,
+    method: 'get'
+  })
+}
+
 export function applyRecalc(data) {
   return request({
     url: '/cost/governance/recalc/apply',

@@ -176,6 +176,63 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
     }
 
     @Override
+    public Map<String, Object> selectRecalcImpact(Long recalcId) {
+        CostRecalcOrder order = requireRecalc(recalcId);
+        enrichRecalcOrders(Collections.singletonList(order));
+        CostBillPeriod period = order.getPeriodId() == null ? requirePeriod(order.getSceneId(), order.getBillMonth()) : requirePeriod(order.getPeriodId());
+        CostCalcTask baselineTask = requireTask(order.getBaselineTaskId());
+        CostCalcTask latestTask = period.getLastTaskId() == null ? null : calcTaskMapper.selectById(period.getLastTaskId());
+        List<CostCalcTaskDetail> sampleDetails = calcTaskDetailMapper.selectList(Wrappers.<CostCalcTaskDetail>lambdaQuery()
+                .eq(CostCalcTaskDetail::getTaskId, baselineTask.getTaskId())
+                .orderByAsc(CostCalcTaskDetail::getPartitionNo)
+                .last("limit 1000"));
+        long inputCount = calcTaskDetailMapper.selectCount(Wrappers.<CostCalcTaskDetail>lambdaQuery()
+                .eq(CostCalcTaskDetail::getTaskId, baselineTask.getTaskId()));
+        long bizCount = inputCount;
+        List<String> sampleBizNos = sampleDetails.stream().map(CostCalcTaskDetail::getBizNo).filter(StringUtils::isNotEmpty)
+                .distinct().limit(5).collect(Collectors.toList());
+        long baselineResultCount = countTaskResults(order.getBaselineTaskId());
+        BigDecimal baselineAmount = sumTaskAmount(order.getBaselineTaskId());
+        long latestResultCount = countTaskResults(period.getLastTaskId());
+        BigDecimal latestAmount = sumTaskAmount(period.getLastTaskId());
+        Long ledgerCount = resultLedgerMapper.countBySceneAndBillMonth(order.getSceneId(), order.getBillMonth());
+        BigDecimal ledgerAmount = resultLedgerMapper.sumAmountBySceneAndBillMonth(order.getSceneId(), order.getBillMonth());
+
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("order", order);
+        result.put("status", order.getRecalcStatus());
+        result.put("sceneId", order.getSceneId());
+        result.put("sceneName", order.getSceneName());
+        result.put("sceneCode", order.getSceneCode());
+        result.put("billMonth", order.getBillMonth());
+        result.put("versionId", order.getVersionId());
+        result.put("versionNo", order.getVersionNo());
+        result.put("periodStatus", period.getPeriodStatus());
+        result.put("baselineTaskId", baselineTask.getTaskId());
+        result.put("baselineTaskNo", baselineTask.getTaskNo());
+        result.put("latestTaskId", latestTask == null ? null : latestTask.getTaskId());
+        result.put("latestTaskNo", latestTask == null ? "" : latestTask.getTaskNo());
+        result.put("inputCount", inputCount);
+        result.put("bizCount", bizCount);
+        result.put("sampleBizNos", sampleBizNos);
+        result.put("baselineResultCount", baselineResultCount);
+        result.put("baselineAmount", baselineAmount);
+        result.put("latestResultCount", latestResultCount);
+        result.put("latestAmount", latestAmount);
+        result.put("periodLedgerCount", ledgerCount == null ? 0L : ledgerCount);
+        result.put("periodLedgerAmount", defaultZero(ledgerAmount).setScale(2, RoundingMode.HALF_UP));
+        result.put("targetTaskType", inputCount == 1 ? TASK_TYPE_FORMAL_SINGLE : TASK_TYPE_FORMAL_BATCH);
+        result.put("willAppendTask", true);
+        result.put("willAppendResultLedger", true);
+        result.put("willOverwritePeriodSummary", true);
+        result.put("willDeleteExistingLedger", false);
+        result.put("impactItems", buildRecalcImpactItems(order, period, baselineTask, latestTask,
+                inputCount, bizCount, baselineResultCount, latestResultCount,
+                ledgerCount == null ? 0L : ledgerCount, baselineAmount, latestAmount));
+        return result;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public int applyRecalc(CostRecalcApplyBo bo) {
         CostScene scene = requireScene(bo.getSceneId());
@@ -430,6 +487,68 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
         stats.put("amountTotal", amountTotal);
         stats.put("feeCount", ledgers.stream().map(CostResultLedger::getFeeCode).filter(StringUtils::isNotEmpty).distinct().count());
         return stats;
+    }
+
+    private List<Map<String, Object>> buildRecalcImpactItems(CostRecalcOrder order, CostBillPeriod period,
+                                                             CostCalcTask baselineTask, CostCalcTask latestTask,
+                                                             long inputCount, long bizCount,
+                                                             long baselineResultCount, long latestResultCount,
+                                                             long periodLedgerCount,
+                                                             BigDecimal baselineAmount, BigDecimal latestAmount) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        items.add(buildImpactItem("ADD_TASK", "追加重算任务",
+                "将基于基准任务 " + baselineTask.getTaskNo() + " 的输入明细创建新的正式核算任务，原任务和原结果保留用于追溯。",
+                1L, "INFO"));
+        items.add(buildImpactItem("ADD_RESULT_LEDGER", "追加目标结果",
+                "目标任务完成后会新增结果台账记录；预计重放 " + inputCount + " 条输入、覆盖 " + bizCount
+                        + " 个业务单号，实际结果条数以目标版本规则命中为准。",
+                inputCount, "INFO"));
+        items.add(buildImpactItem("UPDATE_PERIOD_SUMMARY", "切换账期最新摘要",
+                "账期 " + order.getBillMonth() + " 的最新任务、默认版本、结果条数和金额摘要会切换到本次重算任务；当前最新任务为 "
+                        + firstNonBlank(latestTask == null ? "" : latestTask.getTaskNo(), "-") + "，当前最新结果 "
+                        + latestResultCount + " 条、金额 " + defaultZero(latestAmount).setScale(2, RoundingMode.HALF_UP) + "。",
+                1L, "WARN"));
+        items.add(buildImpactItem("KEEP_HISTORY_LEDGER", "保留历史结果",
+                "不会删除当前账期已有结果台账；当前账期累计已有 " + periodLedgerCount + " 条结果，基准任务 "
+                        + baselineTask.getTaskNo() + " 有 " + baselineResultCount + " 条结果、金额 "
+                        + defaultZero(baselineAmount).setScale(2, RoundingMode.HALF_UP) + "。",
+                periodLedgerCount, "INFO"));
+        if (PERIOD_STATUS_SEALED.equals(period.getPeriodStatus())) {
+            items.add(buildImpactItem("SEALED_PERIOD", "封存账期提示",
+                    "该账期已封存，重算将通过已审核申请进入治理链路，不等同于直接提交普通正式核算。",
+                    1L, "WARN"));
+        }
+        return items;
+    }
+
+    private Map<String, Object> buildImpactItem(String impactType, String title, String message, long count, String level) {
+        LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+        item.put("impactType", impactType);
+        item.put("title", title);
+        item.put("message", message);
+        item.put("count", count);
+        item.put("level", level);
+        return item;
+    }
+
+    private BigDecimal sumTaskAmount(Long taskId) {
+        if (taskId == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        return defaultZero(resultLedgerMapper.sumAmountByTaskId(taskId)).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private long countTaskResults(Long taskId) {
+        if (taskId == null) {
+            return 0L;
+        }
+        Long count = resultLedgerMapper.selectCount(Wrappers.<CostResultLedger>lambdaQuery()
+                .eq(CostResultLedger::getTaskId, taskId));
+        return count == null ? 0L : count;
+    }
+
+    private BigDecimal defaultZero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private Map<String, Object> parseJson(String text) {

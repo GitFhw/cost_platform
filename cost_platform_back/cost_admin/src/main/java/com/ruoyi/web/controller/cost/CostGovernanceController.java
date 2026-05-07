@@ -99,6 +99,12 @@ public class CostGovernanceController extends BaseController {
         return success(governanceService.selectRecalcDetail(recalcId));
     }
 
+    @PreAuthorize("@ss.hasPermi('cost:period:execute')")
+    @GetMapping("/recalc/impact/{recalcId}")
+    public AjaxResult recalcImpact(@PathVariable Long recalcId) {
+        return success(governanceService.selectRecalcImpact(recalcId));
+    }
+
     @PreAuthorize("@ss.hasPermi('cost:period:recalc')")
     @Log(title = "账期治理", businessType = BusinessType.INSERT)
     @PostMapping("/recalc/apply")

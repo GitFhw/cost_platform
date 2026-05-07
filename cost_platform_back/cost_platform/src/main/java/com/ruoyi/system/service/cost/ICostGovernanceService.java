@@ -31,6 +31,8 @@ public interface ICostGovernanceService {
 
     Map<String, Object> selectRecalcDetail(Long recalcId);
 
+    Map<String, Object> selectRecalcImpact(Long recalcId);
+
     int applyRecalc(CostRecalcApplyBo bo);
 
     int approveRecalc(Long recalcId, CostRecalcApproveBo bo);

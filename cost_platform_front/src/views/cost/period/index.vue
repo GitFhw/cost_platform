@@ -274,6 +274,7 @@ import {
   getPeriodDetail,
   getPeriodStats,
   getRecalcDetail,
+  getRecalcImpact,
   listPeriod,
   listRecalc,
   sealPeriod
@@ -503,10 +504,54 @@ async function handleApprove(row, approved) {
 }
 
 async function handleExecuteRecalc(row) {
-  await ElMessageBox.confirm(`确认执行重算申请 #${row.recalcId} 吗？`, '提示', { type: 'warning' })
+  const impactResp = await getRecalcImpact(row.recalcId)
+  const confirmed = await confirmRecalcImpact(impactResp.data || {}, row)
+  if (!confirmed) {
+    return
+  }
   await executeRecalc(row.recalcId)
   proxy.$modal.msgSuccess('重算任务已发起')
   getList()
+}
+
+async function confirmRecalcImpact(impact, row) {
+  const html = buildRecalcImpactHtml(impact, row)
+  try {
+    await ElMessageBox.confirm(html, '重算影响提示', {
+      type: 'warning',
+      dangerouslyUseHTMLString: true,
+      confirmButtonText: '确认执行重算',
+      cancelButtonText: '取消',
+      closeOnClickModal: false
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function buildRecalcImpactHtml(impact, row) {
+  const impactItems = Array.isArray(impact.impactItems) ? impact.impactItems : []
+  const sampleBizNos = Array.isArray(impact.sampleBizNos) ? impact.sampleBizNos : []
+  const cards = [
+    { label: '基准结果', value: `${formatInteger(impact.baselineResultCount)} 条 / ${formatAmount(impact.baselineAmount)}` },
+    { label: '当前最新结果', value: `${formatInteger(impact.latestResultCount)} 条 / ${formatAmount(impact.latestAmount)}` },
+    { label: '账期累计结果', value: `${formatInteger(impact.periodLedgerCount)} 条 / ${formatAmount(impact.periodLedgerAmount)}` },
+    { label: '预计重放输入', value: `${formatInteger(impact.inputCount)} 条` }
+  ].map(item => `<div style="border:1px solid #ebeef5;border-radius:6px;padding:8px 10px;background:#fafafa;"><div style="color:#909399;font-size:12px;">${escapeHtml(item.label)}</div><strong style="display:block;margin-top:4px;color:#303133;">${escapeHtml(item.value)}</strong></div>`).join('')
+  const rows = impactItems.length
+    ? impactItems.map(item => `<li style="margin-bottom:6px;"><strong style="color:${item.level === 'WARN' ? '#b88230' : '#303133'};">${escapeHtml(item.title || item.impactType || '影响项')}</strong>：${escapeHtml(item.message || '')}</li>`).join('')
+    : '<li style="color:#909399;">暂无影响项明细。</li>'
+  return [
+    '<div class="cost-recalc-impact">',
+    `<p style="margin:0 0 10px;color:#303133;">即将执行重算申请 <strong>#${escapeHtml(row.recalcId)}</strong>，目标版本 <strong>${escapeHtml(impact.versionNo || row.versionNo || '-')}</strong>，账期 <strong>${escapeHtml(impact.billMonth || row.billMonth || '-')}</strong>。</p>`,
+    '<p style="margin:0 0 10px;color:#606266;">本次执行会追加新的重算任务和目标任务结果，不会删除已有结果台账；账期最新任务、默认版本与结果摘要会在目标任务推进后切换为本次重算任务。</p>',
+    `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0;">${cards}</div>`,
+    sampleBizNos.length ? `<p style="margin:0 0 10px;color:#909399;font-size:12px;">业务单号样例：${sampleBizNos.map(escapeHtml).join('、')}</p>` : '',
+    `<ul style="margin:0;padding-left:18px;color:#606266;line-height:1.7;">${rows}</ul>`,
+    '<p style="margin:12px 0 0;color:#909399;font-size:12px;">提示：目标结果条数和金额以目标版本规则实际命中为准，完成后可在重算详情中查看差异摘要。</p>',
+    '</div>'
+  ].join('')
 }
 
 async function handleRecalcDetail(row) {
@@ -524,6 +569,19 @@ function formatAmount(value) {
     return '0.00'
   }
   return Number(value).toFixed(2)
+}
+
+function formatInteger(value) {
+  return Number(value || 0).toLocaleString()
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 watch(
