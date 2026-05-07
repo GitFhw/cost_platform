@@ -47,6 +47,9 @@ public class CostGovernanceImpactSupport {
     private CostResultLedgerMapper resultLedgerMapper;
 
     @Autowired
+    private CostCalcTaskMapper calcTaskMapper;
+
+    @Autowired
     private CostResultTraceMapper resultTraceMapper;
 
     @Autowired
@@ -89,6 +92,18 @@ public class CostGovernanceImpactSupport {
                     "当前生效版本仍指向该场景，删除会破坏运行入口。",
                     "当前生效版本仍指向该场景，停用会造成业务选择和运行状态不一致。",
                     "先在发布中心切换、回滚或解除当前生效版本，再执行删除或停用。", sampleActiveVersion(check.getActiveVersionId())));
+        }
+        if (positive(check.getRunningTaskCount())) {
+            impacts.add(impact("SCENE_RUNNING_TASK", "核算任务", "场景仍有运行中任务", check.getRunningTaskCount(), true, true,
+                    "运行中任务仍在写入或准备写入结果，删除场景会破坏执行上下文。",
+                    "运行中任务仍指向该场景，停用会造成任务执行和业务选择状态不一致。",
+                    "进入核算任务总台按场景筛选，等待任务完成、取消或处理失败后再停用。", sampleRunningTasksByScene(check.getSceneId())));
+        }
+        if (positive(check.getResultLedgerCount())) {
+            impacts.add(impact("SCENE_RESULT_LEDGER", "结果台账", "场景已有结果台账", check.getResultLedgerCount(), true, true,
+                    "结果台账已按该场景落账，删除会破坏历史结果查询和审计边界。",
+                    "场景已有结果台账，停用前需要确认后续账期不再使用或已切换替代场景。",
+                    "进入结果台账按场景筛选，确认账期、任务和业务对象影响范围。", sampleLedgersByScene(check.getSceneId())));
         }
         return impacts;
     }
@@ -302,6 +317,29 @@ public class CostGovernanceImpactSupport {
                 .stream()
                 .map(ledger -> "任务 " + StringUtils.defaultString(ledger.getTaskNo()) + " / 账期 " + StringUtils.defaultString(ledger.getBillMonth())
                         + " / 对象 " + label(ledger.getObjectName(), ledger.getObjectCode()))
+                .collect(Collectors.toList());
+    }
+
+    private List<String> sampleLedgersByScene(Long sceneId) {
+        return resultLedgerMapper.selectList(Wrappers.<CostResultLedger>lambdaQuery()
+                        .eq(CostResultLedger::getSceneId, sceneId)
+                        .orderByDesc(CostResultLedger::getResultId)
+                        .last("limit " + SAMPLE_LIMIT))
+                .stream()
+                .map(ledger -> "任务 " + StringUtils.defaultString(ledger.getTaskNo()) + " / 账期 " + StringUtils.defaultString(ledger.getBillMonth())
+                        + " / 费用 " + label(ledger.getFeeName(), ledger.getFeeCode()))
+                .collect(Collectors.toList());
+    }
+
+    private List<String> sampleRunningTasksByScene(Long sceneId) {
+        return calcTaskMapper.selectList(Wrappers.<CostCalcTask>lambdaQuery()
+                        .eq(CostCalcTask::getSceneId, sceneId)
+                        .in(CostCalcTask::getTaskStatus, Arrays.asList("INIT", "RUNNING"))
+                        .orderByDesc(CostCalcTask::getTaskId)
+                        .last("limit " + SAMPLE_LIMIT))
+                .stream()
+                .map(task -> "任务 " + StringUtils.defaultString(task.getTaskNo()) + " / 状态 " + StringUtils.defaultString(task.getTaskStatus())
+                        + " / 账期 " + StringUtils.defaultString(task.getBillMonth()))
                 .collect(Collectors.toList());
     }
 

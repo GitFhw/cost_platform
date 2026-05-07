@@ -674,6 +674,10 @@
               <span>异常任务</span>
               <strong>{{ governanceInfo.failedTaskCount }}</strong>
             </div>
+            <div class="scene-governance__card">
+              <span>结果台账</span>
+              <strong>{{ governanceInfo.resultLedgerCount }}</strong>
+            </div>
           </div>
 
           <div class="scene-governance__recent">
@@ -1220,6 +1224,7 @@ function normalizeGovernanceInfo(data = {}) {
     taskCount: Number(data.taskCount || 0),
     runningTaskCount: Number(data.runningTaskCount || 0),
     failedTaskCount: Number(data.failedTaskCount || 0),
+    resultLedgerCount: Number(data.resultLedgerCount || 0),
     totalConfigCount: Number(data.totalConfigCount || 0),
     canDelete: Boolean(data.canDelete),
     canDisable: Boolean(data.canDisable),

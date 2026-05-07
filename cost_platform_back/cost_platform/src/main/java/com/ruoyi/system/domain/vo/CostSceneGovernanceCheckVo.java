@@ -93,6 +93,11 @@ public class CostSceneGovernanceCheckVo {
     private Long failedTaskCount;
 
     /**
+     * Result ledger count.
+     */
+    private Long resultLedgerCount;
+
+    /**
      * 配置对象总数
      */
     private Long totalConfigCount;

@@ -105,7 +105,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                (select count(1)
                 from cost_calc_task t
                 where t.scene_id = s.scene_id
-                  and (t.task_status = 'FAILED' or coalesce(t.fail_count, 0) > 0)) as failedTaskCount
+                  and (t.task_status = 'FAILED' or coalesce(t.fail_count, 0) > 0)) as failedTaskCount,
+               (select count(1) from cost_result_ledger l where l.scene_id = s.scene_id) as resultLedgerCount
         from cost_scene s
         left join cost_publish_version active_ver on active_ver.version_id = s.active_version_id
         where s.scene_id = #{sceneId}

@@ -113,15 +113,17 @@ public class CostSceneServiceImpl implements ICostSceneService {
         boolean hasPublishedVersion = check.getPublishedVersionCount() > 0;
         boolean hasActiveVersion = StringUtils.isNotNull(check.getActiveVersionId());
         boolean hasDownstreamConfig = check.getTotalConfigCount() > 0;
+        boolean hasRunningTask = check.getRunningTaskCount() > 0;
+        boolean hasResultLedger = check.getResultLedgerCount() > 0;
 
-        check.setCanDelete(!hasActiveVersion && !hasPublishedVersion && !hasDownstreamConfig);
-        check.setCanDisable(!hasActiveVersion && !hasPublishedVersion);
-        check.setRemoveBlockingReason(buildRemoveBlockingReason(check, hasActiveVersion, hasPublishedVersion, hasDownstreamConfig));
-        check.setDisableBlockingReason(buildDisableBlockingReason(check, hasActiveVersion, hasPublishedVersion));
+        check.setCanDelete(!hasActiveVersion && !hasPublishedVersion && !hasDownstreamConfig && !hasRunningTask && !hasResultLedger);
+        check.setCanDisable(!hasActiveVersion && !hasPublishedVersion && !hasRunningTask && !hasResultLedger);
+        check.setRemoveBlockingReason(buildRemoveBlockingReason(check, hasActiveVersion, hasPublishedVersion, hasDownstreamConfig, hasRunningTask, hasResultLedger));
+        check.setDisableBlockingReason(buildDisableBlockingReason(check, hasActiveVersion, hasPublishedVersion, hasRunningTask, hasResultLedger));
         check.setRemoveAdvice(check.getCanDelete() ? "当前场景未被下游配置或发布版本占用，可直接删除。"
-                : "请先清理场景下费用、变量、规则等配置，并解除已发布/生效版本后再删除。");
+                : "请先清理场景下配置、发布版本、运行中任务和结果台账影响后再删除。");
         check.setDisableAdvice(check.getCanDisable() ? buildDisableAdvice(check)
-                : "请先处理当前生效版本或已发布版本，再执行停用。");
+                : "请先处理当前生效版本、已发布版本、运行中任务或结果台账后，再执行停用。");
         check.setImpactItems(governanceImpactSupport.buildSceneImpacts(check));
         check.setRecentTasks(sceneMapper.selectRecentSceneTasks(sceneId));
         return check;
@@ -229,6 +231,7 @@ public class CostSceneServiceImpl implements ICostSceneService {
         check.setTaskCount(nullSafeLong(check.getTaskCount()));
         check.setRunningTaskCount(nullSafeLong(check.getRunningTaskCount()));
         check.setFailedTaskCount(nullSafeLong(check.getFailedTaskCount()));
+        check.setResultLedgerCount(nullSafeLong(check.getResultLedgerCount()));
         check.setTotalConfigCount(check.getFeeCount() + check.getVariableGroupCount() + check.getVariableCount() + check.getRuleCount());
     }
 
@@ -262,9 +265,9 @@ public class CostSceneServiceImpl implements ICostSceneService {
      * @return 说明
      */
     private String buildRemoveBlockingReason(CostSceneGovernanceCheckVo check, boolean hasActiveVersion, boolean hasPublishedVersion,
-                                             boolean hasDownstreamConfig) {
-        if (!hasActiveVersion && !hasPublishedVersion && !hasDownstreamConfig) {
-            return "当前场景未被下游配置或发布版本占用";
+                                             boolean hasDownstreamConfig, boolean hasRunningTask, boolean hasResultLedger) {
+        if (!hasActiveVersion && !hasPublishedVersion && !hasDownstreamConfig && !hasRunningTask && !hasResultLedger) {
+            return "当前场景未被下游配置、发布版本、运行任务或结果台账占用";
         }
         StringJoiner joiner = new StringJoiner("；");
         if (hasDownstreamConfig) {
@@ -276,6 +279,12 @@ public class CostSceneServiceImpl implements ICostSceneService {
         }
         if (hasActiveVersion) {
             joiner.add(String.format("当前仍绑定生效版本%1$d", check.getActiveVersionId()));
+        }
+        if (hasRunningTask) {
+            joiner.add(String.format("仍有%1$d个核算任务正在运行", check.getRunningTaskCount()));
+        }
+        if (hasResultLedger) {
+            joiner.add(String.format("结果台账已有%1$d条历史结果", check.getResultLedgerCount()));
         }
         return joiner.toString();
     }
@@ -289,9 +298,10 @@ public class CostSceneServiceImpl implements ICostSceneService {
      *
      * @return 说明
      */
-    private String buildDisableBlockingReason(CostSceneGovernanceCheckVo check, boolean hasActiveVersion, boolean hasPublishedVersion) {
-        if (!hasActiveVersion && !hasPublishedVersion) {
-            return "当前场景未进入发布生效治理，可安全停用";
+    private String buildDisableBlockingReason(CostSceneGovernanceCheckVo check, boolean hasActiveVersion, boolean hasPublishedVersion,
+                                              boolean hasRunningTask, boolean hasResultLedger) {
+        if (!hasActiveVersion && !hasPublishedVersion && !hasRunningTask && !hasResultLedger) {
+            return "当前场景未进入发布生效、运行任务或结果台账治理，可安全停用";
         }
         StringJoiner joiner = new StringJoiner("；");
         if (hasPublishedVersion) {
@@ -299,6 +309,12 @@ public class CostSceneServiceImpl implements ICostSceneService {
         }
         if (hasActiveVersion) {
             joiner.add(String.format("当前仍绑定生效版本%1$d", check.getActiveVersionId()));
+        }
+        if (hasRunningTask) {
+            joiner.add(String.format("仍有%1$d个核算任务正在运行", check.getRunningTaskCount()));
+        }
+        if (hasResultLedger) {
+            joiner.add(String.format("结果台账已有%1$d条历史结果", check.getResultLedgerCount()));
         }
         return joiner.toString();
     }
