@@ -63,7 +63,9 @@
         <el-table-column label="对象编码" prop="objectCode" width="180" />
         <el-table-column label="动作类型" prop="actionType" width="120" />
         <el-table-column label="动作摘要" prop="actionSummary" min-width="220" />
-        <el-table-column label="操作人" prop="operatorCode" width="120" />
+        <el-table-column label="责任人" min-width="150">
+          <template #default="scope">{{ resolveOperator(scope.row) }}</template>
+        </el-table-column>
         <el-table-column label="操作时间" width="180" align="center">
           <template #default="scope">{{ proxy.parseTime(scope.row.operateTime) }}</template>
         </el-table-column>
@@ -86,6 +88,37 @@
         <el-descriptions-item label="对象编码">{{ detailData.objectCode || '-' }}</el-descriptions-item>
         <el-descriptions-item label="请求号">{{ detailData.requestNo || '-' }}</el-descriptions-item>
       </el-descriptions>
+
+      <div class="audit-page__responsibility" v-if="detailData">
+        <div v-for="item in responsibilityItems" :key="item.label" class="audit-page__responsibility-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <small>{{ item.desc }}</small>
+        </div>
+      </div>
+
+      <div class="audit-page__field-diff" v-if="detailData">
+        <div class="audit-page__section-head audit-page__section-head--tight">
+          <div>
+            <h3>字段级变更</h3>
+            <p>基于变更前后 JSON 快照自动展开字段路径，突出新增、删除和修改项。</p>
+          </div>
+          <el-tag type="info">差异 {{ fieldDiffRows.length }} 项</el-tag>
+        </div>
+        <el-table :data="fieldDiffRows" size="small" border max-height="360">
+          <el-table-column label="类型" width="96" align="center">
+            <template #default="scope">
+              <el-tag :type="resolveDiffTagType(scope.row.changeType)" effect="plain">
+                {{ resolveDiffLabel(scope.row.changeType) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="字段路径" prop="fieldPath" min-width="220" :show-overflow-tooltip="true" />
+          <el-table-column label="变更前" prop="beforeValue" min-width="260" :show-overflow-tooltip="true" />
+          <el-table-column label="变更后" prop="afterValue" min-width="260" :show-overflow-tooltip="true" />
+        </el-table>
+        <el-empty v-if="!fieldDiffRows.length" description="未发现字段级差异" :image-size="72" />
+      </div>
 
       <div class="audit-page__compare">
         <div class="audit-page__compare-panel">
@@ -138,6 +171,18 @@ const metricItems = computed(() => [
   { label: '今日新增', value: stats.todayCount, desc: '当天新增的审计记录数量' }
 ])
 
+const responsibilityItems = computed(() => {
+  const row = detailData.value || {}
+  return [
+    { label: '责任人', value: resolveOperator(row), desc: '来自审计记录的 operatorName/operatorCode' },
+    { label: '操作时间', value: proxy.parseTime(row.operateTime) || '-', desc: '用于追踪配置变化发生时间' },
+    { label: '请求号', value: row.requestNo || '-', desc: '用于串联同一次业务请求' },
+    { label: '动作摘要', value: row.actionSummary || '-', desc: '记录本次变更的业务语义' }
+  ]
+})
+
+const fieldDiffRows = computed(() => buildFieldDiffRows(detailData.value?.beforeJson, detailData.value?.afterJson))
+
 async function loadScenes() {
   const resp = await optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
   sceneOptions.value = resp?.data || []
@@ -183,6 +228,16 @@ function handleDetail(row) {
   detailOpen.value = true
 }
 
+function resolveOperator(row) {
+  if (!row) {
+    return '-'
+  }
+  if (row.operatorName && row.operatorCode && row.operatorName !== row.operatorCode) {
+    return `${row.operatorName} (${row.operatorCode})`
+  }
+  return row.operatorName || row.operatorCode || '-'
+}
+
 function formatJson(text) {
   if (!text) {
     return '{}'
@@ -192,6 +247,66 @@ function formatJson(text) {
   } catch (error) {
     return text
   }
+}
+
+function buildFieldDiffRows(beforeJson, afterJson) {
+  const beforeMap = flattenAuditJson(parseAuditJson(beforeJson))
+  const afterMap = flattenAuditJson(parseAuditJson(afterJson))
+  const fieldPaths = [...new Set([...Object.keys(beforeMap), ...Object.keys(afterMap)])].sort()
+  return fieldPaths
+    .map(fieldPath => {
+      const hasBefore = Object.prototype.hasOwnProperty.call(beforeMap, fieldPath)
+      const hasAfter = Object.prototype.hasOwnProperty.call(afterMap, fieldPath)
+      const beforeValue = hasBefore ? beforeMap[fieldPath] : ''
+      const afterValue = hasAfter ? afterMap[fieldPath] : ''
+      const changeType = !hasBefore ? 'ADDED' : (!hasAfter ? 'REMOVED' : (beforeValue === afterValue ? 'UNCHANGED' : 'CHANGED'))
+      return { fieldPath, beforeValue, afterValue, changeType }
+    })
+    .filter(item => item.changeType !== 'UNCHANGED')
+}
+
+function parseAuditJson(text) {
+  if (!text) {
+    return undefined
+  }
+  try {
+    return JSON.parse(text)
+  } catch (error) {
+    return text
+  }
+}
+
+function flattenAuditJson(value, fieldPath = '', result = {}) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const entries = Object.entries(value)
+    if (!entries.length && fieldPath) {
+      result[fieldPath] = '{}'
+    }
+    entries.forEach(([key, child]) => {
+      flattenAuditJson(child, fieldPath ? `${fieldPath}.${key}` : key, result)
+    })
+    return result
+  }
+  result[fieldPath || '(根)'] = formatAuditValue(value)
+  return result
+}
+
+function formatAuditValue(value) {
+  if (value === undefined || value === null) {
+    return ''
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
+function resolveDiffLabel(type) {
+  return { ADDED: '新增', REMOVED: '删除', CHANGED: '修改' }[type] || type
+}
+
+function resolveDiffTagType(type) {
+  return { ADDED: 'success', REMOVED: 'danger', CHANGED: 'warning' }[type] || 'info'
 }
 
 onMounted(() => {
@@ -290,10 +405,54 @@ onActivated(() => {
     }
   }
 
+  &__section-head--tight {
+    margin-bottom: 12px;
+
+    h3 {
+      font-size: 18px;
+    }
+  }
+
   &__section-actions {
     display: flex;
     align-items: center;
     gap: 10px;
+  }
+
+  &__responsibility {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  &__responsibility-card {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid #e7edf7;
+    border-radius: 8px;
+    background: #f8fafc;
+
+    span,
+    small {
+      display: block;
+      color: #7c8798;
+    }
+
+    strong {
+      display: block;
+      margin: 6px 0;
+      color: #10233e;
+      word-break: break-word;
+    }
+  }
+
+  &__field-diff {
+    margin-top: 18px;
+    padding: 16px;
+    border: 1px solid #e7edf7;
+    border-radius: 8px;
+    background: #fff;
   }
 
   &__compare {
@@ -331,6 +490,7 @@ onActivated(() => {
 @media (max-width: 1360px) {
   .audit-page {
     &__metrics,
+    &__responsibility,
     &__compare {
       grid-template-columns: 1fr;
     }
