@@ -241,7 +241,7 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="governanceOpen" title="费用治理检查" size="640px" append-to-body>
+    <el-drawer v-model="governanceOpen" title="费用治理检查" size="720px" append-to-body>
       <div v-loading="governanceLoading" class="fee-governance" v-if="governanceInfo.feeId">
         <div class="fee-governance__header">
           <div>
@@ -259,6 +259,42 @@
         <el-alert :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon />
         <el-alert :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon />
         <GovernanceImpactList :impacts="governanceInfo.impactItems" :context="governanceInfo" />
+        <div class="fee-governance__contract">
+          <div class="fee-governance__section-head">
+            <div>
+              <strong>费用输入契约</strong>
+              <small>当前费用依赖的变量、来源和维护方式</small>
+            </div>
+            <el-tag size="small" type="info">{{ feeVariableContractSummary }}</el-tag>
+          </div>
+          <el-empty v-if="!governanceInfo.variableContracts.length" description="当前费用暂无输入契约" :image-size="56" />
+          <div v-else class="fee-governance__contract-list">
+            <div
+              v-for="item in governanceInfo.variableContracts"
+              :key="item.relId || `${item.variableCode}-${item.relationType}`"
+              class="fee-governance__contract-item"
+            >
+              <div class="fee-governance__contract-main">
+                <span>{{ item.variableCode || '-' }}</span>
+                <strong>{{ item.variableName || '未命名变量' }}</strong>
+              </div>
+              <div class="fee-governance__contract-tags">
+                <el-tag size="small" effect="plain">{{ resolveFeeRelationTypeLabel(item.relationType) }}</el-tag>
+                <el-tag size="small" effect="plain" :type="item.sourceType === 'RULE_DERIVED' ? 'success' : 'warning'">
+                  {{ resolveFeeContractSourceLabel(item.sourceType) }}
+                </el-tag>
+                <el-tag size="small" effect="plain">{{ resolveVariableSourceTypeLabel(item.variableSourceType) }}</el-tag>
+                <el-tag size="small" effect="plain">{{ resolveVariableDataTypeLabel(item.dataType) }}</el-tag>
+              </div>
+              <div class="fee-governance__contract-meta">
+                <span v-if="item.dataPath">取值路径：{{ item.dataPath }}</span>
+                <span v-if="item.sourceRuleCode">来源规则：{{ item.sourceRuleCode }} / {{ item.sourceRuleName || '-' }}</span>
+                <span v-else-if="item.sourceCode">来源编码：{{ item.sourceCode }}</span>
+                <span v-if="item.remark">备注：{{ item.remark }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="fee-governance__advice">
           <p>删除建议：{{ governanceInfo.removeAdvice }}</p>
           <p>停用建议：{{ governanceInfo.disableAdvice }}</p>
@@ -290,8 +326,20 @@ const sceneOptions = ref([])
 const businessDomainOptions = ref([])
 const feeStatusOptions = ref([])
 const unitCodeOptions = ref([])
+const variableSourceOptions = ref([])
+const variableDataTypeOptions = ref([])
 const objectDimensionOptions = ['协力队', '协力单位', '班组', '人员', '设备', '船舶', '库区', '订单']
 const factorSummaryExamples = ['重量 / 件数 / 作业类型', '班次 / 工时 / 人员级别', '里程 / 车型 / 线路', '设备台时 / 能耗 / 维修类型']
+const feeRelationTypeLabels = {
+  REQUIRED: '必填输入',
+  OPTIONAL: '可选输入',
+  TIER_BASIS: '阶梯依据',
+  FORMULA_INPUT: '公式输入'
+}
+const feeContractSourceLabels = {
+  RULE_DERIVED: '规则派生',
+  MANUAL_REQUIRED: '手工维护'
+}
 const feeCategoryHints = [
   {
     keyword: '港',
@@ -360,6 +408,16 @@ const metricItems = computed(() => [
   }
 ])
 
+const feeVariableContractSummary = computed(() => {
+  const contracts = governanceInfo.value.variableContracts || []
+  if (!contracts.length) {
+    return '0 项输入'
+  }
+  const derivedCount = contracts.filter(item => item.sourceType === 'RULE_DERIVED').length
+  const manualCount = contracts.filter(item => item.sourceType === 'MANUAL_REQUIRED').length
+  return `${contracts.length} 项输入 · ${derivedCount} 规则派生 · ${manualCount} 手工维护`
+})
+
 const unitOptionsForForm = computed(() => {
   const options = [...unitCodeOptions.value]
   const currentValue = form.value?.unitCode
@@ -412,12 +470,14 @@ const currentSceneLabel = computed(() => {
 
 async function loadBaseOptions() {
   const [dictMap, sceneResponse] = await Promise.all([
-    getRemoteDictOptionMap(['cost_business_domain', 'cost_fee_status', 'cost_unit_code']),
+    getRemoteDictOptionMap(['cost_business_domain', 'cost_fee_status', 'cost_unit_code', 'cost_variable_source_type', 'cost_variable_data_type']),
     optionselectScene({ status: '0', pageNum: 1, pageSize: 1000 })
   ])
   businessDomainOptions.value = dictMap.cost_business_domain || []
   feeStatusOptions.value = dictMap.cost_fee_status || []
   unitCodeOptions.value = dictMap.cost_unit_code || []
+  variableSourceOptions.value = dictMap.cost_variable_source_type || []
+  variableDataTypeOptions.value = dictMap.cost_variable_data_type || []
   sceneOptions.value = sceneResponse?.data || []
   const preferredSceneId = resolveWorkingCostSceneId(sceneOptions.value, queryParams.value.sceneId)
   queryParams.value.sceneId = preferredSceneId
@@ -627,7 +687,8 @@ function normalizeGovernanceInfo(data = {}) {
     disableBlockingReason: data.disableBlockingReason || '当前费用可以停用',
     removeAdvice: data.removeAdvice || '',
     disableAdvice: data.disableAdvice || '',
-    impactItems: Array.isArray(data.impactItems) ? data.impactItems : []
+    impactItems: Array.isArray(data.impactItems) ? data.impactItems : [],
+    variableContracts: Array.isArray(data.variableContracts) ? data.variableContracts : []
   }
 }
 
@@ -642,6 +703,26 @@ function resolveDictLabel(optionsRef, value) {
   const options = Array.isArray(optionsRef) ? optionsRef : (optionsRef?.value || [])
   const match = options.find(item => item.value === value)
   return match ? match.label : value || '-'
+}
+
+function resolveLabelByMap(map, value) {
+  return map[value] || value || '-'
+}
+
+function resolveFeeRelationTypeLabel(value) {
+  return resolveLabelByMap(feeRelationTypeLabels, value)
+}
+
+function resolveFeeContractSourceLabel(value) {
+  return resolveLabelByMap(feeContractSourceLabels, value)
+}
+
+function resolveVariableSourceTypeLabel(value) {
+  return resolveDictLabel(variableSourceOptions, value)
+}
+
+function resolveVariableDataTypeLabel(value) {
+  return resolveDictLabel(variableDataTypeOptions, value)
 }
 
 function resolveUnitLabel(value) {
@@ -761,6 +842,58 @@ getList()
 
 .fee-governance__card span { color: var(--el-text-color-secondary); font-size: 12px; }
 .fee-governance__card strong { color: var(--el-color-primary); font-size: 20px; }
+.fee-governance__section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.fee-governance__section-head strong { display: block; font-size: 14px; }
+.fee-governance__section-head small { display: block; margin-top: 4px; color: var(--el-text-color-secondary); }
+.fee-governance__contract {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-bg-color-overlay);
+}
+.fee-governance__contract-list { display: grid; gap: 8px; }
+.fee-governance__contract-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-extra-light);
+}
+.fee-governance__contract-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+.fee-governance__contract-main span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--el-color-primary);
+  word-break: break-all;
+}
+.fee-governance__contract-main strong {
+  text-align: right;
+  word-break: break-word;
+}
+.fee-governance__contract-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fee-governance__contract-meta {
+  display: grid;
+  gap: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .fee-governance__advice { padding: 12px; border-radius: 10px; background: color-mix(in srgb, var(--el-color-warning-light-9) 40%, var(--el-bg-color-overlay)); }
 .fee-governance__advice p { margin: 4px 0; line-height: 1.7; }
 

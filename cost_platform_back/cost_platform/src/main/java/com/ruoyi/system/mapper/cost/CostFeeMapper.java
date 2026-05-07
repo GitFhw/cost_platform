@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ruoyi.system.domain.cost.CostFeeItem;
 import com.ruoyi.system.domain.cost.CostFeeVariableRel;
 import com.ruoyi.system.domain.vo.CostFeeGovernanceCheckVo;
+import com.ruoyi.system.domain.vo.CostFeeVariableContractVo;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
@@ -50,6 +51,15 @@ public interface CostFeeMapper extends BaseMapper<CostFeeItem> {
      * @return 结果
      */
     CostFeeGovernanceCheckVo selectFeeGovernanceCheck(Long feeId);
+
+    /**
+     * Query the variable input contract for a fee.
+     *
+     * @param feeId fee id
+     *
+     * @return contract items
+     */
+    List<CostFeeVariableContractVo> selectFeeVariableContracts(Long feeId);
 
     int insertFeeVariableRels(@Param("list") List<CostFeeVariableRel> list);
 

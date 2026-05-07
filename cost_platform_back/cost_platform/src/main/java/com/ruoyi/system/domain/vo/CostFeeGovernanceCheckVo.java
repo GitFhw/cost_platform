@@ -101,4 +101,9 @@ public class CostFeeGovernanceCheckVo {
      * 关联影响明细
      */
     private List<CostGovernanceImpactVo> impactItems = new ArrayList<>();
+
+    /**
+     * Fee input contracts.
+     */
+    private List<CostFeeVariableContractVo> variableContracts = new ArrayList<>();
 }

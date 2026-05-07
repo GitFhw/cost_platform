@@ -108,6 +108,7 @@ public class CostFeeServiceImpl implements ICostFeeService {
         check.setDisableAdvice(check.getCanDisable() ? buildDisableAdvice(check)
                 : "请先处理发布版本或结果台账引用，再执行停用。");
         check.setImpactItems(governanceImpactSupport.buildFeeImpacts(check));
+        check.setVariableContracts(feeMapper.selectFeeVariableContracts(feeId));
         return check;
     }
 

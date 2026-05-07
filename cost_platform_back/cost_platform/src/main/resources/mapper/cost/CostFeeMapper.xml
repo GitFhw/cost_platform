@@ -121,6 +121,33 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where f.fee_id = #{feeId}
     </select>
 
+    <select id="selectFeeVariableContracts" parameterType="Long" resultType="com.ruoyi.system.domain.vo.CostFeeVariableContractVo">
+        select rel.rel_id as relId,
+               rel.scene_id as sceneId,
+               rel.fee_id as feeId,
+               rel.variable_id as variableId,
+               v.variable_code as variableCode,
+               v.variable_name as variableName,
+               v.variable_type as variableType,
+               v.source_type as variableSourceType,
+               v.data_type as dataType,
+               v.data_path as dataPath,
+               v.status as variableStatus,
+               rel.relation_type as relationType,
+               rel.source_type as sourceType,
+               rel.source_rule_id as sourceRuleId,
+               rel.source_code as sourceCode,
+               r.rule_code as sourceRuleCode,
+               r.rule_name as sourceRuleName,
+               rel.sort_no as sortNo,
+               rel.remark as remark
+        from cost_fee_variable_rel rel
+        left join cost_variable v on v.variable_id = rel.variable_id
+        left join cost_rule r on r.rule_id = rel.source_rule_id
+        where rel.fee_id = #{feeId}
+        order by rel.sort_no asc, rel.rel_id asc
+    </select>
+
     <insert id="insertFeeVariableRels">
         insert into cost_fee_variable_rel (
             scene_id,
