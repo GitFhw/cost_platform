@@ -124,7 +124,68 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 where ver.scene_id = f.scene_id
                   and snap.snapshot_type = 'FEE'
                   and snap.object_code = f.fee_code) as publishedVersionCount,
-               (select count(1) from cost_result_ledger l where l.fee_id = f.fee_id) as resultLedgerCount
+               (select count(1) from cost_result_ledger l where l.fee_id = f.fee_id) as resultLedgerCount,
+               (select count(1) from cost_rule r where r.fee_id = f.fee_id and r.status = '0') as enabledRuleCount,
+               (select count(1) from cost_rule r where r.fee_id = f.fee_id and r.status != '0') as disabledRuleCount,
+               (select count(1)
+                from cost_fee_variable_rel rel
+                join cost_variable v on v.variable_id = rel.variable_id
+                where rel.fee_id = f.fee_id
+                  and v.status = '0') as enabledVariableRelCount,
+               (select count(1)
+                from cost_fee_variable_rel rel
+                left join cost_variable v on v.variable_id = rel.variable_id
+                where rel.fee_id = f.fee_id
+                  and (v.variable_id is null or v.status != '0')) as invalidVariableRelCount,
+               (select count(1)
+                from cost_rule r
+                where r.fee_id = f.fee_id
+                  and r.status = '0'
+                  and r.rule_type = 'TIER_RATE'
+                  and not exists (
+                      select 1
+                      from cost_rule_tier t
+                      where t.rule_id = r.rule_id
+                        and t.status = '0'
+                  )) as tierRuleMissingTierCount,
+               (select count(1)
+                from cost_rule r
+                left join cost_variable v on v.scene_id = r.scene_id
+                     and v.variable_code = r.quantity_variable_code
+                     and v.status = '0'
+                where r.fee_id = f.fee_id
+                  and r.status = '0'
+                  and r.quantity_variable_code is not null
+                  and r.quantity_variable_code != ''
+                  and v.variable_id is null) as missingQuantityVariableCount,
+               (select count(1)
+                from cost_rule r
+                join cost_rule_condition c on c.rule_id = r.rule_id
+                left join cost_variable v on v.scene_id = r.scene_id
+                     and v.variable_code = c.variable_code
+                     and v.status = '0'
+                where r.fee_id = f.fee_id
+                  and r.status = '0'
+                  and c.variable_code is not null
+                  and c.variable_code != ''
+                  and v.variable_id is null) as missingConditionVariableCount,
+               (select count(1)
+                from cost_rule r
+                where r.fee_id = f.fee_id
+                  and r.status = '0'
+                  and r.rule_type = 'FORMULA'
+                  and (r.amount_formula_code is null or r.amount_formula_code = '')) as missingFormulaCodeCount,
+               (select count(1)
+                from cost_rule r
+                left join cost_formula fo on fo.scene_id = r.scene_id
+                     and fo.formula_code = r.amount_formula_code
+                     and fo.status = '0'
+                where r.fee_id = f.fee_id
+                  and r.status = '0'
+                  and r.rule_type = 'FORMULA'
+                  and r.amount_formula_code is not null
+                  and r.amount_formula_code != ''
+                  and fo.formula_id is null) as missingFormulaAssetCount
         from cost_fee_item f
         left join cost_scene s on s.scene_id = f.scene_id
         where f.fee_id = #{feeId}

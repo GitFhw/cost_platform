@@ -94,6 +94,7 @@ public class CostFeeServiceImpl implements ICostFeeService {
             return null;
         }
         normalizeGovernanceCount(check);
+        populateRunReadiness(check);
 
         boolean hasRuleRef = check.getRuleCount() > 0;
         boolean hasPublishedVersionRef = check.getPublishedVersionCount() > 0;
@@ -182,6 +183,74 @@ public class CostFeeServiceImpl implements ICostFeeService {
         check.setVariableRelCount(nullSafeLong(check.getVariableRelCount()));
         check.setPublishedVersionCount(nullSafeLong(check.getPublishedVersionCount()));
         check.setResultLedgerCount(nullSafeLong(check.getResultLedgerCount()));
+        check.setEnabledRuleCount(nullSafeLong(check.getEnabledRuleCount()));
+        check.setDisabledRuleCount(nullSafeLong(check.getDisabledRuleCount()));
+        check.setEnabledVariableRelCount(nullSafeLong(check.getEnabledVariableRelCount()));
+        check.setInvalidVariableRelCount(nullSafeLong(check.getInvalidVariableRelCount()));
+        check.setTierRuleMissingTierCount(nullSafeLong(check.getTierRuleMissingTierCount()));
+        check.setMissingQuantityVariableCount(nullSafeLong(check.getMissingQuantityVariableCount()));
+        check.setMissingConditionVariableCount(nullSafeLong(check.getMissingConditionVariableCount()));
+        check.setMissingFormulaCodeCount(nullSafeLong(check.getMissingFormulaCodeCount()));
+        check.setMissingFormulaAssetCount(nullSafeLong(check.getMissingFormulaAssetCount()));
+    }
+
+    /**
+     * 生成费用运行与发布前置结论。
+     */
+    private void populateRunReadiness(CostFeeGovernanceCheckVo check) {
+        List<String> blockingReasons = new ArrayList<>();
+        List<String> warningReasons = new ArrayList<>();
+
+        if (!"0".equals(check.getStatus())) {
+            blockingReasons.add("费用已停用，不能进入新的发布快照和运行链路。");
+        }
+        if (check.getEnabledRuleCount() <= 0) {
+            blockingReasons.add("当前费用没有启用规则，发布预检会判定为费用规则覆盖缺失。");
+        }
+        if (check.getTierRuleMissingTierCount() > 0) {
+            blockingReasons.add(String.format("存在%1$d条启用阶梯规则缺少启用阶梯明细。", check.getTierRuleMissingTierCount()));
+        }
+        if (check.getMissingQuantityVariableCount() > 0) {
+            blockingReasons.add(String.format("存在%1$d条启用规则的计量变量不存在或未启用。", check.getMissingQuantityVariableCount()));
+        }
+        if (check.getMissingConditionVariableCount() > 0) {
+            blockingReasons.add(String.format("存在%1$d个启用规则条件引用的变量不存在或未启用。", check.getMissingConditionVariableCount()));
+        }
+        if (check.getMissingFormulaCodeCount() > 0) {
+            blockingReasons.add(String.format("存在%1$d条启用公式规则未绑定公式编码。", check.getMissingFormulaCodeCount()));
+        }
+        if (check.getMissingFormulaAssetCount() > 0) {
+            blockingReasons.add(String.format("存在%1$d条启用公式规则引用的公式不存在或未启用。", check.getMissingFormulaAssetCount()));
+        }
+        if (check.getInvalidVariableRelCount() > 0) {
+            warningReasons.add(String.format("存在%1$d个费用输入契约关联的变量不存在或已停用，建议同步修复变量契约。", check.getInvalidVariableRelCount()));
+        }
+        if (check.getDisabledRuleCount() > 0) {
+            warningReasons.add(String.format("当前费用还有%1$d条停用规则，不参与发布和运行。", check.getDisabledRuleCount()));
+        }
+        if (check.getVariableRelCount() <= 0 && check.getEnabledRuleCount() > 0) {
+            warningReasons.add("当前费用暂无输入契约，固定金额类规则可运行，但建议确认是否符合业务口径。");
+        }
+        if (check.getPublishedVersionCount() <= 0) {
+            warningReasons.add("当前费用尚未进入任何发布版本，正式核算前需要先发布场景版本。");
+        }
+
+        boolean publishable = blockingReasons.isEmpty();
+        boolean runnable = publishable && check.getInvalidVariableRelCount() <= 0;
+        check.setPublishable(publishable);
+        check.setRunnable(runnable);
+        check.setRunBlockingReasons(blockingReasons);
+        check.setRunWarningReasons(warningReasons);
+        if (!blockingReasons.isEmpty()) {
+            check.setRunCheckLevel("BLOCK");
+            check.setRunCheckLabel("存在阻断");
+        } else if (!warningReasons.isEmpty()) {
+            check.setRunCheckLevel("WARN");
+            check.setRunCheckLabel("可发布，需确认");
+        } else {
+            check.setRunCheckLevel("PASS");
+            check.setRunCheckLabel("可运行");
+        }
     }
 
     /**

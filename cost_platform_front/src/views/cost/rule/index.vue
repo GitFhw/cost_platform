@@ -1254,7 +1254,9 @@ async function loadFees() {
     })
     feeOptions.value = response?.data || []
     if (!feeOptions.value.find(item => item.feeId === selectedFeeId.value)) {
-      selectedFeeId.value = feeOptions.value[0]?.feeId
+      const routeFeeId = route.query.feeId ? Number(route.query.feeId) : undefined
+      const matchedRouteFee = routeFeeId ? feeOptions.value.find(item => item.feeId === routeFeeId) : undefined
+      selectedFeeId.value = matchedRouteFee?.feeId || feeOptions.value[0]?.feeId
       queryParams.value.feeId = selectedFeeId.value
     }
   } finally {

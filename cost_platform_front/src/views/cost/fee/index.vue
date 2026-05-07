@@ -266,6 +266,55 @@
           <el-descriptions-item label="适用范围" :span="2">{{ governanceInfo.scopeDescription || '-' }}</el-descriptions-item>
           <el-descriptions-item label="备注" :span="2">{{ governanceInfo.remark || '-' }}</el-descriptions-item>
         </el-descriptions>
+        <div class="fee-governance__run-check" :class="`is-${feeRunStatusMeta.level}`">
+          <div class="fee-governance__section-head">
+            <div>
+              <strong>可运行性检查</strong>
+              <small>按当前配置判断费用是否具备启用规则、有效引用和发布资格</small>
+            </div>
+            <el-tag size="small" :type="feeRunStatusMeta.tagType">{{ feeRunStatusMeta.label }}</el-tag>
+          </div>
+          <div class="fee-governance__run-grid">
+            <div v-for="item in feeRunMetricItems" :key="item.label" class="fee-governance__run-card">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.desc }}</small>
+            </div>
+          </div>
+          <el-alert
+            :title="feeRunStatusMeta.title"
+            :description="feeRunStatusMeta.description"
+            :type="feeRunStatusMeta.alertType"
+            :closable="false"
+            show-icon
+          />
+          <div
+            v-if="governanceInfo.runBlockingReasons.length || governanceInfo.runWarningReasons.length"
+            class="fee-governance__run-reasons"
+          >
+            <div v-if="governanceInfo.runBlockingReasons.length">
+              <strong>阻断项</strong>
+              <span v-for="item in governanceInfo.runBlockingReasons" :key="item">{{ item }}</span>
+            </div>
+            <div v-if="governanceInfo.runWarningReasons.length">
+              <strong>告警项</strong>
+              <span v-for="item in governanceInfo.runWarningReasons" :key="item">{{ item }}</span>
+            </div>
+          </div>
+          <div class="fee-governance__run-actions">
+            <el-button
+              v-if="!governanceInfo.publishable"
+              size="small"
+              type="primary"
+              plain
+              icon="Setting"
+              @click="handleOpenRuleCenter(governanceInfo)"
+            >
+              补规则配置
+            </el-button>
+            <el-button size="small" plain icon="Tickets" @click="handleOpenPublishCenter(governanceInfo)">打开发布中心</el-button>
+          </div>
+        </div>
         <el-alert :title="governanceInfo.canDelete ? '允许删除' : '当前不允许删除'" :description="governanceInfo.removeBlockingReason" :type="governanceInfo.canDelete ? 'success' : 'warning'" :closable="false" show-icon />
         <el-alert :title="governanceInfo.canDisable ? '允许停用' : '当前不允许停用'" :description="governanceInfo.disableBlockingReason" :type="governanceInfo.canDisable ? 'success' : 'warning'" :closable="false" show-icon />
         <GovernanceImpactList :impacts="governanceInfo.impactItems" :context="governanceInfo" />
@@ -595,6 +644,61 @@ const feeRuleSummary = computed(() => {
   return `${rules.length} 条规则 · ${enabledCount} 启用`
 })
 
+const feeRunStatusMeta = computed(() => {
+  const level = governanceInfo.value.runCheckLevel || 'PASS'
+  if (level === 'BLOCK') {
+    return {
+      level: 'block',
+      label: governanceInfo.value.runCheckLabel || '存在阻断',
+      tagType: 'danger',
+      alertType: 'error',
+      title: '当前费用暂不能参与发布或运行',
+      description: '需要先处理阻断项，再进入场景发布和正式核算链路。'
+    }
+  }
+  if (level === 'WARN') {
+    return {
+      level: 'warn',
+      label: governanceInfo.value.runCheckLabel || '可发布，需确认',
+      tagType: 'warning',
+      alertType: 'warning',
+      title: '当前费用具备发布基础，但仍有告警项',
+      description: '告警项不会阻断发布，建议在上线或正式核算前完成业务确认。'
+    }
+  }
+  return {
+    level: 'pass',
+    label: governanceInfo.value.runCheckLabel || '可运行',
+    tagType: 'success',
+    alertType: 'success',
+    title: '当前费用具备发布和运行基础',
+    description: '费用已具备启用规则和有效依赖，可随场景进入发布预检。'
+  }
+})
+
+const feeRunMetricItems = computed(() => [
+  {
+    label: '启用规则',
+    value: governanceInfo.value.enabledRuleCount || 0,
+    desc: '参与当前草稿发布的规则数量'
+  },
+  {
+    label: '停用规则',
+    value: governanceInfo.value.disabledRuleCount || 0,
+    desc: '不进入发布与运行链路'
+  },
+  {
+    label: '有效变量',
+    value: governanceInfo.value.enabledVariableRelCount || 0,
+    desc: '输入契约中仍启用的变量'
+  },
+  {
+    label: '异常引用',
+    value: governanceInfo.value.runIssueCount || 0,
+    desc: '变量、阶梯或公式引用问题'
+  }
+])
+
 const feePublishSummary = computed(() => `${(governanceInfo.value.publishRefs || []).length} 个版本`)
 
 const feeResultSummary = computed(() => `${(governanceInfo.value.resultRefs || []).length} 条样例`)
@@ -864,6 +968,25 @@ async function handleGovernance(row) {
   }
 }
 
+function handleOpenRuleCenter(row = {}) {
+  const query = {}
+  if (row.sceneId) {
+    query.sceneId = row.sceneId
+  }
+  if (row.feeId) {
+    query.feeId = row.feeId
+  }
+  router.push({ path: COST_MENU_ROUTES.rule, query })
+}
+
+function handleOpenPublishCenter(row = {}) {
+  const query = {}
+  if (row.sceneId) {
+    query.sceneId = row.sceneId
+  }
+  router.push({ path: COST_MENU_ROUTES.publish, query })
+}
+
 async function fetchFeeGovernance(feeId) {
   const response = await getFeeGovernance(feeId)
   return normalizeGovernanceInfo(response.data)
@@ -891,6 +1014,27 @@ function normalizeGovernanceInfo(data = {}) {
     variableRelCount: Number(data.variableRelCount || 0),
     publishedVersionCount: Number(data.publishedVersionCount || 0),
     resultLedgerCount: Number(data.resultLedgerCount || 0),
+    enabledRuleCount: Number(data.enabledRuleCount || 0),
+    disabledRuleCount: Number(data.disabledRuleCount || 0),
+    enabledVariableRelCount: Number(data.enabledVariableRelCount || 0),
+    invalidVariableRelCount: Number(data.invalidVariableRelCount || 0),
+    tierRuleMissingTierCount: Number(data.tierRuleMissingTierCount || 0),
+    missingQuantityVariableCount: Number(data.missingQuantityVariableCount || 0),
+    missingConditionVariableCount: Number(data.missingConditionVariableCount || 0),
+    missingFormulaCodeCount: Number(data.missingFormulaCodeCount || 0),
+    missingFormulaAssetCount: Number(data.missingFormulaAssetCount || 0),
+    runIssueCount: Number(data.invalidVariableRelCount || 0)
+      + Number(data.tierRuleMissingTierCount || 0)
+      + Number(data.missingQuantityVariableCount || 0)
+      + Number(data.missingConditionVariableCount || 0)
+      + Number(data.missingFormulaCodeCount || 0)
+      + Number(data.missingFormulaAssetCount || 0),
+    runnable: data.runnable !== false,
+    publishable: data.publishable !== false,
+    runCheckLevel: data.runCheckLevel || 'PASS',
+    runCheckLabel: data.runCheckLabel || '可运行',
+    runBlockingReasons: Array.isArray(data.runBlockingReasons) ? data.runBlockingReasons : [],
+    runWarningReasons: Array.isArray(data.runWarningReasons) ? data.runWarningReasons : [],
     canDelete: Boolean(data.canDelete),
     canDisable: Boolean(data.canDisable),
     removeBlockingReason: data.removeBlockingReason || '当前费用可以删除',
@@ -1083,6 +1227,72 @@ getList()
 .fee-governance__detail :deep(.el-descriptions__label) {
   width: 116px;
 }
+.fee-governance__run-check {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-bg-color-overlay);
+}
+.fee-governance__run-check.is-pass {
+  border-color: var(--el-color-success-light-7);
+}
+.fee-governance__run-check.is-warn {
+  border-color: var(--el-color-warning-light-5);
+}
+.fee-governance__run-check.is-block {
+  border-color: var(--el-color-danger-light-5);
+}
+.fee-governance__run-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.fee-governance__run-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+.fee-governance__run-card span,
+.fee-governance__run-card small {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.fee-governance__run-card strong {
+  color: var(--el-text-color-primary);
+  font-size: 18px;
+}
+.fee-governance__run-reasons {
+  display: grid;
+  gap: 8px;
+}
+.fee-governance__run-reasons div {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-extra-light);
+}
+.fee-governance__run-reasons strong {
+  font-size: 13px;
+}
+.fee-governance__run-reasons span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.fee-governance__run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .fee-governance__section-head {
   display: flex;
   justify-content: space-between;
@@ -1214,6 +1424,7 @@ getList()
 
 @media (max-width: 1200px) {
   .fee-center__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fee-governance__run-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fee-governance__reference-grid { grid-template-columns: 1fr; }
 }
 </style>

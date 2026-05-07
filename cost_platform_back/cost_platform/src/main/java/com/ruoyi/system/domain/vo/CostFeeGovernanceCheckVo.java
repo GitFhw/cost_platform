@@ -113,6 +113,81 @@ public class CostFeeGovernanceCheckVo {
     private Long resultLedgerCount;
 
     /**
+     * 启用规则数量
+     */
+    private Long enabledRuleCount;
+
+    /**
+     * 停用规则数量
+     */
+    private Long disabledRuleCount;
+
+    /**
+     * 有效变量关系数量
+     */
+    private Long enabledVariableRelCount;
+
+    /**
+     * 无效变量关系数量
+     */
+    private Long invalidVariableRelCount;
+
+    /**
+     * 缺少阶梯明细的启用阶梯规则数量
+     */
+    private Long tierRuleMissingTierCount;
+
+    /**
+     * 缺少计量变量的启用规则数量
+     */
+    private Long missingQuantityVariableCount;
+
+    /**
+     * 缺少条件变量的启用规则条件数量
+     */
+    private Long missingConditionVariableCount;
+
+    /**
+     * 缺少公式编码的启用公式规则数量
+     */
+    private Long missingFormulaCodeCount;
+
+    /**
+     * 缺少公式资产的启用公式规则数量
+     */
+    private Long missingFormulaAssetCount;
+
+    /**
+     * 是否具备运行基础
+     */
+    private Boolean runnable;
+
+    /**
+     * 是否可参与下一次发布
+     */
+    private Boolean publishable;
+
+    /**
+     * 运行检查级别：PASS/WARN/BLOCK
+     */
+    private String runCheckLevel;
+
+    /**
+     * 运行检查文案
+     */
+    private String runCheckLabel;
+
+    /**
+     * 运行检查阻断原因
+     */
+    private List<String> runBlockingReasons = new ArrayList<>();
+
+    /**
+     * 运行检查告警原因
+     */
+    private List<String> runWarningReasons = new ArrayList<>();
+
+    /**
      * 是否允许删除
      */
     private Boolean canDelete;
