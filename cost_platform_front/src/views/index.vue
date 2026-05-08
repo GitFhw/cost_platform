@@ -185,6 +185,7 @@ import { getPublishStats, listPublish } from '@/api/cost/publish'
 import { getResultStats, getTaskOverview, getTaskStats } from '@/api/cost/run'
 import { getAlarmStats } from '@/api/cost/governance'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { resolveWorkingBillMonth } from '@/utils/costWorkContext'
 
 const router = useRouter()
 const loading = ref(false)
@@ -323,13 +324,14 @@ onMounted(() => {
 
 async function loadDashboard() {
   loading.value = true
+  const resultQuery = { billMonth: resolveWorkingBillMonth() }
   try {
     const [publishStatsResult, publishListResult, taskStatsResult, taskOverviewResult, resultStatsResult, alarmStatsResult] = await Promise.allSettled([
       getPublishStats({}),
       listPublish({ pageNum: 1, pageSize: 5 }),
       getTaskStats({}),
       getTaskOverview({}),
-      getResultStats({}),
+      getResultStats(resultQuery),
       getAlarmStats({})
     ])
     publishStats.value = resolveResultData(publishStatsResult)

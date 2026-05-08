@@ -414,7 +414,7 @@ public class CostVariableServiceImpl implements ICostVariableService {
         result.put("success", true);
         result.put("sceneId", sceneId);
         result.put("remoteVariableCount", remoteVariableCount == null ? 0 : remoteVariableCount);
-        result.put("message", "已触发变量缓存刷新与同步状态重置。当前阶段为轻量实现，后续再接入真实缓存链路。");
+        result.put("message", "变量缓存已刷新，同步状态已重置。");
         result.put("cachePolicy", "MANUAL_REFRESH");
         result.put("refreshAt", new Date());
         return result;

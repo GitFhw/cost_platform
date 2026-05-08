@@ -49,10 +49,12 @@ import {
   resolveCurrentBillMonth
 } from '@/utils/costWorkContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
+import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
 const router = useRouter()
 const context = ref(getCostWorkContext())
+const businessDomainOptions = ref([])
 
 const visible = computed(() => route.path.startsWith('/cost'))
 const sceneLabel = computed(() => {
@@ -62,7 +64,11 @@ const sceneLabel = computed(() => {
   return context.value.sceneId ? `场景 #${context.value.sceneId}` : '未设置工作场景'
 })
 const sceneTooltip = computed(() => context.value.sceneId ? '查看或切换当前工作场景' : '设置当前工作场景')
-const domainLabel = computed(() => context.value.businessDomainName || context.value.businessDomain || '未设置业务域')
+const domainLabel = computed(() => {
+  return context.value.businessDomainName
+    || resolveDictLabel(businessDomainOptions.value, context.value.businessDomain)
+    || '未设置业务域'
+})
 const billMonthLabel = computed(() => context.value.billMonth || resolveCurrentBillMonth())
 const versionLabel = computed(() => context.value.versionNo || context.value.versionName || (context.value.versionId ? `版本 #${context.value.versionId}` : '未选择版本'))
 const stepItems = [
@@ -92,12 +98,30 @@ async function hydrateSceneInfo() {
         sceneCode: scene.sceneCode,
         sceneName: scene.sceneName,
         businessDomain: scene.businessDomain,
-        businessDomainName: scene.businessDomainName || scene.businessDomainLabel
+        businessDomainName: scene.businessDomainName || scene.businessDomainLabel || resolveDictLabel(businessDomainOptions.value, scene.businessDomain)
       })
     }
   } catch (error) {
     console.warn('Failed to hydrate cost scene context:', error)
   }
+}
+
+async function loadDictOptions() {
+  const dictMap = await getRemoteDictOptionMap(['cost_business_domain'])
+  businessDomainOptions.value = dictMap.cost_business_domain || []
+  if (context.value.businessDomain && !context.value.businessDomainName) {
+    const label = resolveDictLabel(businessDomainOptions.value, context.value.businessDomain)
+    if (label) {
+      context.value = patchCostWorkContext({ businessDomainName: label })
+    }
+  }
+}
+
+function resolveDictLabel(options = [], value) {
+  if (!value) {
+    return ''
+  }
+  return options.find(item => item.value === value)?.label || ''
 }
 
 function goTo(path) {
@@ -111,6 +135,7 @@ function goTo(path) {
 onMounted(() => {
   window.addEventListener(COST_WORK_CONTEXT_CHANGE_EVENT, refreshContext)
   window.addEventListener('storage', refreshContext)
+  loadDictOptions()
   hydrateSceneInfo()
 })
 
