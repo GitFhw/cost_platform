@@ -1800,78 +1800,55 @@ function formatFileTimestamp(value) {
 </script>
 
 <style scoped lang="scss">
+@use '../../../assets/styles/cost-workbench.scss' as costWorkbench;
+
 .simulation-page {
-  --sim-bg: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--el-bg-color-page) 82%, #f5e3c1 18%) 0%,
-    color-mix(in srgb, var(--el-bg-color-page) 88%, #f1ead6 12%) 220px,
-    var(--el-bg-color-page) 100%
-  );
-  --sim-card-bg: color-mix(in srgb, var(--el-bg-color-overlay) 94%, #fff7ec 6%);
-  --sim-card-soft: color-mix(in srgb, var(--el-bg-color-overlay) 90%, #fff3df 10%);
-  --sim-border: color-mix(in srgb, var(--el-border-color) 72%, #dfbf8c 28%);
-  --sim-shadow: 0 16px 34px rgb(110 78 31 / 0.08);
-  --sim-accent: color-mix(in srgb, var(--el-color-primary) 72%, #148f86 28%);
+  --sim-bg: var(--el-bg-color-page);
+  --sim-card-bg: var(--el-bg-color-overlay);
+  --sim-card-soft: color-mix(in srgb, var(--el-bg-color-overlay) 94%, var(--el-color-primary-light-9) 6%);
+  --sim-border: var(--el-border-color);
+  --sim-shadow: none;
+  --sim-accent: var(--el-color-primary);
   --sim-warning: color-mix(in srgb, var(--el-color-warning) 82%, #dd9c2f 18%);
   --sim-text: var(--el-text-color-primary);
   --sim-muted: var(--el-text-color-secondary);
   --sim-pill-bg: color-mix(in srgb, var(--el-bg-color-overlay) 88%, #fff 12%);
-  --sim-query-bg: color-mix(in srgb, var(--sim-card-bg) 95%, transparent);
-  --sim-table-header-bg: color-mix(in srgb, var(--sim-card-soft) 82%, var(--el-bg-color-page) 18%);
-  --sim-table-row-bg: color-mix(in srgb, var(--sim-card-bg) 92%, var(--el-bg-color-page) 8%);
-  --sim-table-row-hover-bg: color-mix(in srgb, var(--sim-card-soft) 88%, var(--el-bg-color-page) 12%);
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  min-height: calc(100dvh - 124px);
+  --sim-query-bg: color-mix(in srgb, var(--el-bg-color-overlay) 96%, var(--el-color-primary-light-9) 4%);
+  --sim-table-header-bg: var(--el-fill-color-light);
+  --sim-table-row-bg: var(--el-bg-color-overlay);
+  --sim-table-row-hover-bg: var(--el-fill-color-lighter);
+  @include costWorkbench.page-root(18px);
   padding-bottom: 12px;
-  background: var(--sim-bg);
 }
 
 :global(html.dark) .simulation-page {
-  --sim-bg: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--el-bg-color-page) 78%, #3b2d1f 22%) 0%,
-    color-mix(in srgb, var(--el-bg-color-page) 90%, #2a2119 10%) 220px,
-    var(--el-bg-color-page) 100%
-  );
-  --sim-card-bg: color-mix(in srgb, var(--el-bg-color-overlay) 94%, #2f261d 6%);
-  --sim-card-soft: color-mix(in srgb, var(--el-bg-color-overlay) 90%, #3b2d20 10%);
-  --sim-border: color-mix(in srgb, var(--el-border-color) 74%, #8b6943 26%);
-  --sim-shadow: 0 18px 38px rgb(0 0 0 / 0.24);
-  --sim-accent: color-mix(in srgb, var(--el-color-primary) 74%, #6fe7db 26%);
+  --sim-bg: var(--el-bg-color-page);
+  --sim-card-bg: var(--el-bg-color-overlay);
+  --sim-card-soft: color-mix(in srgb, var(--el-bg-color-overlay) 92%, var(--el-color-primary-light-9) 8%);
+  --sim-border: var(--el-border-color);
+  --sim-shadow: none;
+  --sim-accent: var(--el-color-primary);
   --sim-warning: color-mix(in srgb, var(--el-color-warning) 78%, #ffd089 22%);
   --sim-pill-bg: color-mix(in srgb, var(--el-bg-color-overlay) 84%, #16110c 16%);
-  --sim-query-bg: color-mix(in srgb, var(--sim-card-bg) 92%, var(--el-bg-color-page) 8%);
-  --sim-table-header-bg: color-mix(in srgb, var(--sim-card-soft) 80%, var(--el-bg-color-page) 20%);
-  --sim-table-row-bg: color-mix(in srgb, var(--sim-card-bg) 90%, var(--el-bg-color-page) 10%);
-  --sim-table-row-hover-bg: color-mix(in srgb, var(--sim-card-soft) 88%, var(--el-bg-color-page) 12%);
+  --sim-query-bg: color-mix(in srgb, var(--el-bg-color-overlay) 94%, var(--el-color-primary-light-9) 6%);
+  --sim-table-header-bg: var(--el-fill-color-light);
+  --sim-table-row-bg: var(--el-bg-color-overlay);
+  --sim-table-row-hover-bg: var(--el-fill-color-lighter);
 }
 
-.simulation-page__hero,
 .simulation-page__panel,
-.simulation-page__summary-card,
 .simulation-page__workbench,
-.simulation-page__query-shell,
 .simulation-page__timeline-card {
-  border: 1px solid var(--sim-border);
-  border-radius: 28px;
-  background: var(--sim-card-bg);
-  box-shadow: var(--sim-shadow);
+  @include costWorkbench.surface(var(--sim-card-bg), var(--sim-border));
 }
 
-.simulation-page__hero,
 .simulation-page__panel,
-.simulation-page__query-shell,
 .simulation-page__workbench {
   padding: 24px 26px;
 }
 
 .simulation-page__hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
-  align-items: start;
+  @include costWorkbench.hero(var(--sim-card-bg));
 }
 
 .simulation-page__hero-side {
@@ -1888,19 +1865,16 @@ function formatFileTimestamp(value) {
 }
 
 .simulation-page__entry-card {
+  @include costWorkbench.surface(var(--sim-card-bg), var(--sim-border));
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 14px;
   padding: 16px 18px;
-  border: 1px solid var(--sim-border);
-  border-radius: 18px;
-  background: var(--sim-card-bg);
-  box-shadow: var(--sim-shadow);
 }
 
 .simulation-page__entry-card.is-active {
-  background: color-mix(in srgb, var(--sim-card-soft) 82%, var(--el-color-success-light-9) 18%);
+  background: color-mix(in srgb, var(--sim-card-soft) 84%, var(--el-color-primary-light-9) 16%);
 }
 
 .simulation-page__entry-card strong {
@@ -1917,10 +1891,7 @@ function formatFileTimestamp(value) {
 }
 
 .simulation-page__eyebrow {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  @include costWorkbench.eyebrow;
   color: var(--sim-accent);
 }
 
@@ -1929,43 +1900,31 @@ function formatFileTimestamp(value) {
 }
 
 .simulation-page__title {
-  margin: 10px 0 0;
-  font-size: 34px;
-  line-height: 1.15;
+  @include costWorkbench.page-title;
   color: var(--sim-text);
 }
 
 .simulation-page__subtitle {
-  margin: 12px 0 0;
+  @include costWorkbench.page-subtitle;
   color: var(--sim-muted);
-  line-height: 1.8;
 }
 
 .simulation-page__query-shell {
-  position: sticky;
-  top: 0;
-  z-index: 8;
-  background: var(--sim-query-bg);
-  backdrop-filter: blur(12px);
+  @include costWorkbench.query-shell(var(--sim-query-bg));
 }
 
 .simulation-page__panel-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
+  @include costWorkbench.section-head;
 }
 
 .simulation-page__panel-head h3 {
-  margin: 0;
+  @include costWorkbench.section-title;
   color: var(--sim-text);
-  font-size: 22px;
 }
 
 .simulation-page__panel-head p {
-  margin: 8px 0 0;
+  @include costWorkbench.section-desc;
   color: var(--sim-muted);
-  line-height: 1.8;
 }
 
 .simulation-page__query-form {
@@ -1978,13 +1937,13 @@ function formatFileTimestamp(value) {
 }
 
 .simulation-page__summary-grid--overview {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  @include costWorkbench.metric-grid;
 }
 
 .simulation-page__summary-grid--prep,
 .simulation-page__summary-grid--batch {
+  @include costWorkbench.metric-grid;
   margin-top: 18px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .simulation-page__summary-grid--result {
@@ -1993,8 +1952,7 @@ function formatFileTimestamp(value) {
 }
 
 .simulation-page__summary-card {
-  display: grid;
-  gap: 8px;
+  @include costWorkbench.metric-card(var(--sim-card-bg), var(--sim-border));
   padding: 18px 20px;
 }
 
@@ -2008,9 +1966,8 @@ function formatFileTimestamp(value) {
 }
 
 .simulation-page__summary-card strong {
+  @include costWorkbench.metric-value(28px);
   color: var(--sim-accent);
-  font-size: 28px;
-  line-height: 1.1;
 }
 
 .simulation-page__summary-card small {
@@ -2121,7 +2078,7 @@ function formatFileTimestamp(value) {
 .simulation-page__timeline-order {
   font-size: 12px;
   color: var(--sim-muted);
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
 }
 
 .simulation-page__timeline-status {

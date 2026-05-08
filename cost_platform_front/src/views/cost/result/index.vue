@@ -964,76 +964,45 @@ onActivated(async () => {
 </script>
 
 <style scoped lang="scss">
+@use '../../../assets/styles/cost-workbench.scss' as costWorkbench;
+
 .result-page {
-  display: grid;
-  gap: 16px;
-  min-height: calc(100dvh - 124px);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--el-bg-color-page) 86%, #dbead7 14%) 0%,
-    var(--el-bg-color-page) 260px,
-    var(--el-bg-color-page) 100%
-  );
+  @include costWorkbench.page-root;
 }
 
-.result-page__hero,
-.result-page__metric-card,
 .result-page__table,
-.result-page__query-shell,
 .result-page__summary-card,
 .result-page__detail-hero,
 .result-page__tabs {
-  border: 1px solid var(--el-border-color);
-  border-radius: 16px;
-  background: var(--el-bg-color-overlay);
+  @include costWorkbench.surface;
 }
 
 .result-page__hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 22px 24px;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--el-color-success-light-8) 56%, var(--el-bg-color-overlay)),
-    var(--el-bg-color-overlay)
-  );
+  @include costWorkbench.hero;
 }
 
 .result-page__eyebrow {
-  font-size: 12px;
-  color: var(--el-color-success-dark-2);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  @include costWorkbench.eyebrow;
 }
 
 .result-page__title {
-  margin: 8px 0 0;
-  font-size: 28px;
+  @include costWorkbench.page-title;
 }
 
 .result-page__subtitle {
-  margin: 10px 0 0;
-  color: var(--el-text-color-regular);
-  line-height: 1.8;
+  @include costWorkbench.page-subtitle;
 }
 
 .result-page__metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  @include costWorkbench.metric-grid;
 }
 
 .result-page__metric-card {
-  display: grid;
-  gap: 6px;
-  padding: 14px 16px;
+  @include costWorkbench.metric-card;
 }
 
 .result-page__metric-card strong {
-  font-size: 26px;
-  color: var(--el-color-success-dark-2);
+  @include costWorkbench.metric-value;
 }
 
 .result-page__business-summary {
@@ -1045,9 +1014,7 @@ onActivated(async () => {
 .result-page__distribution-card {
   min-width: 0;
   padding: 16px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 16px;
-  background: var(--el-bg-color-overlay);
+  @include costWorkbench.surface;
 }
 
 .result-page__section-head--tight {
@@ -1067,7 +1034,7 @@ onActivated(async () => {
   padding: 10px 12px;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--el-bg-color-overlay) 92%, var(--el-color-success-light-9) 8%);
+  background: color-mix(in srgb, var(--el-bg-color-overlay) 94%, var(--el-color-primary-light-9) 6%);
 }
 
 .result-page__distribution-row strong,
@@ -1084,18 +1051,13 @@ onActivated(async () => {
 }
 
 .result-page__distribution-row > span {
-  color: var(--el-color-success-dark-2);
+  color: var(--el-color-primary);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .result-page__query-shell {
-  position: sticky;
-  top: 0;
-  z-index: 8;
-  padding: 16px;
-  background: color-mix(in srgb, var(--el-bg-color-overlay) 94%, #eef8e9 6%);
-  backdrop-filter: blur(12px);
+  @include costWorkbench.query-shell;
 }
 
 .result-page__query-form {

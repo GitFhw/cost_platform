@@ -1739,28 +1739,16 @@ onActivated(async () => {
 </script>
 
 <style scoped lang="scss">
+@use '../../../assets/styles/cost-workbench.scss' as costWorkbench;
+
 .run-page {
-  display: grid;
-  gap: 16px;
-  min-height: calc(100dvh - 124px);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--el-bg-color-page) 84%, #f4dfb9 16%) 0%,
-    var(--el-bg-color-page) 260px,
-    var(--el-bg-color-page) 100%
-  );
+  @include costWorkbench.page-root;
 }
-.run-page__hero, .run-page__metric-card, .run-page__panel, .run-page__summary-card, .run-page__batch-card, .run-page__query-shell {
-  border: 1px solid var(--el-border-color);
-  border-radius: 16px;
-  background: var(--el-bg-color-overlay);
+.run-page__panel, .run-page__summary-card, .run-page__batch-card {
+  @include costWorkbench.surface;
 }
 .run-page__hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 22px 24px;
-  background: color-mix(in srgb, var(--el-color-warning-light-8) 28%, var(--el-bg-color-overlay));
+  @include costWorkbench.hero;
 }
 .run-page__hero-side { display: grid; gap: 10px; justify-items: end; align-content: start; }
 .run-page__entry-guide {
@@ -1779,7 +1767,7 @@ onActivated(async () => {
   background: var(--el-bg-color-overlay);
 }
 .run-page__entry-card.is-active {
-  background: color-mix(in srgb, var(--el-color-warning-light-9) 44%, var(--el-bg-color-overlay));
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 18%, var(--el-bg-color-overlay));
 }
 .run-page__entry-card strong {
   display: block;
@@ -1793,32 +1781,23 @@ onActivated(async () => {
   line-height: 1.6;
 }
 .run-page__eyebrow {
-  font-size: 12px;
-  color: var(--el-color-warning-dark-2);
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  @include costWorkbench.eyebrow;
 }
-.run-page__title { margin: 8px 0 0; font-size: 28px; }
-.run-page__subtitle { margin: 10px 0 0; color: var(--el-text-color-regular); line-height: 1.8; }
-.run-page__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-.run-page__metric-card { display: grid; gap: 6px; padding: 14px 16px; }
-.run-page__metric-card strong { font-size: 26px; color: var(--el-color-warning-dark-2); }
+.run-page__title { @include costWorkbench.page-title; }
+.run-page__subtitle { @include costWorkbench.page-subtitle; }
+.run-page__metrics { @include costWorkbench.metric-grid; }
+.run-page__metric-card { @include costWorkbench.metric-card; }
+.run-page__metric-card strong { @include costWorkbench.metric-value; }
 .run-page__overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .run-page__query-shell {
-  position: sticky;
-  top: 0;
-  z-index: 8;
-  padding: 16px;
-  background: color-mix(in srgb, var(--el-bg-color-overlay) 94%, #fff4df 6%);
-  backdrop-filter: blur(12px);
+  @include costWorkbench.query-shell;
 }
 .run-page__query-form { margin-top: 14px; }
 .run-page__workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .run-page__panel { padding: 16px; }
-.run-page__section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
-.run-page__section-head h3 { margin: 0; font-size: 18px; }
-.run-page__section-head p { margin: 6px 0 0; color: var(--el-text-color-secondary); font-size: 13px; }
+.run-page__section-head { @include costWorkbench.section-head; align-items: center; margin-bottom: 16px; }
+.run-page__section-head h3 { @include costWorkbench.section-title; }
+.run-page__section-head p { @include costWorkbench.section-desc; margin-top: 6px; font-size: 13px; }
 .run-page__panel-badge {
   display: inline-flex;
   align-items: center;
