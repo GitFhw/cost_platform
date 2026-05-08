@@ -67,7 +67,7 @@
         </div>
         <div class="result-page__section-actions">
           <el-button type="primary" plain icon="DataLine" @click="openCompare">差异对比</el-button>
-          <el-button type="warning" plain icon="Download" @click="handleExport">导出结果</el-button>
+          <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['cost:result:export']">导出结果</el-button>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
         </div>
       </div>

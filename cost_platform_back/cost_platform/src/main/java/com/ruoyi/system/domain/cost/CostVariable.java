@@ -195,7 +195,6 @@ public class CostVariable extends BaseEntity {
     /**
      * 鉴权配置JSON
      */
-    @Excel(name = "鉴权配置")
     @TableField("auth_config_json")
     private String authConfigJson;
 

@@ -270,10 +270,10 @@ public class CostRunController extends BaseController {
     /**
      * 导出结果台账
      */
-    @PreAuthorize("@ss.hasPermi('cost:result:list')")
+    @PreAuthorize("@ss.hasPermi('cost:result:export')")
     @PostMapping("/result/export")
     public void exportResult(HttpServletResponse response, CostResultLedger query) {
-        List<CostResultLedger> list = runService.selectResultList(query);
+        List<CostResultLedger> list = runService.selectResultExportList(query);
         Date exportTime = DateUtils.getNowDate();
         String exportBy = getUsername();
         list.forEach(item -> {

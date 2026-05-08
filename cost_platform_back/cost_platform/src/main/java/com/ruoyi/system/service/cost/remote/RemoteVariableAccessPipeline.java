@@ -41,20 +41,24 @@ public class RemoteVariableAccessPipeline {
     private final RestTemplate restTemplate;
     private final RemoteRequestBuilder requestBuilder;
     private final RemoteAuthHandler authHandler;
+    private final RemoteEndpointGuard endpointGuard;
     private final ObjectMapper objectMapper;
 
     public RemoteVariableAccessPipeline(@Qualifier("costAccessRestTemplate") RestTemplate restTemplate,
                                         RemoteRequestBuilder requestBuilder,
-                                        RemoteAuthHandler authHandler) {
+                                        RemoteAuthHandler authHandler,
+                                        RemoteEndpointGuard endpointGuard) {
         this.restTemplate = restTemplate;
         this.requestBuilder = requestBuilder;
         this.authHandler = authHandler;
+        this.endpointGuard = endpointGuard;
         this.objectMapper = new ObjectMapper();
     }
 
     public RemoteInvokeResult invoke(RemoteVariableConfig config) {
         long startedAt = System.nanoTime();
         URI uri = requestBuilder.buildUri(config);
+        endpointGuard.validate(uri);
         HttpHeaders headers = requestBuilder.buildHeaders(config);
         String authHeaderName = authHandler.resolveAuthHeaderName(config);
         boolean authHeaderApplied = StringUtils.isNotEmpty(authHeaderName) && headers.containsKey(authHeaderName);

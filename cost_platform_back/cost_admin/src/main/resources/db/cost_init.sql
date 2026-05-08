@@ -7,6 +7,19 @@
 -- 3. Update this file directly when the required production schema, menus, dictionaries or baseline metadata change.
 
 set names utf8mb4;
+
+drop procedure if exists cost_init_preflight;
+delimiter //
+create procedure cost_init_preflight()
+begin
+  if exists (select 1 from information_schema.tables where table_schema = database() limit 1) then
+    signal sqlstate '45000' set message_text = 'cost_init.sql 仅允许在空数据库执行；既有环境请使用版本补丁脚本';
+  end if;
+end//
+delimiter ;
+call cost_init_preflight();
+drop procedure if exists cost_init_preflight;
+
 set foreign_key_checks = 0;
 
 -- Production baseline initialization for cost_platform.
@@ -1074,6 +1087,7 @@ create table cost_calc_task (
   finished_time              datetime        default null comment '结束时间',
   duration_ms                bigint          default 0 comment '任务总耗时，单位毫秒',
   request_no                 varchar(64)     default '' comment '幂等请求号',
+  request_no_key             varchar(64)     generated always as (nullif(request_no, '')) stored comment '非空幂等请求号唯一键辅助列',
   execute_node               varchar(128)    default '' comment '执行节点标识，用于分布式任务追踪',
   input_source_type          varchar(32)     not null default 'INLINE_JSON' comment '输入来源类型，例如INLINE_JSON、INPUT_BATCH',
   source_batch_no            varchar(64)     default '' comment '来源批次号',
@@ -1085,6 +1099,7 @@ create table cost_calc_task (
   update_time                datetime        default current_timestamp on update current_timestamp comment '更新时间',
   primary key (task_id),
   unique key uk_cost_calc_task_no (task_no),
+  unique key uk_cost_calc_task_request_no (scene_id, version_id, bill_month, request_no_key),
   key idx_cost_calc_task_scene_month (scene_id, bill_month),
   key idx_cost_calc_task_scene_status (scene_id, task_status),
   key idx_cost_calc_task_version (version_id),
@@ -2231,6 +2246,11 @@ select 2247, '追溯解释', 2009, 2, '#', '', '', '', 1, 0, 'F', '0', '0', 'cos
 from dual
 where not exists (select 1 from sys_menu where menu_id = 2247);
 
+insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
+select 2248, '结果导出', 2009, 3, '#', '', '', '', 1, 0, 'F', '0', '0', 'cost:result:export', '#', 'admin', sysdate(), ''
+from dual
+where not exists (select 1 from sys_menu where menu_id = 2248);
+
 -- ----------------------------
 -- 3、菜单授权给管理员角色
 -- ----------------------------
@@ -2277,6 +2297,10 @@ where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 22
 insert into sys_role_menu (role_id, menu_id)
 select 1, 2247 from dual
 where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 2247);
+
+insert into sys_role_menu (role_id, menu_id)
+select 1, 2248 from dual
+where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 2248);
 
 -- 变量来源治理
 
@@ -3176,4 +3200,3 @@ where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 22
 insert into sys_role_menu (role_id, menu_id)
 select 1, 2295 from dual
 where not exists (select 1 from sys_role_menu where role_id = 1 and menu_id = 2295);
-

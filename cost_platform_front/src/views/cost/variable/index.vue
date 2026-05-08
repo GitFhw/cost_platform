@@ -63,19 +63,19 @@
           </div>
         </div>
         <div class="variable-center__action-grid">
-          <button class="variable-center__action-card" type="button" @click="handleAdd">
+          <button class="variable-center__action-card" type="button" @click="handleAdd" v-hasPermi="['cost:variable:add']">
             <strong>新增变量</strong>
             <span>录入输入、字典、第三方接口或公式变量。</span>
           </button>
-          <button class="variable-center__action-card" type="button" @click="handleImport">
+          <button class="variable-center__action-card" type="button" @click="handleImport" v-hasPermi="['cost:variable:add']">
             <strong>导入变量</strong>
             <span>先做预览校验，再批量导入变量清单。</span>
           </button>
-          <button class="variable-center__action-card" type="button" @click="downloadImportTemplate">
+          <button class="variable-center__action-card" type="button" @click="downloadImportTemplate" v-hasPermi="['cost:variable:export']">
             <strong>下载模板</strong>
             <span>按平台模板整理 Excel 后再执行导入。</span>
           </button>
-          <button class="variable-center__action-card" type="button" @click="handleTemplateCenter">
+          <button class="variable-center__action-card" type="button" @click="handleTemplateCenter" v-hasPermi="['cost:variable:add']">
             <strong>应用共享模板</strong>
             <span>把内置影响因素模板复制到目标场景。</span>
           </button>
@@ -155,11 +155,11 @@
       <el-col :span="1.5"><el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['cost:variable:remove']">删除变量</el-button></el-col>
       <el-col :span="1.5"><el-button type="primary" plain icon="FolderOpened" @click="handleGroupCenter" v-hasPermi="['cost:variable:list']">变量组</el-button></el-col>
       <el-col :span="1.5"><el-button type="primary" plain icon="Upload" @click="handleImport" v-hasPermi="['cost:variable:add']">导入变量</el-button></el-col>
-      <el-col :span="1.5"><el-button type="success" plain icon="CopyDocument" :disabled="single" @click="handleCopy()">复制变量</el-button></el-col>
-      <el-col :span="1.5"><el-button type="primary" plain icon="Collection" @click="handleTemplateCenter">共享模板</el-button></el-col>
-      <el-col :span="1.5"><el-button type="info" plain icon="Connection" :disabled="single" @click="handleTestRemote">测试接口</el-button></el-col>
-      <el-col :span="1.5"><el-button type="info" plain icon="View" :disabled="single" @click="handlePreviewRemote">预览数据</el-button></el-col>
-      <el-col :span="1.5"><el-button type="info" plain icon="RefreshRight" @click="handleRefreshRemote">刷新状态</el-button></el-col>
+      <el-col :span="1.5"><el-button type="success" plain icon="CopyDocument" :disabled="single" @click="handleCopy()" v-hasPermi="['cost:variable:add']">复制变量</el-button></el-col>
+      <el-col :span="1.5"><el-button type="primary" plain icon="Collection" @click="handleTemplateCenter" v-hasPermi="['cost:variable:add']">共享模板</el-button></el-col>
+      <el-col :span="1.5"><el-button type="info" plain icon="Connection" :disabled="single" @click="handleTestRemote" v-hasPermi="['cost:variable:edit']">测试接口</el-button></el-col>
+      <el-col :span="1.5"><el-button type="info" plain icon="View" :disabled="single" @click="handlePreviewRemote" v-hasPermi="['cost:variable:edit']">预览数据</el-button></el-col>
+      <el-col :span="1.5"><el-button type="info" plain icon="RefreshRight" @click="handleRefreshRemote" v-hasPermi="['cost:variable:edit']">刷新状态</el-button></el-col>
       <el-col :span="1.5"><el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['cost:variable:export']">导出</el-button></el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -213,7 +213,7 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="governance" icon="View">治理检查</el-dropdown-item>
-                  <el-dropdown-item command="copy" icon="CopyDocument">复制变量</el-dropdown-item>
+                  <el-dropdown-item command="copy" icon="CopyDocument" v-hasPermi="['cost:variable:add']">复制变量</el-dropdown-item>
                   <el-dropdown-item command="delete" icon="Delete" v-hasPermi="['cost:variable:remove']">删除变量</el-dropdown-item>
                 </el-dropdown-menu>
               </template>

@@ -30,6 +30,7 @@ import com.ruoyi.system.service.cost.variable.VariableSourceHandlerChain;
 import com.ruoyi.system.service.cost.variable.VariableSourceHandlerSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -63,6 +64,7 @@ public class CostVariableServiceImpl implements ICostVariableService {
             RemoteVariableAccessPipeline.ADAPTER_PAGE_ENVELOPE,
             RemoteVariableAccessPipeline.ADAPTER_SINGLE_OBJECT);
     private static final String REMOTE_TOKEN_PLACEHOLDER = "__PASTE_TOKEN_HERE__";
+    private static final String REMOTE_SECRET_MASK = "******";
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
@@ -110,17 +112,72 @@ public class CostVariableServiceImpl implements ICostVariableService {
 
     @Override
     public List<CostVariable> selectVariableList(CostVariable variable) {
-        return variableMapper.selectVariableList(variable);
+        List<CostVariable> variables = variableMapper.selectVariableList(variable);
+        variables.forEach(this::maskRemoteAuthConfig);
+        return variables;
     }
 
     @Override
     public CostVariable selectVariableById(Long variableId) {
-        return variableMapper.selectById(variableId);
+        return maskRemoteAuthConfigCopy(selectVariableByIdRaw(variableId));
     }
 
     @Override
     public List<CostVariable> selectVariableOptions(CostVariable variable) {
         return variableMapper.selectVariableOptions(variable);
+    }
+
+    private CostVariable selectVariableByIdRaw(Long variableId) {
+        return variableId == null ? null : variableMapper.selectById(variableId);
+    }
+
+    private CostVariable maskRemoteAuthConfigCopy(CostVariable variable) {
+        if (variable == null) {
+            return null;
+        }
+        CostVariable copy = new CostVariable();
+        BeanUtils.copyProperties(variable, copy);
+        maskRemoteAuthConfig(copy);
+        return copy;
+    }
+
+    private void maskRemoteAuthConfig(CostVariable variable) {
+        if (variable == null || StringUtils.isEmpty(variable.getAuthConfigJson())) {
+            return;
+        }
+        ObjectNode masked = objectMapper.createObjectNode();
+        masked.put("configured", true);
+        masked.put("masked", true);
+        masked.put("placeholder", REMOTE_SECRET_MASK);
+        variable.setAuthConfigJson(toJson(masked));
+    }
+
+    private void preserveMaskedAuthConfig(CostVariable variable) {
+        if (variable == null || variable.getVariableId() == null || !isMaskedAuthConfig(variable.getAuthConfigJson())) {
+            return;
+        }
+        CostVariable current = selectVariableByIdRaw(variable.getVariableId());
+        variable.setAuthConfigJson(current == null ? null : current.getAuthConfigJson());
+    }
+
+    private boolean isMaskedAuthConfig(String authConfigJson) {
+        if (StringUtils.isEmpty(authConfigJson)) {
+            return false;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(authConfigJson);
+            return node != null && node.path("masked").asBoolean(false);
+        } catch (Exception ignored) {
+            return REMOTE_SECRET_MASK.equals(StringUtils.trim(authConfigJson));
+        }
+    }
+
+    private String toJson(JsonNode node) {
+        try {
+            return objectMapper.writeValueAsString(node);
+        } catch (Exception ignored) {
+            return "{}";
+        }
     }
 
     @Override
@@ -190,6 +247,7 @@ public class CostVariableServiceImpl implements ICostVariableService {
 
     @Override
     public int updateVariable(CostVariable variable) {
+        preserveMaskedAuthConfig(variable);
         validateDisableBeforeUpdate(variable);
         validateVariableConfig(variable);
         normalizeVariableSourceFields(variable);
@@ -233,7 +291,7 @@ public class CostVariableServiceImpl implements ICostVariableService {
         if (request == null || request.getVariableId() == null) {
             throw new ServiceException("请选择需要复制的变量");
         }
-        CostVariable source = selectVariableById(request.getVariableId());
+        CostVariable source = selectVariableByIdRaw(request.getVariableId());
         if (source == null) {
             throw new ServiceException("源变量不存在");
         }
@@ -374,7 +432,7 @@ public class CostVariableServiceImpl implements ICostVariableService {
     @Override
     public Map<String, Object> previewRemoteData(Map<String, Object> request) {
         Long variableId = parseLong(request.get("variableId"));
-        CostVariable variable = variableId == null ? null : selectVariableById(variableId);
+        CostVariable variable = variableId == null ? null : selectVariableByIdRaw(variableId);
         RemoteVariableConfig config = resolveRemoteVariableConfig(request, variable);
         RemoteInvokeResult invokeResult = remoteVariableAccessPipeline.invoke(config);
         List<Map<String, Object>> rawRows = remoteVariableAccessPipeline.buildPreviewRawRows(invokeResult.items);

@@ -35,6 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,7 +89,10 @@ public class CostRunServiceImpl implements ICostRunService {
     private static final int TASK_DISPATCH_MAX_ROUNDS_PER_SCAN = 3;
     private static final long DEFAULT_TASK_DISPATCH_INTERVAL_SECONDS = 15L;
     private static final long DEFAULT_TASK_STALE_TIMEOUT_SECONDS = 600L;
+    private static final long TASK_HEARTBEAT_INTERVAL_MILLIS = 30_000L;
     private static final int DEFAULT_INPUT_BATCH_INSERT_SIZE = 200;
+    private static final int RESULT_EXPORT_MAX_ROWS = 100_000;
+    private static final int RESULT_COMPARE_MAX_ROWS = 100_000;
     private static final String DRAFT_VERSION_LABEL = "草稿版本";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -831,13 +835,10 @@ public class CostRunServiceImpl implements ICostRunService {
                     List<Map<String, Object>> inputs = parseTaskInput(bo);
                     validateBillMonth(bo.getBillMonth());
                     CostBillPeriod period = ensureBillPeriodAvailable(snapshot.sceneId, bo.getBillMonth(), snapshot.versionId);
-                    if (StringUtils.isNotEmpty(bo.getRequestNo())) {
-                        CostCalcTask existing = calcTaskMapper.selectOne(Wrappers.<CostCalcTask>lambdaQuery()
-                                .eq(CostCalcTask::getSceneId, snapshot.sceneId)
-                                .eq(CostCalcTask::getVersionId, snapshot.versionId)
-                                .eq(CostCalcTask::getBillMonth, bo.getBillMonth())
-                                .eq(CostCalcTask::getRequestNo, bo.getRequestNo())
-                                .last("limit 1"));
+                    String requestNo = firstNonBlank(bo.getRequestNo(), "");
+                    if (StringUtils.isNotEmpty(requestNo)) {
+                        CostCalcTask existing = selectExistingTaskByRequestNo(snapshot.sceneId, snapshot.versionId,
+                                bo.getBillMonth(), requestNo);
                         if (existing != null) {
                             return selectTaskDetail(existing.getTaskId(), 1, 10);
                         }
@@ -856,7 +857,7 @@ public class CostRunServiceImpl implements ICostRunService {
                     task.setFailCount(0);
                     task.setTaskStatus(TASK_STATUS_INIT);
                     task.setProgressPercent(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
-                    task.setRequestNo(firstNonBlank(bo.getRequestNo(), ""));
+                    task.setRequestNo(requestNo);
                     task.setExecuteNode(resolveExecuteNode());
                     task.setInputSourceType(resolveInputSourceType(bo));
                     task.setSourceBatchNo(firstNonBlank(bo.getSourceBatchNo(), ""));
@@ -866,7 +867,18 @@ public class CostRunServiceImpl implements ICostRunService {
                     task.setCreateTime(now);
                     task.setUpdateBy(operator);
                     task.setUpdateTime(now);
-                    calcTaskMapper.insert(task);
+                    try {
+                        calcTaskMapper.insert(task);
+                    } catch (DuplicateKeyException ex) {
+                        if (StringUtils.isNotEmpty(requestNo)) {
+                            CostCalcTask existing = selectExistingTaskByRequestNo(snapshot.sceneId, snapshot.versionId,
+                                    bo.getBillMonth(), requestNo);
+                            if (existing != null) {
+                                return selectTaskDetail(existing.getTaskId(), 1, 10);
+                            }
+                        }
+                        throw ex;
+                    }
                     markPeriodInProgress(period, task);
 
                     List<CostCalcTaskDetail> details = buildTaskDetails(task, inputs);
@@ -880,6 +892,18 @@ public class CostRunServiceImpl implements ICostRunService {
                     dispatchTaskAfterCommit(task.getTaskId());
                     return selectTaskDetail(task.getTaskId(), 1, 10);
                 });
+    }
+
+    private CostCalcTask selectExistingTaskByRequestNo(Long sceneId, Long versionId, String billMonth, String requestNo) {
+        if (sceneId == null || versionId == null || StringUtils.isEmpty(billMonth) || StringUtils.isEmpty(requestNo)) {
+            return null;
+        }
+        return calcTaskMapper.selectOne(Wrappers.<CostCalcTask>lambdaQuery()
+                .eq(CostCalcTask::getSceneId, sceneId)
+                .eq(CostCalcTask::getVersionId, versionId)
+                .eq(CostCalcTask::getBillMonth, billMonth)
+                .eq(CostCalcTask::getRequestNo, requestNo)
+                .last("limit 1"));
     }
 
     @Override
@@ -1184,6 +1208,18 @@ public class CostRunServiceImpl implements ICostRunService {
     public List<CostResultLedger> selectResultList(CostResultLedger query) {
         validateResultQueryScope(query);
         List<CostResultLedger> results = selectResultListInternal(query);
+        enrichResults(results);
+        return results;
+    }
+
+    @Override
+    public List<CostResultLedger> selectResultExportList(CostResultLedger query) {
+        validateResultQueryScope(query);
+        CostResultLedger exportQuery = query == null ? new CostResultLedger() : query;
+        List<CostResultLedger> results = selectResultListInternal(exportQuery, RESULT_EXPORT_MAX_ROWS + 1);
+        if (results.size() > RESULT_EXPORT_MAX_ROWS) {
+            throw new ServiceException("结果导出最多支持 " + RESULT_EXPORT_MAX_ROWS + " 条，请缩小筛选范围后重试");
+        }
         enrichResults(results);
         return results;
     }
@@ -2768,6 +2804,13 @@ public class CostRunServiceImpl implements ICostRunService {
     }
 
     private List<CostResultLedger> selectResultListInternal(CostResultLedger query) {
+        return selectResultListInternal(query, null);
+    }
+
+    private List<CostResultLedger> selectResultListInternal(CostResultLedger query, Integer limit) {
+        if (query == null) {
+            query = new CostResultLedger();
+        }
         List<Long> requestTaskIds = resolveResultRequestTaskIds(query.getRequestNo());
         if (StringUtils.isNotEmpty(query.getRequestNo()) && requestTaskIds.isEmpty()) {
             return Collections.emptyList();
@@ -2785,7 +2828,8 @@ public class CostRunServiceImpl implements ICostRunService {
                 .like(StringUtils.isNotEmpty(query.getObjectName()), CostResultLedger::getObjectName, query.getObjectName())
                 .eq(StringUtils.isNotEmpty(query.getBizNo()), CostResultLedger::getBizNo, query.getBizNo())
                 .eq(StringUtils.isNotEmpty(query.getResultStatus()), CostResultLedger::getResultStatus, query.getResultStatus())
-                .orderByDesc(CostResultLedger::getResultId));
+                .orderByDesc(CostResultLedger::getResultId)
+                .last(limit != null && limit > 0, "limit " + limit));
     }
 
     private ResultCompareSource buildResultCompareSource(CostResultCompareBo query, boolean leftSide) {
@@ -2811,7 +2855,11 @@ public class CostRunServiceImpl implements ICostRunService {
                 .eq(sceneId != null, CostResultLedger::getSceneId, sceneId)
                 .eq(versionId != null, CostResultLedger::getVersionId, versionId)
                 .eq(StringUtils.isNotEmpty(billMonth), CostResultLedger::getBillMonth, billMonth)
-                .orderByDesc(CostResultLedger::getResultId));
+                .orderByDesc(CostResultLedger::getResultId)
+                .last("limit " + (RESULT_COMPARE_MAX_ROWS + 1)));
+        if (results.size() > RESULT_COMPARE_MAX_ROWS) {
+            throw new ServiceException("结果对比最多支持 " + RESULT_COMPARE_MAX_ROWS + " 条，请缩小筛选范围后重试");
+        }
         enrichResults(results);
 
         ResultCompareSource source = new ResultCompareSource();
@@ -2965,7 +3013,7 @@ public class CostRunServiceImpl implements ICostRunService {
 
     private void validateResultQueryScope(CostResultLedger query) {
         if (query == null) {
-            return;
+            throw new ServiceException("结果台账数据量较大，请至少补充账期、任务ID、任务号或业务单号后再查询");
         }
         boolean hasPrimaryScope = query.getTaskId() != null
                 || StringUtils.isNotEmpty(query.getTaskNo())
@@ -4020,6 +4068,28 @@ public class CostRunServiceImpl implements ICostRunService {
                 .eq(CostCalcTaskPartition::getClaimTime, claimToken.claimTime)) > 0;
     }
 
+    private boolean touchPartitionHeartbeat(Long taskId, PartitionClaimToken claimToken) {
+        if (taskId == null || claimToken == null || !isPartitionClaimOwned(claimToken)) {
+            return false;
+        }
+        Date heartbeatTime = DateUtils.getNowDate();
+        int partitionUpdated = calcTaskPartitionMapper.update(null, Wrappers.<CostCalcTaskPartition>lambdaUpdate()
+                .eq(CostCalcTaskPartition::getTaskId, taskId)
+                .eq(CostCalcTaskPartition::getPartitionNo, claimToken.partitionNo)
+                .eq(CostCalcTaskPartition::getPartitionStatus, TASK_STATUS_RUNNING)
+                .eq(CostCalcTaskPartition::getExecuteNode, claimToken.executeNode)
+                .eq(CostCalcTaskPartition::getClaimTime, claimToken.claimTime)
+                .set(CostCalcTaskPartition::getUpdateTime, heartbeatTime));
+        if (partitionUpdated <= 0) {
+            return false;
+        }
+        calcTaskMapper.update(null, Wrappers.<CostCalcTask>lambdaUpdate()
+                .eq(CostCalcTask::getTaskId, taskId)
+                .eq(CostCalcTask::getTaskStatus, TASK_STATUS_RUNNING)
+                .set(CostCalcTask::getUpdateTime, heartbeatTime));
+        return true;
+    }
+
     private Date normalizePartitionClaimTime(Date value) {
         if (value == null) {
             return null;
@@ -4081,11 +4151,23 @@ public class CostRunServiceImpl implements ICostRunService {
         }
 
         PartitionExecutionBundle bundle = new PartitionExecutionBundle();
+        touchPartitionHeartbeat(taskId, claimToken);
+        long nextHeartbeatAt = System.currentTimeMillis() + TASK_HEARTBEAT_INTERVAL_MILLIS;
         for (CostCalcTaskDetail detail : details) {
             if (isTaskCancelled(taskId) || !isPartitionClaimOwned(claimToken)) {
                 break;
             }
+            if (System.currentTimeMillis() >= nextHeartbeatAt) {
+                if (!touchPartitionHeartbeat(taskId, claimToken)) {
+                    bundle.markOwnerLost();
+                    break;
+                }
+                nextHeartbeatAt = System.currentTimeMillis() + TASK_HEARTBEAT_INTERVAL_MILLIS;
+            }
             prepareTaskDetailExecution(task, detail, snapshot, bundle);
+        }
+        if (!bundle.ownerLost) {
+            touchPartitionHeartbeat(taskId, claimToken);
         }
         if (!bundle.detailUpdates.isEmpty()) {
             persistPartitionBundle(taskId, claimToken, bundle);

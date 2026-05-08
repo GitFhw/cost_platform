@@ -59,6 +59,8 @@ public interface ICostRunService {
 
     List<CostResultLedger> selectResultList(CostResultLedger query);
 
+    List<CostResultLedger> selectResultExportList(CostResultLedger query);
+
     Map<String, Object> selectResultDetail(Long resultId);
 
     Map<String, Object> selectTraceDetail(Long traceId);

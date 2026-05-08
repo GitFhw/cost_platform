@@ -91,7 +91,7 @@ public class CostVariableController extends BaseController {
     @PreAuthorize("@ss.hasPermi('cost:variable:export')")
     public void importTemplate(HttpServletResponse response) {
         ExcelUtil<CostVariableImportRow> util = new ExcelUtil<>(CostVariableImportRow.class);
-        util.importTemplateExcel(response, "变量导入模板", "线程二-变量导入模板");
+        util.importTemplateExcel(response, "变量导入模板", "变量导入模板");
     }
 
     /**
@@ -213,7 +213,7 @@ public class CostVariableController extends BaseController {
     /**
      * 预览第三方接口数据。
      */
-    @PreAuthorize("@ss.hasPermi('cost:variable:list')")
+    @PreAuthorize("@ss.hasPermi('cost:variable:edit')")
     @PostMapping("/remote/preview")
     public AjaxResult previewRemote(@RequestBody Map<String, Object> request) {
         return success(variableService.previewRemoteData(request));
