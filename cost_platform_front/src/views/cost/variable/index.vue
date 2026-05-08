@@ -159,7 +159,7 @@
       <el-col :span="1.5"><el-button type="primary" plain icon="Collection" @click="handleTemplateCenter">共享模板</el-button></el-col>
       <el-col :span="1.5"><el-button type="info" plain icon="Connection" :disabled="single" @click="handleTestRemote">测试接口</el-button></el-col>
       <el-col :span="1.5"><el-button type="info" plain icon="View" :disabled="single" @click="handlePreviewRemote">预览数据</el-button></el-col>
-      <el-col :span="1.5"><el-button type="info" plain icon="RefreshRight" @click="handleRefreshRemote">刷新缓存</el-button></el-col>
+      <el-col :span="1.5"><el-button type="info" plain icon="RefreshRight" @click="handleRefreshRemote">刷新状态</el-button></el-col>
       <el-col :span="1.5"><el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['cost:variable:export']">导出</el-button></el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -1807,7 +1807,12 @@ async function handlePreviewRemoteDraft() {
 
 async function handleRefreshRemote() {
   const response = await refreshVariableRemote({ sceneId: queryParams.value.sceneId })
-  proxy.$modal.msgSuccess(response.data?.message || '刷新成功')
+  const message = response.data?.message || '刷新状态已返回'
+  if (response.data?.cacheRefreshSupported === false) {
+    proxy.$modal.msgWarning(message)
+    return
+  }
+  proxy.$modal.msgSuccess(message)
 }
 
 function handleImport() {
