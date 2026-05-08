@@ -283,6 +283,7 @@ import useSettingsStore from '@/store/modules/settings'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 
 const { proxy } = getCurrentInstance()
 const settingsStore = useSettingsStore()
@@ -591,6 +592,20 @@ watch(
   },
   { immediate: true }
 )
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  beforeRefresh: sceneId => {
+    periodForm.sceneId = sceneId
+    periodForm.activeVersionId = undefined
+    recalcForm.sceneId = sceneId
+    recalcForm.versionId = undefined
+    baselineTaskOptions.value = []
+    clearCostWorkContext(['versionId'])
+  },
+  refresh: getList
+})
 
 watch(
   () => [recalcForm.sceneId, recalcForm.versionId, recalcForm.billMonth],

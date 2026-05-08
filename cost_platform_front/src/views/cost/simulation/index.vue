@@ -498,6 +498,7 @@ import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -818,6 +819,19 @@ watch(
   },
   { immediate: true }
 )
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  beforeRefresh: async sceneId => {
+    queryParams.versionId = undefined
+    lastSceneId.value = sceneId
+    clearCostWorkContext(['versionId'])
+    await loadVersionOptions(sceneId)
+    await fillTemplates()
+  },
+  refresh: getList
+})
 
 onMounted(async () => {
   await initPage()

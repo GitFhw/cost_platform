@@ -342,6 +342,7 @@ import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import useSettingsStore from '@/store/modules/settings'
 import {resolveWorkingCostSceneId} from '@/utils/costSceneContext'
 import {resolveWorkingBillMonth, syncCostWorkContext} from '@/utils/costWorkContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 
 const route = useRoute()
 const router = useRouter()
@@ -557,6 +558,17 @@ watch(
   },
   {immediate: true}
 )
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  beforeRefresh: sceneId => {
+    cacheForm.sceneId = sceneId
+    cacheForm.versionId = undefined
+    cacheVersionOptions.value = []
+  },
+  refresh: getList
+})
 
 async function handleRefreshCache() {
   await ElMessageBox.confirm(

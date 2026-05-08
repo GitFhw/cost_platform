@@ -698,6 +698,7 @@ import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { optionselectVariable } from '@/api/cost/variable'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { confirmCostDeleteImpact, confirmCostDisableImpact, findFirstDeleteBlockedCheck, findFirstDisableBlockedCheck } from '@/utils/costGovernanceDeletePreview'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -2251,6 +2252,16 @@ async function initializePageState() {
   }
   await getList()
 }
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  beforeRefresh: async sceneId => {
+    form.sceneId = sceneId
+    await loadSceneAssets(sceneId)
+  },
+  refresh: getList
+})
 
 onMounted(async () => {
   await initializePageState()

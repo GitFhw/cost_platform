@@ -959,6 +959,7 @@ import { optionselectVariable } from '@/api/cost/variable'
 import useSettingsStore from '@/store/modules/settings'
 import { validateCostExpression } from '@/utils/costExpressionValidation'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { confirmCostDeleteImpact, confirmCostDisableImpact, findFirstDeleteBlockedCheck, findFirstDisableBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { confirmCostNextAction } from '@/utils/costNextAction'
@@ -1558,6 +1559,18 @@ async function handleSceneChange(sceneId = queryParams.value.sceneId) {
   await loadFees()
   handleQuery()
 }
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  beforeRefresh: async sceneId => {
+    selectedFeeId.value = undefined
+    queryParams.value.feeId = undefined
+    feeKeyword.value = ''
+    await loadVariables(sceneId)
+  },
+  refresh: getList
+})
 
 async function handleFeeSelect(item) {
   selectedFeeId.value = item.feeId

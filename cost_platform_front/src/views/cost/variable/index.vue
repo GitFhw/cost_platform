@@ -900,6 +900,7 @@ import {
 } from '@/api/cost/variableGroup'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 import { parseJsonText, safeFormatJson } from '@/utils/jsonTools'
 
@@ -1395,6 +1396,17 @@ async function handleSceneChange(sceneId = queryParams.value.sceneId) {
   queryParams.value.groupId = undefined
   groupOptions.value = await loadGroups(queryParams.value.sceneId)
 }
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  beforeRefresh: async sceneId => {
+    queryParams.value.groupId = undefined
+    groupQuery.value.sceneId = sceneId
+    groupOptions.value = await loadGroups(sceneId)
+  },
+  refresh: getList
+})
 
 async function loadFormulaOptions(sceneId) {
   if (!sceneId) {

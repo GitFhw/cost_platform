@@ -472,6 +472,7 @@ import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { confirmCostDeleteImpact, confirmCostDisableImpact, confirmCostExportImpact, findFirstDeleteBlockedCheck, findFirstDisableBlockedCheck } from '@/utils/costGovernanceDeletePreview'
 import { confirmCostNextAction } from '@/utils/costNextAction'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
@@ -1188,6 +1189,12 @@ async function ensureDisableAllowed() {
   }
   return true
 }
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  refresh: getList
+})
 
 onActivated(() => {
   getList()

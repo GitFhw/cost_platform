@@ -501,6 +501,7 @@ import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { getCostUnitSemantic } from '@/utils/costUnitSemantics'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
@@ -939,6 +940,21 @@ watch(
   },
   { immediate: true }
 )
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  beforeRefresh: async sceneId => {
+    queryParams.versionId = undefined
+    compareForm.leftSceneId = sceneId
+    compareForm.rightSceneId = sceneId
+    compareForm.leftVersionId = undefined
+    compareForm.rightVersionId = undefined
+    clearCostWorkContext(['versionId'])
+    await loadVersionOptions(sceneId)
+  },
+  refresh: getList
+})
 
 watch(
   () => route.query,

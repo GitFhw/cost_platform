@@ -874,6 +874,7 @@ import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { confirmCostNextAction } from '@/utils/costNextAction'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
 
 const route = useRoute()
@@ -1676,6 +1677,27 @@ watch(
   },
   { immediate: true }
 )
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  beforeRefresh: async sceneId => {
+    queryParams.versionId = undefined
+    form.sceneId = sceneId
+    form.versionId = undefined
+    lastQuerySceneId.value = sceneId
+    lastFormSceneId.value = sceneId
+    clearCostWorkContext(['versionId'])
+    if (sceneId) {
+      await loadVersionOptions(sceneId, versionOptions)
+      await loadVersionOptions(sceneId, formVersionOptions)
+    } else {
+      versionOptions.value = []
+      formVersionOptions.value = []
+    }
+  },
+  refresh: getList
+})
 
 watch(
   () => route.query,

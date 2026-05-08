@@ -510,6 +510,7 @@ import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { confirmCostSceneSwitch } from '@/utils/costSceneSwitchGuard'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { chooseCostNextAction } from '@/utils/costNextAction'
 import { resolveCostChangeTypeLabel, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
@@ -701,6 +702,18 @@ async function handlePublishSceneChange(sceneId) {
   lastPublishSceneId.value = sceneId
   lastQuerySceneId.value = sceneId
 }
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  beforeRefresh: sceneId => {
+    publishForm.sceneId = sceneId
+    lastQuerySceneId.value = sceneId
+    lastPublishSceneId.value = sceneId
+    diffOpen.value = false
+  },
+  refresh: getList
+})
 
 async function handlePrecheck() {
   if (!publishForm.sceneId) {

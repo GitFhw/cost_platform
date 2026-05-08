@@ -140,6 +140,7 @@ import { listAudit, getAuditStats } from '@/api/cost/governance'
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 
 const { proxy } = getCurrentInstance()
 const settingsStore = useSettingsStore()
@@ -308,6 +309,12 @@ function resolveDiffLabel(type) {
 function resolveDiffTagType(type) {
   return { ADDED: 'success', REMOVED: 'danger', CHANGED: 'warning' }[type] || 'info'
 }
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  refresh: getList
+})
 
 onMounted(() => {
   getList()

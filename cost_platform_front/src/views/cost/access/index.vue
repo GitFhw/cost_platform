@@ -466,6 +466,7 @@ import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { clearCostWorkContext, resolveWorkingBillMonth, resolveWorkingVersionId, syncCostWorkContext } from '@/utils/costWorkContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { safeFormatJson } from '@/utils/jsonTools'
 
 const route = useRoute()
@@ -1521,6 +1522,12 @@ watch(
   },
   { immediate: true }
 )
+
+useCostWorkSceneAutoRefresh({
+  queryParams: selectionForm,
+  sceneOptions,
+  onSceneChange: handleSceneChange
+})
 
 onMounted(async () => {
   await initializePage()
