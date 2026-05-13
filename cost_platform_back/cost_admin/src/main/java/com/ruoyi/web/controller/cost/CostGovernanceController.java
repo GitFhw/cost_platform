@@ -194,6 +194,6 @@ public class CostGovernanceController extends BaseController {
     @PutMapping("/cache/refresh")
     public AjaxResult refreshCache(@RequestParam(value = "sceneId", required = false) Long sceneId,
                                    @RequestParam(value = "versionId", required = false) Long versionId) {
-        return toAjax(governanceService.refreshRuntimeCache(sceneId, versionId));
+        return success(governanceService.refreshRuntimeCache(sceneId, versionId));
     }
 }

@@ -188,7 +188,51 @@
           <span>缓存键</span>
           <strong class="alert-page__cache-key">{{ cacheStats.cacheKey || '-' }}</strong>
         </div>
+        <div class="alert-page__cache-card">
+          <span>Redis 连接</span>
+          <strong>{{ redisStatus.connected ? '已连接' : '未连接' }}</strong>
+          <small>{{ redisStatus.message || redisStatus.ping || '-' }}</small>
+        </div>
+        <div class="alert-page__cache-card">
+          <span>Redis 版本 / 模式</span>
+          <strong>{{ redisStatus.redisVersion || '-' }}</strong>
+          <small>{{ redisStatus.redisMode || '-' }}</small>
+        </div>
+        <div class="alert-page__cache-card">
+          <span>Redis 内存</span>
+          <strong>{{ redisStatus.usedMemoryHuman || '-' }}</strong>
+          <small>最大 {{ redisStatus.maxMemoryHuman || '-' }}</small>
+        </div>
+        <div class="alert-page__cache-card">
+          <span>Redis DB 键数</span>
+          <strong>{{ redisStatus.dbSize ?? '-' }}</strong>
+          <small>运行快照 {{ redisStatus.runtimeCacheKeyCount || 0 }} 个</small>
+        </div>
+        <div class="alert-page__cache-card">
+          <span>最近刷新审计</span>
+          <strong>{{ formatDateTime(lastCacheAudit.operateTime) }}</strong>
+          <small>{{ lastCacheAudit.operatorName || lastCacheAudit.operatorCode || '-' }}</small>
+        </div>
+        <div class="alert-page__cache-card">
+          <span>未关闭缓存告警</span>
+          <strong>{{ cacheStats.openCacheAlarmCount || 0 }}</strong>
+          <small>{{ latestCacheAlarm.alarmTitle || '刷新成功会自动关闭历史告警' }}</small>
+        </div>
       </div>
+      <el-alert
+          v-if="cacheStats.openCacheAlarmCount"
+          class="alert-page__cache-alert"
+          type="warning"
+          :closable="false"
+          :title="`当前条件存在 ${cacheStats.openCacheAlarmCount} 条未关闭缓存刷新告警，刷新成功后会自动关闭。`"
+      />
+      <el-alert
+          v-if="refreshFeedback"
+          class="alert-page__cache-alert"
+          type="success"
+          :closable="false"
+          :title="refreshFeedback"
+      />
     </section>
 
     <el-form ref="queryRef" :model="queryParams" :inline="true" label-width="84px" v-show="showSearch">
@@ -359,6 +403,7 @@ const cacheVersionOptions = ref([])
 const alarmLevelOptions = ref([])
 const alarmStatusOptions = ref([])
 const cacheStats = ref({})
+const refreshFeedback = ref('')
 const stats = reactive({
   alarmCount: 0,
   occurrenceCount: 0,
@@ -402,6 +447,9 @@ const metricItems = computed(() => [
 ])
 
 const notificationSummary = computed(() => overview.notificationSummary || {})
+const redisStatus = computed(() => cacheStats.value.redisStatus || {})
+const lastCacheAudit = computed(() => cacheStats.value.lastRefreshAudit || {})
+const latestCacheAlarm = computed(() => cacheStats.value.latestCacheAlarm || {})
 const notificationEnabled = computed(() => Boolean(notificationSummary.value.enabled))
 const notificationAlertType = computed(() => {
   if (!notificationEnabled.value) {
@@ -576,8 +624,10 @@ async function handleRefreshCache() {
       '提示',
       {type: 'warning'}
   )
-  await refreshRuntimeCache({sceneId: cacheForm.sceneId, versionId: cacheForm.versionId})
-  proxy.$modal.msgSuccess('运行快照缓存已刷新')
+  const resp = await refreshRuntimeCache({sceneId: cacheForm.sceneId, versionId: cacheForm.versionId})
+  const result = resp?.data || {}
+  refreshFeedback.value = `运行快照缓存已刷新，删除 ${result.deletedCount || 0} 个缓存键，关闭 ${result.resolvedAlarmCount || 0} 条缓存告警。`
+  proxy.$modal.msgSuccess(refreshFeedback.value)
   await loadCacheStats()
   await getList()
 }
@@ -707,7 +757,7 @@ onActivated(async () => {
 
   &__cache-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 14px;
     margin-top: 18px;
   }
@@ -732,6 +782,10 @@ onActivated(async () => {
   &__cache-key {
     font-size: 16px !important;
     line-height: 1.6;
+  }
+
+  &__cache-alert {
+    margin-top: 14px;
   }
 
   &__level-list {

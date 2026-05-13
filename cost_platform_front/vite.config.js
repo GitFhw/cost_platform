@@ -4,6 +4,41 @@ import createVitePlugins from './vite/plugins'
 
 const baseUrl = 'http://localhost:8080' // 后端接口
 
+function resolveVendorChunk(id) {
+  const normalizedId = id.replace(/\\/g, '/')
+  if (!normalizedId.includes('/node_modules/')) {
+    return undefined
+  }
+
+  const vendorGroups = [
+    ['vendor-vue', ['/node_modules/vue/', '/node_modules/vue-router/', '/node_modules/pinia/', '/node_modules/@vueuse/']],
+    ['vendor-element', ['/node_modules/element-plus/', '/node_modules/@element-plus/']],
+    ['vendor-echarts', ['/node_modules/echarts/', '/node_modules/zrender/']],
+    ['vendor-ace', ['/node_modules/ace-builds/']],
+    ['vendor-rich-editor', ['/node_modules/@vueup/vue-quill/', '/node_modules/quill/', '/node_modules/parchment/']],
+    ['vendor-utils', [
+      '/node_modules/axios/',
+      '/node_modules/clipboard/',
+      '/node_modules/file-saver/',
+      '/node_modules/fuse.js/',
+      '/node_modules/js-beautify/',
+      '/node_modules/js-cookie/',
+      '/node_modules/jsencrypt/',
+      '/node_modules/nprogress/',
+      '/node_modules/sortablejs/',
+      '/node_modules/splitpanes/',
+      '/node_modules/vue-cropper/',
+      '/node_modules/vuedraggable/'
+    ]]
+  ]
+
+  const targetGroup = vendorGroups.find(([, packages]) => {
+    return packages.some(packagePath => normalizedId.includes(packagePath))
+  })
+
+  return targetGroup ? targetGroup[0] : 'vendor-misc'
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd())
@@ -34,6 +69,7 @@ export default defineConfig(({ mode, command }) => {
       chunkSizeWarningLimit: 2000,
       rollupOptions: {
         output: {
+          manualChunks: resolveVendorChunk,
           chunkFileNames: 'static/js/[name]-[hash].js',
           entryFileNames: 'static/js/[name]-[hash].js',
           assetFileNames: 'static/[ext]/[name]-[hash].[ext]'

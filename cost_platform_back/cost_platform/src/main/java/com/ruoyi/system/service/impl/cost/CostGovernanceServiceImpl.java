@@ -18,6 +18,8 @@ import com.ruoyi.system.service.cost.ICostAlarmService;
 import com.ruoyi.system.service.cost.ICostAuditService;
 import com.ruoyi.system.service.cost.ICostGovernanceService;
 import com.ruoyi.system.service.cost.ICostRunService;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +38,11 @@ import java.util.stream.Collectors;
 @Service
 public class CostGovernanceServiceImpl implements ICostGovernanceService {
     private static final String RUNTIME_CACHE_PREFIX = "cost:runtime:snapshot:";
+    private static final int CACHE_KEY_SAMPLE_LIMIT = 50;
+    private static final String CACHE_OBJECT_TYPE = "CACHE";
+    private static final String CACHE_ACTION_REFRESH = "REFRESH";
+    private static final String CACHE_ALARM_TYPE_REFRESH_FAILED = "CACHE_REFRESH_FAILED";
+    private static final String ALARM_STATUS_OPEN = "OPEN";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -363,7 +370,7 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
 
     @Override
     public Map<String, Object> selectRuntimeCacheStats(Long sceneId, Long versionId) {
-        Collection<String> keys = redisCache.keys(RUNTIME_CACHE_PREFIX + "*");
+        Collection<String> keys = selectRuntimeCacheKeys();
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("cacheCount", keys == null ? 0 : keys.size());
         result.put("sceneId", sceneId);
@@ -371,15 +378,26 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
         if (versionId != null) {
             String cacheKey = RUNTIME_CACHE_PREFIX + versionId;
             result.put("cacheKey", cacheKey);
-            result.put("exists", Boolean.TRUE.equals(redisCache.hasKey(cacheKey)));
-            result.put("expireSeconds", redisCache.getExpire(cacheKey));
+            result.put("exists", hasRedisKey(cacheKey));
+            result.put("expireSeconds", getRedisExpire(cacheKey));
         }
-        result.put("cacheKeys", keys == null ? Collections.emptyList() : new ArrayList<>(keys));
+        List<String> keyList = keys == null ? Collections.emptyList() : new ArrayList<>(keys);
+        result.put("cacheKeys", keyList.stream().limit(CACHE_KEY_SAMPLE_LIMIT).collect(Collectors.toList()));
+        result.put("cacheKeySampleLimit", CACHE_KEY_SAMPLE_LIMIT);
+        result.put("cacheKeyOverflow", Math.max(0, keyList.size() - CACHE_KEY_SAMPLE_LIMIT));
+        String lockKey = distributedLockSupport.buildRuntimeCacheLockKey(sceneId, versionId);
+        result.put("refreshLockKey", lockKey);
+        result.put("refreshLocked", hasRedisKey(lockKey));
+        result.put("redisStatus", buildRedisRuntimeStatus(keys));
+        result.put("lastRefreshAudit", buildLastCacheRefreshAudit(sceneId, versionId));
+        List<CostAlarmRecord> openCacheAlarms = selectOpenCacheAlarms(sceneId, versionId);
+        result.put("openCacheAlarmCount", openCacheAlarms.size());
+        result.put("latestCacheAlarm", buildLatestCacheAlarm(openCacheAlarms));
         return result;
     }
 
     @Override
-    public int refreshRuntimeCache(Long sceneId, Long versionId) {
+    public Map<String, Object> refreshRuntimeCache(Long sceneId, Long versionId) {
         return distributedLockSupport.executeRuntimeCacheLock(sceneId, versionId,
                 "当前正在刷新运行缓存，请稍后重试", () ->
                 {
@@ -400,26 +418,179 @@ public class CostGovernanceServiceImpl implements ICostGovernanceService {
                         if (!keys.isEmpty()) {
                             redisCache.deleteObject(keys);
                         }
-                        auditService.recordAudit(sceneId, "CACHE", versionId == null ? "RUNTIME" : String.valueOf(versionId),
-                                "REFRESH", "刷新运行快照缓存", null, keys, "");
+                        List<CostAlarmRecord> openAlarmsBeforeRefresh = selectOpenCacheAlarms(sceneId, versionId);
+                        String sourceKey = buildCacheSourceKey(sceneId, versionId);
+                        int resolvedAlarmCount = 0;
                         if (versionId != null || sceneId != null) {
-                            String sourceKey = "CACHE:" + (versionId == null ? String.valueOf(sceneId) : versionId);
-                            alarmService.autoResolveBySourceKey(sourceKey, "缓存刷新成功，自动关闭历史缓存告警");
+                            resolvedAlarmCount = alarmService.autoResolveBySourceKey(sourceKey, "缓存刷新成功，自动关闭历史缓存告警");
                         }
-                        return 1;
+                        LinkedHashMap<String, Object> refreshResult = new LinkedHashMap<>();
+                        refreshResult.put("sceneId", sceneId);
+                        refreshResult.put("versionId", versionId);
+                        refreshResult.put("deletedCount", keys.size());
+                        refreshResult.put("deletedKeys", keys);
+                        refreshResult.put("resolvedAlarmCount", resolvedAlarmCount);
+                        refreshResult.put("openAlarmCountBeforeRefresh", openAlarmsBeforeRefresh.size());
+                        refreshResult.put("refreshedAt", DateUtils.getNowDate());
+                        refreshResult.put("redisStatus", buildRedisRuntimeStatus(selectRuntimeCacheKeys()));
+                        auditService.recordAudit(sceneId, CACHE_OBJECT_TYPE, versionId == null ? "RUNTIME" : String.valueOf(versionId),
+                                CACHE_ACTION_REFRESH, "刷新运行快照缓存", null, refreshResult, "");
+                        if (versionId != null || sceneId != null) {
+                            refreshResult.put("lastRefreshAudit", buildLastCacheRefreshAudit(sceneId, versionId));
+                        }
+                        refreshResult.put("statsAfterRefresh", selectRuntimeCacheStats(sceneId, versionId));
+                        return refreshResult;
                     } catch (Exception e) {
                         CostAlarmRecord alarm = new CostAlarmRecord();
                         alarm.setSceneId(sceneId);
                         alarm.setVersionId(versionId);
-                        alarm.setAlarmType("CACHE_REFRESH_FAILED");
+                        alarm.setAlarmType(CACHE_ALARM_TYPE_REFRESH_FAILED);
                         alarm.setAlarmLevel("ERROR");
                         alarm.setAlarmTitle("运行快照缓存刷新失败");
                         alarm.setAlarmContent(limitLength(e.getMessage(), 1000));
-                        alarm.setSourceKey("CACHE:" + (versionId == null ? String.valueOf(sceneId) : versionId));
+                        alarm.setSourceKey(buildCacheSourceKey(sceneId, versionId));
                         alarmService.createAlarm(alarm);
                         throw e;
                     }
                 });
+    }
+
+    private Collection<String> selectRuntimeCacheKeys() {
+        try {
+            Collection<String> keys = redisCache.keys(RUNTIME_CACHE_PREFIX + "*");
+            return keys == null ? Collections.emptyList() : keys;
+        } catch (Exception ignored) {
+            return Collections.emptyList();
+        }
+    }
+
+    private boolean hasRedisKey(String key) {
+        if (StringUtils.isEmpty(key)) {
+            return false;
+        }
+        try {
+            return Boolean.TRUE.equals(redisCache.hasKey(key));
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private Long getRedisExpire(String key) {
+        if (StringUtils.isEmpty(key)) {
+            return null;
+        }
+        try {
+            return redisCache.getExpire(key);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Map<String, Object> buildRedisRuntimeStatus(Collection<String> runtimeKeys) {
+        LinkedHashMap<String, Object> status = new LinkedHashMap<>();
+        status.put("connected", false);
+        status.put("runtimeCacheKeyCount", runtimeKeys == null ? 0 : runtimeKeys.size());
+        try {
+            RedisConnectionFactory connectionFactory = redisCache.redisTemplate.getConnectionFactory();
+            if (connectionFactory == null) {
+                status.put("state", "UNAVAILABLE");
+                status.put("message", "Redis connection factory is unavailable");
+                return status;
+            }
+            try (RedisConnection connection = connectionFactory.getConnection()) {
+                Properties info = connection.serverCommands().info();
+                status.put("connected", true);
+                status.put("state", "UP");
+                status.put("ping", connection.ping());
+                status.put("dbSize", connection.serverCommands().dbSize());
+                putRedisInfo(status, info, "redis_version", "redisVersion");
+                putRedisInfo(status, info, "redis_mode", "redisMode");
+                putRedisInfo(status, info, "connected_clients", "connectedClients");
+                putRedisInfo(status, info, "used_memory_human", "usedMemoryHuman");
+                putRedisInfo(status, info, "maxmemory_human", "maxMemoryHuman");
+                putRedisInfo(status, info, "instantaneous_ops_per_sec", "opsPerSecond");
+                putRedisInfo(status, info, "rdb_last_bgsave_status", "lastSaveStatus");
+            }
+        } catch (Exception e) {
+            status.put("state", "DOWN");
+            status.put("message", limitLength(e.getMessage(), 300));
+        }
+        return status;
+    }
+
+    private void putRedisInfo(Map<String, Object> status, Properties info, String sourceKey, String targetKey) {
+        if (info != null && info.getProperty(sourceKey) != null) {
+            status.put(targetKey, info.getProperty(sourceKey));
+        }
+    }
+
+    private Map<String, Object> buildLastCacheRefreshAudit(Long sceneId, Long versionId) {
+        try {
+            CostAuditLog query = new CostAuditLog();
+            query.setSceneId(sceneId);
+            query.setObjectType(CACHE_OBJECT_TYPE);
+            query.setActionType(CACHE_ACTION_REFRESH);
+            if (versionId != null) {
+                query.setObjectCode(String.valueOf(versionId));
+            }
+            List<CostAuditLog> audits = auditService.selectAuditList(query);
+            Optional<CostAuditLog> latest = audits.stream()
+                    .filter(item -> versionId == null || String.valueOf(versionId).equals(item.getObjectCode()))
+                    .findFirst();
+            if (latest.isEmpty()) {
+                return Collections.emptyMap();
+            }
+            CostAuditLog audit = latest.get();
+            LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+            result.put("auditId", audit.getAuditId());
+            result.put("sceneId", audit.getSceneId());
+            result.put("objectCode", audit.getObjectCode());
+            result.put("operatorCode", audit.getOperatorCode());
+            result.put("operatorName", audit.getOperatorName());
+            result.put("operateTime", audit.getOperateTime());
+            result.put("actionSummary", audit.getActionSummary());
+            return result;
+        } catch (Exception ignored) {
+            return Collections.emptyMap();
+        }
+    }
+
+    private List<CostAlarmRecord> selectOpenCacheAlarms(Long sceneId, Long versionId) {
+        try {
+            CostAlarmRecord query = new CostAlarmRecord();
+            query.setSceneId(sceneId);
+            query.setAlarmType(CACHE_ALARM_TYPE_REFRESH_FAILED);
+            query.setAlarmStatus(ALARM_STATUS_OPEN);
+            List<CostAlarmRecord> alarms = alarmService.selectAlarmList(query);
+            if (versionId == null) {
+                return alarms;
+            }
+            String sourceKey = buildCacheSourceKey(sceneId, versionId);
+            return alarms.stream()
+                    .filter(item -> Objects.equals(versionId, item.getVersionId()) || sourceKey.equals(item.getSourceKey()))
+                    .collect(Collectors.toList());
+        } catch (Exception ignored) {
+            return Collections.emptyList();
+        }
+    }
+
+    private Map<String, Object> buildLatestCacheAlarm(List<CostAlarmRecord> alarms) {
+        if (alarms == null || alarms.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        CostAlarmRecord latest = alarms.get(0);
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        result.put("alarmId", latest.getAlarmId());
+        result.put("alarmTitle", latest.getAlarmTitle());
+        result.put("alarmContent", latest.getAlarmContent());
+        result.put("alarmLevel", latest.getAlarmLevel());
+        result.put("latestTriggerTime", latest.getLatestTriggerTime());
+        result.put("occurrenceCount", latest.getOccurrenceCount());
+        return result;
+    }
+
+    private String buildCacheSourceKey(Long sceneId, Long versionId) {
+        return "CACHE:" + (versionId == null ? String.valueOf(sceneId) : versionId);
     }
 
     private CostBillPeriod buildPeriodQuery(Long sceneId) {

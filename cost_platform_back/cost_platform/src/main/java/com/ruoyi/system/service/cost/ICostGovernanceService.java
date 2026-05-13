@@ -62,5 +62,5 @@ public interface ICostGovernanceService {
 
     Map<String, Object> selectRuntimeCacheStats(Long sceneId, Long versionId);
 
-    int refreshRuntimeCache(Long sceneId, Long versionId);
+    Map<String, Object> refreshRuntimeCache(Long sceneId, Long versionId);
 }

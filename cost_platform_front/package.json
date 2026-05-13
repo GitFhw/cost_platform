@@ -9,6 +9,7 @@
     "dev": "vite",
     "build:prod": "vite build",
     "build:stage": "vite build --mode staging",
+    "build:audit": "node scripts/audit-bundle-size.mjs",
     "preview": "vite preview"
   },
   "repository": {
