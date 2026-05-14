@@ -93,6 +93,52 @@ class RuntimeVariableResolverChainTest {
     }
 
     @Test
+    void shouldResolveSpecificSourceBeforeFallbackWhenResolverListIsUnordered() {
+        RuntimeVariableResolverChain chain = new RuntimeVariableResolverChain(List.of(
+                new FallbackRuntimeVariableResolver(),
+                new InputRuntimeVariableResolver(),
+                new FormulaRuntimeVariableResolver(),
+                new DictRuntimeVariableResolver(),
+                new RemoteRuntimeVariableResolver()));
+        RuntimeVariableResolutionService service = new RuntimeVariableResolutionService(chain, new FakeExpressionService());
+
+        CostRunServiceImpl.RuntimeVariable input = new CostRunServiceImpl.RuntimeVariable();
+        input.variableCode = "INPUT_A";
+        input.sourceType = "INPUT";
+        input.dataPath = "inputA";
+
+        CostRunServiceImpl.RuntimeVariable formula = new CostRunServiceImpl.RuntimeVariable();
+        formula.variableCode = "FORMULA_A";
+        formula.sourceType = "FORMULA";
+        formula.formulaCode = "FORMULA_A";
+
+        CostRunServiceImpl.RuntimeFormula runtimeFormula = new CostRunServiceImpl.RuntimeFormula();
+        runtimeFormula.formulaCode = "FORMULA_A";
+        runtimeFormula.formulaExpr = "V.INPUT_A + 1";
+
+        CostRunServiceImpl.RuntimeSnapshot snapshot = new CostRunServiceImpl.RuntimeSnapshot();
+        snapshot.variablesByCode.put(input.variableCode, input);
+        snapshot.variablesByCode.put(formula.variableCode, formula);
+        snapshot.formulasByCode.put(runtimeFormula.formulaCode, runtimeFormula);
+
+        LinkedHashMap<String, Object> computedValues = new LinkedHashMap<>();
+        Object value = service.resolve(
+                snapshot,
+                formula,
+                Map.of("inputA", 5),
+                computedValues,
+                snapshot.variablesByCode,
+                new LinkedHashSet<>(),
+                (variable, baseContext) -> null,
+                (rawValue, variable) -> rawValue);
+
+        assertThat(value).isEqualTo(6);
+        assertThat(computedValues)
+                .containsEntry("INPUT_A", 5)
+                .containsEntry("FORMULA_A", 6);
+    }
+
+    @Test
     void shouldResolveFormulaVariableThroughDependencyAwareChain() {
         RuntimeVariableResolverChain chain = new RuntimeVariableResolverChain(
                 new FormulaRuntimeVariableResolver(),

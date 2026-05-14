@@ -2,11 +2,13 @@ package com.ruoyi.system.service.cost.variable.runtime;
 
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.service.impl.cost.CostRunServiceImpl;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import static com.ruoyi.system.service.cost.constant.CostDomainConstants.*;
 
 @Component
+@Order(10)
 public class FormulaRuntimeVariableResolver implements RuntimeVariableResolver {
     @Override
     public boolean supports(RuntimeVariableResolveContext context) {

@@ -2,6 +2,7 @@ package com.ruoyi.system.service.cost.variable.runtime;
 
 import com.ruoyi.common.exception.ServiceException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -13,11 +14,13 @@ public class RuntimeVariableResolverChain {
 
     @Autowired
     public RuntimeVariableResolverChain(List<RuntimeVariableResolver> resolvers) {
-        this.resolvers = resolvers == null ? List.of() : new ArrayList<>(resolvers);
+        this.resolvers = resolvers == null ? new ArrayList<>() : new ArrayList<>(resolvers);
+        AnnotationAwareOrderComparator.sort(this.resolvers);
     }
 
     public RuntimeVariableResolverChain(RuntimeVariableResolver... resolvers) {
-        this.resolvers = resolvers == null ? List.of() : List.of(resolvers);
+        this.resolvers = resolvers == null ? new ArrayList<>() : new ArrayList<>(List.of(resolvers));
+        AnnotationAwareOrderComparator.sort(this.resolvers);
     }
 
     public Object resolve(RuntimeVariableResolveContext context, RuntimeVariableResolveSupport support) {

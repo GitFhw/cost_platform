@@ -49,17 +49,16 @@ public class RuntimeRemoteVariableValueService {
         if (variable == null) {
             return "";
         }
-        String standardPath = firstNonBlank(variable.dataPath, variable.variableCode);
-        if (StringUtils.isNotEmpty(standardPath)) {
-            return standardPath;
-        }
         Map<String, Object> mapping = parseOptionalJsonMap(variable.mappingConfigJson);
+        String valuePath = resolveRemoteValuePath(variable, mapping);
         String configuredContextPath = stringValue(mapping.get("contextPath"));
         if (StringUtils.isNotEmpty(configuredContextPath)) {
-            return configuredContextPath;
+            return appendPath(configuredContextPath, valuePath);
+        }
+        if (isExplicitTemplatePath(variable.dataPath)) {
+            return variable.dataPath;
         }
         String scopeCode = firstNonBlank(variable.sourceSystem, variable.variableCode);
-        String valuePath = resolveRemoteValuePath(variable, mapping);
         return REMOTE_CONTEXT_ROOT + "." + scopeCode + "." + variable.variableCode + "." + valuePath;
     }
 
@@ -384,6 +383,27 @@ public class RuntimeRemoteVariableValueService {
             }
         }
         return "";
+    }
+
+    private String appendPath(String prefix, String suffix) {
+        String normalizedPrefix = StringUtils.trimToEmpty(prefix);
+        String normalizedSuffix = StringUtils.trimToEmpty(suffix);
+        if (StringUtils.isEmpty(normalizedPrefix)) {
+            return normalizedSuffix;
+        }
+        if (StringUtils.isEmpty(normalizedSuffix) || normalizedPrefix.equals(normalizedSuffix)
+                || normalizedPrefix.endsWith("." + normalizedSuffix)) {
+            return normalizedPrefix;
+        }
+        return normalizedPrefix + "." + normalizedSuffix;
+    }
+
+    private boolean isExplicitTemplatePath(String path) {
+        String normalized = StringUtils.trimToEmpty(path);
+        return normalized.contains(".")
+                || normalized.startsWith(REMOTE_CONTEXT_ROOT)
+                || normalized.startsWith(REMOTE_PAYLOAD_ROOT)
+                || normalized.startsWith(REMOTE_DATA_ROOT);
     }
 
     private String stringValue(Object value) {
