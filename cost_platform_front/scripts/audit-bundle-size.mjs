@@ -6,6 +6,7 @@ import process from 'node:process'
 const projectRoot = process.cwd()
 const distDir = path.resolve(projectRoot, 'dist')
 const reportPath = path.resolve(distDir, 'bundle-size-report.json')
+const markdownReportPath = path.resolve(distDir, 'bundle-size-report.md')
 const trackedExtensions = new Set(['.js', '.css'])
 const largeAssetThreshold = 900 * 1024
 
@@ -65,7 +66,39 @@ const report = {
 
 fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`)
 
+const markdownLines = [
+  '# Bundle Size Audit',
+  '',
+  `- GeneratedAt: ${report.generatedAt}`,
+  `- LargeAssetThreshold: ${formatKb(largeAssetThreshold)}`,
+  `- WarningCount: ${warnings.length}`,
+  '',
+  '## Totals',
+  '',
+  '| Type | Files | Size | Gzip |',
+  '| --- | ---: | ---: | ---: |',
+  ...Object.entries(totals).map(([type, total]) => `| ${type} | ${total.count} | ${formatKb(total.size)} | ${formatKb(total.gzipSize)} |`),
+  '',
+  '## Largest Assets',
+  '',
+  '| Rank | Asset | Type | Size | Gzip |',
+  '| ---: | --- | --- | ---: | ---: |',
+  ...report.largestAssets.map((asset, index) => `| ${index + 1} | \`${asset.file}\` | ${asset.type} | ${formatKb(asset.size)} | ${formatKb(asset.gzipSize)} |`),
+  '',
+  '## Large Asset Warnings',
+  ''
+]
+
+if (warnings.length === 0) {
+  markdownLines.push('No asset exceeds the configured threshold.')
+} else {
+  warnings.forEach(warning => markdownLines.push(`- ${warning}`))
+}
+markdownLines.push('')
+fs.writeFileSync(markdownReportPath, `${markdownLines.join('\n')}\n`)
+
 console.log(`Bundle audit written to ${path.relative(projectRoot, reportPath)}`)
+console.log(`Bundle audit markdown written to ${path.relative(projectRoot, markdownReportPath)}`)
 Object.entries(totals).forEach(([type, total]) => {
   console.log(`${type}: ${total.count} files, ${formatKb(total.size)}, gzip ${formatKb(total.gzipSize)}`)
 })
