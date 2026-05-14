@@ -5,6 +5,7 @@ import process from 'node:process'
 const projectRoot = process.cwd()
 const costViewsDir = path.resolve(projectRoot, 'src/views/cost')
 const reportPath = path.resolve(projectRoot, 'dist/cost-page-size-report.json')
+const markdownReportPath = path.resolve(projectRoot, 'dist/cost-page-size-report.md')
 const warningLineThreshold = 1000
 const largeLineThreshold = 1500
 
@@ -51,7 +52,41 @@ const report = {
 fs.mkdirSync(path.dirname(reportPath), { recursive: true })
 fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`)
 
+const markdownLines = [
+  '# Cost Page Size Audit',
+  '',
+  `- GeneratedAt: ${report.generatedAt}`,
+  `- PageCount: ${report.pageCount}`,
+  `- OversizedPageCount: ${report.oversizedPageCount}`,
+  `- WarningLineThreshold: ${warningLineThreshold}`,
+  `- LargeLineThreshold: ${largeLineThreshold}`,
+  '',
+  '## Largest Pages',
+  '',
+  '| Rank | Page | Lines | Level |',
+  '| ---: | --- | ---: | --- |',
+  ...report.largestPages.map((page, index) => {
+    const level = page.lines >= largeLineThreshold ? 'large' : page.lines >= warningLineThreshold ? 'watch' : 'ok'
+    return `| ${index + 1} | \`${page.file}\` | ${page.lines} | ${level} |`
+  }),
+  '',
+  '## Refactor Queue',
+  ''
+]
+
+if (oversizedPages.length === 0) {
+  markdownLines.push('No page exceeds the warning threshold.')
+} else {
+  oversizedPages.forEach((page, index) => {
+    const level = page.lines >= largeLineThreshold ? 'large' : 'watch'
+    markdownLines.push(`${index + 1}. \`${page.file}\` has ${page.lines} lines (${level}). Prefer extracting static options, pure helpers, and isolated panels before changing business behavior.`)
+  })
+}
+markdownLines.push('')
+fs.writeFileSync(markdownReportPath, `${markdownLines.join('\n')}\n`)
+
 console.log(`Cost page audit written to ${path.relative(projectRoot, reportPath)}`)
+console.log(`Cost page audit markdown written to ${path.relative(projectRoot, markdownReportPath)}`)
 console.log(`Cost pages: ${pages.length}, over ${warningLineThreshold} lines: ${oversizedPages.length}`)
 pages.slice(0, 12).forEach(page => {
   const label = page.lines >= largeLineThreshold ? 'large' : page.lines >= warningLineThreshold ? 'watch' : 'ok'
