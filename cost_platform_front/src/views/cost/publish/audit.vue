@@ -327,6 +327,7 @@ import { getPublishDiff, getPublishStats, getPublishVersion, listPublish } from 
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 import { resolveCheckLevelMeta, resolveCostChangeTypeMeta } from '@/utils/costDisplayLabels'
 import { getRemoteDictOptionMap } from '@/utils/dictRemote'
@@ -580,6 +581,16 @@ function buildValidationNote(value) {
   }
   return `阻断 ${meta.blockingCount} / 告警 ${meta.warningCount}`
 }
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  beforeRefresh: () => {
+    detailOpen.value = false
+    diffOpen.value = false
+  },
+  refresh: getList
+})
 
 onMounted(() => {
   getList()

@@ -165,6 +165,7 @@ import { getTaskInputBatchDetail, listTaskInputBatch } from '@/api/cost/run'
 import { optionselectScene } from '@/api/cost/scene'
 import useSettingsStore from '@/store/modules/settings'
 import { resolveWorkingCostSceneId } from '@/utils/costSceneContext'
+import { useCostWorkSceneAutoRefresh } from '@/utils/costWorkSceneAutoRefresh'
 import { COST_MENU_ROUTES } from '@/utils/costMenuRoutes'
 
 const router = useRouter()
@@ -254,6 +255,12 @@ function summarizeJson(value) {
   if (!value) return '-'
   return value.length > 180 ? `${value.slice(0, 180)}...` : value
 }
+
+useCostWorkSceneAutoRefresh({
+  queryParams,
+  sceneOptions,
+  refresh: getList
+})
 
 onMounted(getList)
 onActivated(getList)
