@@ -39,7 +39,6 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -1192,8 +1191,8 @@ public class CostRunServiceImpl implements ICostRunService {
         if (query == null) {
             throw new ServiceException("请补充对比条件");
         }
-        ResultCompareSource left = buildResultCompareSource(query, true);
-        ResultCompareSource right = buildResultCompareSource(query, false);
+        CostResultCompareSource left = buildResultCompareSource(query, true);
+        CostResultCompareSource right = buildResultCompareSource(query, false);
         List<Map<String, Object>> rows = buildResultCompareRows(left, right);
 
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
@@ -2832,7 +2831,7 @@ public class CostRunServiceImpl implements ICostRunService {
                 .last(limit != null && limit > 0, "limit " + limit));
     }
 
-    private ResultCompareSource buildResultCompareSource(CostResultCompareBo query, boolean leftSide) {
+    private CostResultCompareSource buildResultCompareSource(CostResultCompareBo query, boolean leftSide) {
         String sourceType = firstNonBlank(leftSide ? query.getLeftSourceType() : query.getRightSourceType(), "FORMAL").toUpperCase(Locale.ROOT);
         if ("SIMULATION".equals(sourceType)) {
             return buildSimulationCompareSource(leftSide ? query.getLeftSimulationId() : query.getRightSimulationId());
@@ -2844,7 +2843,7 @@ public class CostRunServiceImpl implements ICostRunService {
                 leftSide ? query.getLeftBillMonth() : query.getRightBillMonth());
     }
 
-    private ResultCompareSource buildFormalCompareSource(Long taskId, Long sceneId, Long versionId, String billMonth) {
+    private CostResultCompareSource buildFormalCompareSource(Long taskId, Long sceneId, Long versionId, String billMonth) {
         boolean hasTaskScope = taskId != null;
         boolean hasBusinessScope = StringUtils.isNotEmpty(billMonth) && (sceneId != null || versionId != null);
         if (!hasTaskScope && !hasBusinessScope) {
@@ -2862,7 +2861,7 @@ public class CostRunServiceImpl implements ICostRunService {
         }
         enrichResults(results);
 
-        ResultCompareSource source = new ResultCompareSource();
+        CostResultCompareSource source = new CostResultCompareSource();
         source.sourceType = "FORMAL";
         source.sourceName = "正式结果";
         source.taskId = taskId;
@@ -2884,7 +2883,7 @@ public class CostRunServiceImpl implements ICostRunService {
         return source;
     }
 
-    private ResultCompareSource buildSimulationCompareSource(Long simulationId) {
+    private CostResultCompareSource buildSimulationCompareSource(Long simulationId) {
         if (simulationId == null) {
             throw new ServiceException("试算结果对比请补充试算ID");
         }
@@ -2896,7 +2895,7 @@ public class CostRunServiceImpl implements ICostRunService {
         Map<String, Object> result = parseJsonObjectForExport(record.getResultJson());
         List<Map<String, Object>> feeResults = castMapList(result.get("feeResults"));
 
-        ResultCompareSource source = new ResultCompareSource();
+        CostResultCompareSource source = new CostResultCompareSource();
         source.sourceType = "SIMULATION";
         source.sourceName = "试算结果";
         source.sourceNo = record.getSimulationNo();
@@ -2923,13 +2922,13 @@ public class CostRunServiceImpl implements ICostRunService {
         return source;
     }
 
-    private List<Map<String, Object>> buildResultCompareRows(ResultCompareSource left, ResultCompareSource right) {
+    private List<Map<String, Object>> buildResultCompareRows(CostResultCompareSource left, CostResultCompareSource right) {
         LinkedHashSet<String> feeCodes = new LinkedHashSet<>();
         feeCodes.addAll(left.fees.keySet());
         feeCodes.addAll(right.fees.keySet());
         return feeCodes.stream().map(feeCode -> {
-                    CompareFeeAggregate leftFee = left.fees.get(feeCode);
-                    CompareFeeAggregate rightFee = right.fees.get(feeCode);
+                    CostResultCompareFeeAggregate leftFee = left.fees.get(feeCode);
+                    CostResultCompareFeeAggregate rightFee = right.fees.get(feeCode);
                     BigDecimal leftAmount = leftFee == null ? BigDecimal.ZERO : leftFee.amountTotal;
                     BigDecimal rightAmount = rightFee == null ? BigDecimal.ZERO : rightFee.amountTotal;
                     BigDecimal diffAmount = rightAmount.subtract(leftAmount).setScale(2, RoundingMode.HALF_UP);
@@ -2952,7 +2951,7 @@ public class CostRunServiceImpl implements ICostRunService {
                 .collect(Collectors.toList());
     }
 
-    private String resolveResultCompareChangeType(CompareFeeAggregate leftFee, CompareFeeAggregate rightFee, BigDecimal diffAmount) {
+    private String resolveResultCompareChangeType(CostResultCompareFeeAggregate leftFee, CostResultCompareFeeAggregate rightFee, BigDecimal diffAmount) {
         if (leftFee == null && rightFee != null) {
             return "ADDED";
         }
@@ -2962,7 +2961,7 @@ public class CostRunServiceImpl implements ICostRunService {
         return diffAmount.compareTo(BigDecimal.ZERO) == 0 ? "UNCHANGED" : "CHANGED";
     }
 
-    private Map<String, Object> buildResultCompareSummary(ResultCompareSource left, ResultCompareSource right, List<Map<String, Object>> rows) {
+    private Map<String, Object> buildResultCompareSummary(CostResultCompareSource left, CostResultCompareSource right, List<Map<String, Object>> rows) {
         LinkedHashMap<String, Object> summary = new LinkedHashMap<>();
         BigDecimal diffAmount = right.amountTotal.subtract(left.amountTotal).setScale(2, RoundingMode.HALF_UP);
         summary.put("leftAmountTotal", left.amountTotal.setScale(2, RoundingMode.HALF_UP));
@@ -2981,7 +2980,7 @@ public class CostRunServiceImpl implements ICostRunService {
         return rows.stream().filter(row -> changeType.equals(row.get("changeType"))).count();
     }
 
-    private Map<String, Object> buildResultCompareSourceMap(ResultCompareSource source) {
+    private Map<String, Object> buildResultCompareSourceMap(CostResultCompareSource source) {
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         result.put("sourceType", source.sourceType);
         result.put("sourceName", source.sourceName);
@@ -4915,42 +4914,6 @@ public class CostRunServiceImpl implements ICostRunService {
         return RUNTIME_CACHE_PREFIX + versionId;
     }
 
-    private static class ResultCompareSource {
-        private String sourceType;
-        private String sourceName;
-        private String sourceNo;
-        private Long taskId;
-        private Long simulationId;
-        private Long sceneId;
-        private String sceneName;
-        private Long versionId;
-        private String versionNo;
-        private String billMonth;
-        private long resultCount;
-        private BigDecimal amountTotal = BigDecimal.ZERO;
-        private final Map<String, CompareFeeAggregate> fees = new LinkedHashMap<>();
-
-        private void addFee(String feeCode, String feeName, BigDecimal amountValue, long count) {
-            String key = StringUtils.isNotEmpty(feeCode) ? feeCode : "UNKNOWN";
-            CompareFeeAggregate aggregate = fees.computeIfAbsent(key, code -> {
-                CompareFeeAggregate item = new CompareFeeAggregate();
-                item.feeCode = code;
-                item.feeName = StringUtils.isNotEmpty(feeName) ? feeName : code;
-                return item;
-            });
-            aggregate.feeName = StringUtils.isNotEmpty(aggregate.feeName) ? aggregate.feeName : feeName;
-            aggregate.amountTotal = aggregate.amountTotal.add(amountValue == null ? BigDecimal.ZERO : amountValue);
-            aggregate.resultCount += count;
-        }
-    }
-
-    private static class CompareFeeAggregate {
-        private String feeCode;
-        private String feeName;
-        private long resultCount;
-        private BigDecimal amountTotal = BigDecimal.ZERO;
-    }
-
     public static class RuntimeSnapshot {
         public Long sceneId;
         public Long versionId;
@@ -5074,129 +5037,6 @@ public class CostRunServiceImpl implements ICostRunService {
 
         private FeeTemplateVariable(RuntimeVariable variable) {
             this.variable = variable;
-        }
-    }
-
-    private static class AfterCommitTaskSynchronization implements TransactionSynchronization {
-        private final Runnable runnable;
-
-        private AfterCommitTaskSynchronization(Runnable runnable) {
-            this.runnable = runnable;
-        }
-
-        @Override
-        public void afterCommit() {
-            if (runnable != null) {
-                runnable.run();
-            }
-        }
-    }
-
-    private static class TaskClaimResult {
-        private final Date startedTime;
-
-        private TaskClaimResult(Date startedTime) {
-            this.startedTime = startedTime;
-        }
-    }
-
-    private static class PartitionClaimToken {
-        private final Long taskId;
-        private final Integer partitionNo;
-        private final String executeNode;
-        private final Date claimTime;
-
-        private PartitionClaimToken(Long taskId, Integer partitionNo, String executeNode, Date claimTime) {
-            this.taskId = taskId;
-            this.partitionNo = partitionNo;
-            this.executeNode = executeNode;
-            this.claimTime = claimTime;
-        }
-    }
-
-    private static class PartitionDispatchContext {
-        private final List<CostCalcTaskDetail> partitionDetails;
-        private final PartitionClaimToken claimToken;
-
-        private PartitionDispatchContext(List<CostCalcTaskDetail> partitionDetails, PartitionClaimToken claimToken) {
-            this.partitionDetails = partitionDetails;
-            this.claimToken = claimToken;
-        }
-    }
-
-    private static class TaskDetailFailure {
-        private final CostCalcTaskDetail detail;
-        private final String errorMessage;
-
-        private TaskDetailFailure(CostCalcTaskDetail detail, String errorMessage) {
-            this.detail = detail;
-            this.errorMessage = errorMessage;
-        }
-    }
-
-    private static class TaskExecutionSummary {
-        private int totalCount;
-        private int processedCount;
-        private int successCount;
-        private int failedCount;
-    }
-
-    private static class PartitionExecutionResult {
-        private int processedCount;
-        private int successCount;
-        private int failedCount;
-        private BigDecimal amountTotal = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        private String persistMode = PARTITION_PERSIST_MODE_BATCH;
-        private String recoveryHint = "";
-        private String lastErrorStage = "";
-    }
-
-    static class PartitionExecutionBundle {
-        private final List<CostResultTrace> traceInserts = new ArrayList<>();
-        private final List<CostResultLedger> ledgerInserts = new ArrayList<>();
-        private final List<CostCalcTaskDetail> detailUpdates = new ArrayList<>();
-        private final List<TaskDetailFailure> failures = new ArrayList<>();
-        private boolean ownerLost;
-        private int processedCount;
-        private int successCount;
-        private int failedCount;
-        private BigDecimal amountTotal = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        private String persistMode = PARTITION_PERSIST_MODE_BATCH;
-        private String recoveryHint = "";
-        private String lastErrorStage = "";
-
-        private Collection<String> bizNos() {
-            return detailUpdates.stream()
-                    .map(CostCalcTaskDetail::getBizNo)
-                    .filter(StringUtils::isNotEmpty)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-        }
-
-        private PartitionExecutionResult toResult() {
-            PartitionExecutionResult result = new PartitionExecutionResult();
-            result.processedCount = processedCount;
-            result.successCount = successCount;
-            result.failedCount = failedCount;
-            result.amountTotal = amountTotal.setScale(2, RoundingMode.HALF_UP);
-            result.persistMode = persistMode;
-            result.recoveryHint = recoveryHint;
-            result.lastErrorStage = lastErrorStage;
-            return result;
-        }
-
-        private void markOwnerLost() {
-            this.ownerLost = true;
-            this.processedCount = 0;
-            this.successCount = 0;
-            this.failedCount = 0;
-            this.amountTotal = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-            this.traceInserts.clear();
-            this.ledgerInserts.clear();
-            this.detailUpdates.clear();
-            this.failures.clear();
-            this.persistMode = PARTITION_PERSIST_MODE_BATCH;
-            this.recoveryHint = "分片已被其他执行器接管，本次结果未写回";
-            this.lastErrorStage = PARTITION_STAGE_EXECUTION;
         }
     }
 
