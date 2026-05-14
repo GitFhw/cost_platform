@@ -788,7 +788,7 @@ create table cost_scene (
   unique key uk_cost_scene_code (scene_code),
   key idx_cost_scene_domain_status (business_domain, status),
   key idx_cost_scene_org_status (org_code, status)
-) engine=innodb default charset=utf8mb4 comment='核算平台-场景主数据表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-场景主数据表';
 
 drop table if exists cost_fee_item;
 create table cost_fee_item (
@@ -813,7 +813,7 @@ create table cost_fee_item (
   key idx_cost_fee_scene_status (scene_id, status),
   key idx_cost_fee_scene_sort (scene_id, sort_no),
   constraint fk_cost_fee_scene foreign key (scene_id) references cost_scene (scene_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-费用主数据表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-费用主数据表';
 
 -- =========================================================
 -- 二、变量与影响因素
@@ -836,7 +836,7 @@ create table cost_variable_group (
   unique key uk_cost_var_group_scene_code (scene_id, group_code),
   key idx_cost_var_group_scene_sort (scene_id, sort_no),
   constraint fk_cost_var_group_scene foreign key (scene_id) references cost_scene (scene_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-变量分组表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-变量分组表';
 
 drop table if exists cost_variable;
 create table cost_variable (
@@ -886,7 +886,7 @@ create table cost_variable (
   key idx_cost_variable_scene_formula (scene_id, formula_code),
   constraint fk_cost_variable_scene foreign key (scene_id) references cost_scene (scene_id),
   constraint fk_cost_variable_group foreign key (group_id) references cost_variable_group (group_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-变量主数据表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-变量主数据表';
 
 drop table if exists cost_fee_variable_rel;
 create table cost_fee_variable_rel (
@@ -912,7 +912,7 @@ create table cost_fee_variable_rel (
   constraint fk_cost_fee_var_scene foreign key (scene_id) references cost_scene (scene_id),
   constraint fk_cost_fee_var_fee foreign key (fee_id) references cost_fee_item (fee_id),
   constraint fk_cost_fee_var_variable foreign key (variable_id) references cost_variable (variable_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-费用与变量适用关系表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-费用与变量适用关系表';
 
 -- =========================================================
 -- 三、规则与条件
@@ -948,7 +948,7 @@ create table cost_rule (
   key idx_cost_rule_scene_formula (scene_id, amount_formula_code),
   constraint fk_cost_rule_scene foreign key (scene_id) references cost_scene (scene_id),
   constraint fk_cost_rule_fee foreign key (fee_id) references cost_fee_item (fee_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-费率规则主表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-费率规则主表';
 
 drop table if exists cost_rule_condition;
 create table cost_rule_condition (
@@ -972,7 +972,7 @@ create table cost_rule_condition (
   key idx_cost_rule_cond_scene_var (scene_id, variable_code),
   constraint fk_cost_rule_condition_scene foreign key (scene_id) references cost_scene (scene_id),
   constraint fk_cost_rule_condition_rule foreign key (rule_id) references cost_rule (rule_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-规则条件表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-规则条件表';
 
 drop table if exists cost_rule_tier;
 create table cost_rule_tier (
@@ -995,7 +995,7 @@ create table cost_rule_tier (
   key idx_cost_rule_tier_scene_rule (scene_id, rule_id),
   constraint fk_cost_rule_tier_scene foreign key (scene_id) references cost_scene (scene_id),
   constraint fk_cost_rule_tier_rule foreign key (rule_id) references cost_rule (rule_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-规则阶梯明细表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-规则阶梯明细表';
 
 -- =========================================================
 -- 四、发布版本与快照
@@ -1025,7 +1025,7 @@ create table cost_publish_version (
   key idx_cost_publish_scene_status (scene_id, version_status),
   key idx_cost_publish_scene_time (scene_id, published_time),
   constraint fk_cost_publish_scene foreign key (scene_id) references cost_scene (scene_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-场景发布版本表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-场景发布版本表';
 
 drop table if exists cost_publish_snapshot;
 create table cost_publish_snapshot (
@@ -1042,7 +1042,7 @@ create table cost_publish_snapshot (
   key idx_cost_snapshot_version_type (version_id, snapshot_type),
   key idx_cost_snapshot_version_code (version_id, object_code),
   constraint fk_cost_snapshot_version foreign key (version_id) references cost_publish_version (version_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-发布快照明细表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-发布快照明细表';
 
 -- =========================================================
 -- 五、试算与正式核算任务
@@ -1068,7 +1068,7 @@ create table cost_simulation_record (
   key idx_cost_simulation_scene_time (scene_id, create_time),
   constraint fk_cost_simulation_scene foreign key (scene_id) references cost_scene (scene_id),
   constraint fk_cost_simulation_version foreign key (version_id) references cost_publish_version (version_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-试算记录表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-试算记录表';
 
 drop table if exists cost_calc_task;
 create table cost_calc_task (
@@ -1105,7 +1105,7 @@ create table cost_calc_task (
   key idx_cost_calc_task_version (version_id),
   constraint fk_cost_calc_task_scene foreign key (scene_id) references cost_scene (scene_id),
   constraint fk_cost_calc_task_version foreign key (version_id) references cost_publish_version (version_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-正式核算任务表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-正式核算任务表';
 
 drop table if exists cost_calc_task_detail;
 create table cost_calc_task_detail (
@@ -1127,7 +1127,7 @@ create table cost_calc_task_detail (
   key idx_cost_calc_task_detail_task_partition (task_id, partition_no),
   key idx_cost_calc_task_detail_task_no (task_no),
   constraint fk_cost_calc_task_detail_task foreign key (task_id) references cost_calc_task (task_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-正式核算任务明细表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-正式核算任务明细表';
 
 -- =========================================================
 -- 六、结果台账与追溯
@@ -1164,7 +1164,7 @@ create table cost_result_ledger (
   constraint fk_cost_result_scene foreign key (scene_id) references cost_scene (scene_id),
   constraint fk_cost_result_version foreign key (version_id) references cost_publish_version (version_id),
   constraint fk_cost_result_fee foreign key (fee_id) references cost_fee_item (fee_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-结果台账表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-结果台账表';
 
 drop table if exists cost_result_trace;
 create table cost_result_trace (
@@ -1186,7 +1186,7 @@ create table cost_result_trace (
   constraint fk_cost_trace_version foreign key (version_id) references cost_publish_version (version_id),
   constraint fk_cost_trace_rule foreign key (rule_id) references cost_rule (rule_id),
   constraint fk_cost_trace_tier foreign key (tier_id) references cost_rule_tier (tier_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-结果追溯解释表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-结果追溯解释表';
 
 -- =========================================================
 -- 七、治理与审计
@@ -1210,7 +1210,7 @@ create table cost_audit_log (
   key idx_cost_audit_scene_time (scene_id, operate_time),
   key idx_cost_audit_object (object_type, object_code),
   key idx_cost_audit_action (action_type, operate_time)
-) engine=innodb default charset=utf8mb4 comment='核算平台-配置审计日志表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-配置审计日志表';
 
 set foreign_key_checks = 1;
 
@@ -1239,7 +1239,7 @@ create table if not exists cost_scene (
   unique key uk_cost_scene_code (scene_code),
   key idx_cost_scene_domain_status (business_domain, status),
   key idx_cost_scene_org_status (org_code, status)
-) engine=innodb default charset=utf8mb4 comment='核算平台-场景主数据表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-场景主数据表';
 
 -- ----------------------------
 -- 2、核算字典规划
@@ -2412,7 +2412,7 @@ create table if not exists cost_bill_period (
   unique key uk_cost_bill_period_scene_month (scene_id, bill_month),
   key idx_cost_bill_period_status (period_status),
   key idx_cost_bill_period_version (active_version_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-账期治理表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-账期治理表';
 
 create table if not exists cost_recalc_order (
   recalc_id bigint not null auto_increment comment '重算申请主键',
@@ -2444,7 +2444,7 @@ create table if not exists cost_recalc_order (
   key idx_cost_recalc_scene_month (scene_id, bill_month),
   key idx_cost_recalc_status (recalc_status),
   key idx_cost_recalc_target_task (target_task_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-重算申请与记录表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-重算申请与记录表';
 
 create table if not exists cost_alarm_record (
   alarm_id bigint not null auto_increment comment '告警主键',
@@ -2477,7 +2477,7 @@ create table if not exists cost_alarm_record (
   key idx_cost_alarm_task (task_id, detail_id),
   key idx_cost_alarm_status (alarm_status, alarm_level),
   key idx_cost_alarm_source_status (source_key, alarm_status)
-) engine=innodb default charset=utf8mb4 comment='核算平台-运行告警台账';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-运行告警台账';
 
 insert into sys_dict_type (dict_id, dict_name, dict_type, status, create_by, create_time, remark)
 select 143, '核算-账期状态', 'cost_bill_period_status', '0', 'admin', sysdate(), '账期治理状态'
@@ -2709,7 +2709,7 @@ create table if not exists cost_formula
     primary key (formula_id),
     unique key uk_cost_formula_scene_code (scene_id, formula_code),
     key idx_cost_formula_scene_status (scene_id, status)
-) engine = innodb comment = '公式实验室主表';
+) engine = innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment = '公式实验室主表';
 
 insert into sys_dict_type (dict_id, dict_name, dict_type, status, create_by, create_time, remark)
 select 147, '核算-公式状态', 'cost_formula_status', '0', 'admin', sysdate(), '公式实验室状态'
@@ -2853,7 +2853,7 @@ create table if not exists cost_calc_task_partition (
   key idx_cost_calc_task_partition_task_no (task_no),
   key idx_cost_calc_task_partition_status_claim (partition_status, claim_time),
   constraint fk_cost_calc_task_partition_task foreign key (task_id) references cost_calc_task (task_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-正式核算任务分片表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-正式核算任务分片表';
 
 -- 正式核算输入批次
 
@@ -2881,7 +2881,7 @@ create table if not exists cost_calc_input_batch (
   key idx_cost_calc_input_batch_scene_month (scene_id, bill_month),
   constraint fk_cost_calc_input_batch_scene foreign key (scene_id) references cost_scene (scene_id),
   constraint fk_cost_calc_input_batch_version foreign key (version_id) references cost_publish_version (version_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-正式核算输入批次表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-正式核算输入批次表';
 
 create table if not exists cost_calc_input_batch_item (
   item_id                    bigint          not null auto_increment comment '输入批次明细主键',
@@ -2898,7 +2898,7 @@ create table if not exists cost_calc_input_batch_item (
   unique key uk_cost_calc_input_batch_item (batch_id, biz_no),
   key idx_cost_calc_input_batch_item_batch (batch_id, item_no),
   constraint fk_cost_calc_input_batch_item_batch foreign key (batch_id) references cost_calc_input_batch (batch_id)
-) engine=innodb default charset=utf8mb4 comment='核算平台-正式核算输入批次明细表';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='核算平台-正式核算输入批次明细表';
 
 insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
 select 2014, '导入批次', 20220, 4, 'taskBatch', 'cost/task/batch', '', 'CostTaskBatchLedger', 1, 0, 'C', '0', '0', 'cost:task:list', 'upload', 'admin', sysdate(), '正式核算导入批次台账入口'
@@ -2932,7 +2932,7 @@ create table if not exists cost_formula_version
     unique key uk_cost_formula_version_no (formula_id, version_no),
     key idx_cost_formula_version_scene (scene_id, formula_code),
     key idx_cost_formula_version_formula (formula_id, create_time)
-) engine = innodb comment = '公式版本台账';
+) engine = innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment = '公式版本台账';
 
 
 insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
@@ -2973,7 +2973,7 @@ create table if not exists cost_access_profile (
     unique key uk_cost_access_profile_scene_code (scene_id, profile_code),
     key idx_cost_access_profile_fee (fee_id),
     key idx_cost_access_profile_status (status)
-) engine=innodb comment='数据接入方案';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='数据接入方案';
 
 insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
 select 20151, '接入方案查询', 2015, 1, '', '', '', '', 1, 0, 'F', '0', '0', 'cost:access:query', '#', 'admin', sysdate(), '接入方案查询权限'
@@ -3105,7 +3105,7 @@ create table if not exists cost_open_app (
     remark varchar(500) null comment '备注',
     unique key uk_cost_open_app_code (app_code),
     key idx_cost_open_app_status (status)
-) engine=innodb comment='第三方开放应用';
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci comment='第三方开放应用';
 
 insert into cost_open_app (
     app_code, app_name, app_secret_hash, scene_scope_type, scene_ids_json,

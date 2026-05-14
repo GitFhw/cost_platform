@@ -206,6 +206,10 @@ Add-Check $checks "REL-002-COST-TABLES" "cost domain table count" `
     "select concat(count(t.table_name), '/', count(r.table_name)) from (select 'cost_access_profile' table_name union all select 'cost_alarm_record' union all select 'cost_audit_log' union all select 'cost_bill_period' union all select 'cost_calc_input_batch' union all select 'cost_calc_input_batch_item' union all select 'cost_calc_task' union all select 'cost_calc_task_detail' union all select 'cost_calc_task_partition' union all select 'cost_fee_item' union all select 'cost_fee_variable_rel' union all select 'cost_formula' union all select 'cost_formula_version' union all select 'cost_open_app' union all select 'cost_publish_snapshot' union all select 'cost_publish_version' union all select 'cost_recalc_order' union all select 'cost_result_ledger' union all select 'cost_result_trace' union all select 'cost_rule' union all select 'cost_rule_condition' union all select 'cost_rule_tier' union all select 'cost_scene' union all select 'cost_simulation_record' union all select 'cost_variable' union all select 'cost_variable_group') r left join information_schema.tables t on t.table_schema = database() and t.table_name = r.table_name;" `
     { param($value) $parts = $value -split '/'; [int]$parts[0] -eq [int]$parts[1] -and [int]$parts[1] -ge 26 } "all required cost tables"
 
+Add-Check $checks "REL-002-COLLATION" "cost table collation consistency" `
+    "select count(*) from information_schema.columns where table_schema = database() and table_name like 'cost\_%' and collation_name is not null and collation_name <> 'utf8mb4_general_ci';" `
+    { param($value) [int]$value -eq 0 } "0 non-utf8mb4_general_ci columns"
+
 Add-Check $checks "TASK-014-REQUEST-NO" "unique request_no index" `
     "select count(distinct index_name) from information_schema.statistics where table_schema = database() and table_name = 'cost_calc_task' and index_name = 'uk_cost_calc_task_request_no' and non_unique = 0 and column_name in ('scene_id','version_id','bill_month','request_no_key') group by index_name having count(distinct column_name) = 4;" `
     { param($value) [int]$value -ge 1 } ">= 1"

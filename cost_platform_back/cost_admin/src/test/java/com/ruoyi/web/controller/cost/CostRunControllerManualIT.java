@@ -1161,7 +1161,7 @@ class CostRunControllerManualIT {
                 .set(CostCalcTaskPartition::getAmountTotal, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                 .set(CostCalcTaskPartition::getUpdateTime, DateUtils.getNowDate()));
 
-        Class<?> resultType = Class.forName("com.ruoyi.system.service.impl.cost.CostRunServiceImpl$PartitionExecutionResult");
+        Class<?> resultType = Class.forName("com.ruoyi.system.service.impl.cost.PartitionExecutionResult");
         var resultConstructor = resultType.getDeclaredConstructor();
         resultConstructor.setAccessible(true);
         Object fakeResult = resultConstructor.newInstance();
